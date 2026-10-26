@@ -154,6 +154,43 @@ test('an active saved session can switch to RAM with its ID and prior saved snap
   })
 })
 
+test('history OFF after a restart leaves an untouched saved session saved and keeps its edits in RAM', () => {
+  databaseFixture(file => {
+    const marker = 'HISTORY_OFF_EDIT_MUST_STAY_IN_RAM_0123456789'
+    const first = new Repository(file), saved = first.create('meeting')
+    first.update(saved.id, { notes: 'Saved before restart' }); first.transcript(saved.id, 'manual', 'Saved speech', 'saved-turn', 10)
+    first.saveSettings({ ...first.settings(), historyEnabled: false }); first.close()
+    const repo = new Repository(file)
+    assert.equal(repo.list()[0].id, saved.id); assert.equal(repo.isPersistent(saved.id), true)
+    repo.shadowIfHistoryOff(saved.id)
+    assert.equal(repo.isPersistent(saved.id), false)
+    repo.update(saved.id, { notes: marker }); repo.setStatus(saved.id, 'recording'); repo.markTranscriptIncomplete(saved.id)
+    repo.transcript(saved.id, 'microphone', marker, 'ram-turn', 20); repo.saveAnswer(answer(saved.id, marker))
+    assert.equal(repo.applyGeneratedNotes(saved.id, 0, marker, `${marker} notes`), true)
+    repo.close()
+    for (const path of [file, `${file}-wal`, `${file}-shm`]) if (existsSync(path)) assert(!readFileSync(path).includes(Buffer.from(marker)))
+    const reopened = new Repository(file)
+    try {
+      const restored = reopened.get(saved.id)
+      assert.equal(restored.persistent, true); assert.equal(restored.notes, 'Saved before restart'); assert.equal(restored.status, 'idle'); assert.equal(restored.transcriptIncomplete, false)
+      assert.deepEqual(restored.transcript.map(t => t.text), ['Saved speech']); assert.equal(restored.answers.length, 0)
+      reopened.shadowIfHistoryOff(saved.id); assert.equal(reopened.reset(saved.id).contextEpoch, 1)
+    } finally { reopened.close() }
+    const final = new Repository(file)
+    try { const kept = final.get(saved.id); assert.equal(kept.contextEpoch, 0); assert.deepEqual(kept.transcript.map(t => t.text), ['Saved speech']) } finally { final.close() }
+  })
+})
+
+test('history ON leaves shadowIfHistoryOff a no-op so edits keep saving', () => {
+  databaseFixture(file => {
+    const repo = new Repository(file), saved = repo.create('meeting')
+    repo.shadowIfHistoryOff(saved.id); assert.equal(repo.isPersistent(saved.id), true)
+    repo.transcript(saved.id, 'manual', 'Durable speech', 'durable-turn', 10); repo.close()
+    const reopened = new Repository(file)
+    try { assert.deepEqual(reopened.get(saved.id).transcript.map(t => t.text), ['Durable speech']) } finally { reopened.close() }
+  })
+})
+
 test('RAM snapshots are defensive and reset, Trash, restore and late-note fences remain coherent', () => {
   const repo = new Repository(':memory:', { historyEnabled: false })
   try {

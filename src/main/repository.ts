@@ -94,6 +94,8 @@ export class Repository {
   isPersistent(id: string): boolean { this.get(id, true); return !this.ephemeral.has(id) }
   hasSavedSnapshot(id: string): boolean { return !!this.db.prepare('SELECT 1 FROM sessions WHERE id=?').get(id) }
   makeEphemeral(id: string): StoredSession { if (!this.ephemeral.has(id)) this.ephemeral.set(id, structuredClone(this.get(id))); return this.get(id) }
+  /** Called before an edit: with history off, the session continues in RAM and its saved snapshot stays unchanged. */
+  shadowIfHistoryOff(id: string): void { if (!this.historyEnabled) this.makeEphemeral(id) }
   markTranscriptIncomplete(id: string): void {
     this.get(id)
     const ephemeral = this.ephemeral.get(id)

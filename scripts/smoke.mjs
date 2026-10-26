@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { DatabaseSync } from 'node:sqlite'
 import WebSocket from 'ws'
 import { writeDocumentFixtures } from './fixtures.mjs'
 import { runDesktopWorkflow, verifyDesktopPersistence } from './smoke-workflow.mjs'
@@ -185,7 +186,31 @@ try {
   debuggerClient = await connectDebugger(await debuggerURL(running))
   const persistence = await debuggerClient.evaluate(`(${verifyDesktopPersistence.toString()})(window.faangin, ${JSON.stringify(workflow.ids)})`)
   if (!persistence || Object.values(persistence).some(value => value !== true)) throw new Error('Isolated restart persistence checks did not pass.')
-  console.log(`Faangin ${startup.version}: 21 isolated fixture requests passed. ${nativeAudio ? 'Performed bounded native system audio capture; no retained audio or live inference. ' + JSON.stringify(workflow.nativeAudio) : 'Native Electron display permission reached the owned capture handler without opening an OS stream. No live inference or recording was performed.'} Sandboxed startup, document imports, interview brief, selected-image Solve, BFS/DFS manual and automatic follow-up continuity with history off, streaming, Fast/Smart routing, selected memory, cancellation, safe quota errors, spoken Reply, automatic source/partial/disable/stop/failure guards, and saved answers verified across restart.`)
+  await debuggerClient.evaluate('window.faangin.updateSettings({ historyEnabled: false })')
+  debuggerClient.close(); debuggerClient = undefined
+  await stop(running); running = undefined
+  running = launch('ready-history-off.json')
+  const historyOff = (await ready(running)).startupSession, startupId = historyOff?.id
+  if (!startupId || historyOff.historyEnabled !== false || historyOff.persistent !== true) throw new Error(`A history-off launch did not reopen the newest saved session unchanged: ${JSON.stringify(historyOff)}`)
+  debuggerClient = await connectDebugger(await debuggerURL(running))
+  const database = new DatabaseSync(join(fixture, 'faangin.sqlite'), { readOnly: true })
+  // Each edit path targets a different untouched saved session so every guard is checked on its own.
+  const targets = { transcript: startupId, notes: workflow.ids.interviewFlow, answer: workflow.ids.persisted }
+  const savedRows = () => JSON.stringify([database.prepare('SELECT COUNT(*) n FROM transcripts WHERE session_id=?').get(targets.transcript), database.prepare('SELECT notes FROM sessions WHERE id=?').get(targets.notes), database.prepare('SELECT COUNT(*) n FROM answers WHERE session_id=?').get(targets.answer)])
+  let before, edits, after
+  try {
+    before = savedRows()
+    edits = await debuggerClient.evaluate(`(async (api, targets) => {
+      await api.appendTranscript(targets.transcript, 'History-off edit of the startup session.')
+      await api.updateSession(targets.notes, { notes: 'History-off notes.' })
+      await api.generate({ sessionId: targets.answer, action: 'ask', prompt: 'History-off question.' })
+      const sessions = await api.listSessions()
+      return Object.fromEntries(Object.entries(targets).map(([kind, id]) => [kind, sessions.find(session => session.id === id)?.persistent]))
+    })(window.faangin, ${JSON.stringify(targets)})`)
+    after = savedRows()
+  } finally { database.close() }
+  if (new Set(Object.values(targets)).size !== 3 || before !== after || Object.values(edits ?? {}).some(persistent => persistent !== false)) throw new Error(`History-off edits reached the saved workspace: ${JSON.stringify({ before, after, edits })}`)
+  console.log(`Faangin ${startup.version}: 21 isolated fixture requests passed. ${nativeAudio ? 'Performed bounded native system audio capture; no retained audio or live inference. ' + JSON.stringify(workflow.nativeAudio) : 'Native Electron display permission reached the owned capture handler without opening an OS stream. No live inference or recording was performed.'} Sandboxed startup, document imports, interview brief, selected-image Solve, BFS/DFS manual and automatic follow-up continuity with history off, streaming, Fast/Smart routing, selected memory, cancellation, safe quota errors, spoken Reply, automatic source/partial/disable/stop/failure guards, and saved answers verified across restart. A history-off restart kept edits of saved sessions out of SQLite.`)
 } finally {
   overlayDebugger?.close()
   debuggerClient?.close()

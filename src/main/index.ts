@@ -610,6 +610,7 @@ function generate(input: ReturnType<typeof validate.generateInput>, automatic?: 
   const compiled = compilePrompt({ action: input.action, prompt: input.prompt ?? '', settings: snapshotSettings, session: snapshotSession, attachments: selected, smart: input.smart ?? snapshotSettings.smartMode, memory, ...(automatic ? { replyTarget: automatic.candidate.turn.id, automatic: { source: settings.liveSuggestionSource, channels: [...captureResources?.listening ?? []] } } : {}) })
   const compatible = snapshotSettings.chatProvider === 'compatible' ? validateCompatibleChatConfiguration({ endpoint: snapshotSettings.compatibleChatEndpoint, model: (input.smart ?? snapshotSettings.smartMode) ? snapshotSettings.compatibleChatSmartModel : snapshotSettings.compatibleChatModel, vision: snapshotSettings.compatibleChatVision }) : null
   const apiKey = compatible ? undefined : requireKey(), credential = compatible ? compatibleCredential(compatible.endpoint) : undefined
+  repo.shadowIfHistoryOff(input.sessionId)
   const requestId = randomUUID(), abort = new AbortController()
   const abortAutomatic = () => {
     const reason = interruptionReason(automatic?.signal.reason), request = requests.get(requestId)
@@ -864,6 +865,7 @@ function startFixtureCapture(sessionId: string): void {
     },
     dispose() { lease.stopAccepting(); resources.closed = true; if (captureResources === resources) captureResources = null; fence.invalidate() }
   }
+  repo.shadowIfHistoryOff(sessionId)
   resources.lease = lease; fixtureCapture = resources; captureResources = resources; captureGeneration = token; currentSessionId = sessionId; revokedChannels.clear()
   captureState = { active: true, sessionId, microphone: listening.has('microphone') ? 'Listening (fixture)' : 'Off', system: listening.has('system') ? 'Listening (fixture)' : 'Off' }
   captureLifecycle.adopt(sessionId, lease)
@@ -876,7 +878,7 @@ async function startCapture(sessionId: string): Promise<void> {
   if (quitting) throw new Error('Faangin is closing.')
   const policy = capturePolicy.state()
   if (policy.phase !== 'idle' && policy.sessionId !== sessionId) throw new Error('Stop the current session before capturing another.')
-  currentSessionId = sessionId
+  repo.shadowIfHistoryOff(sessionId); currentSessionId = sessionId
   await captureLifecycle.start(sessionId)
 }
 function releaseChannel(token: number, channel: AudioChannel): void {
@@ -1269,7 +1271,7 @@ function setupIPC(): void {
   })
   handle('session-create', [1, 1], (_event, value) => { const created = repo.create(validate.mode(value)); if (currentSessionId) { manualPreparations.cancel(currentSessionId); captureSolve.cancel(currentSessionId) }; liveReplies.reset(); currentSessionId = created.id; refreshLiveSuggestions(); emitState(); return fullSession(created.id) })
   handle('session-select', [1, 1], (_event, value) => { const id = validate.id(value); if (!settings.historyEnabled) repo.makeEphemeral(id); const selected = fullSession(id); if (currentSessionId !== selected.id) { if (currentSessionId) { manualPreparations.cancel(currentSessionId); captureSolve.cancel(currentSessionId) }; liveReplies.reset() }; currentSessionId = selected.id; refreshLiveSuggestions(); emitState(); return selected })
-  handle('session-update', [2, 2], (_event, value, patch) => { const result = repo.update(validate.id(value), validate.sessionPatch(patch)); emitState(); return fullSession(result.id) })
+  handle('session-update', [2, 2], (_event, value, patch) => { const id = validate.id(value), sessionPatch = validate.sessionPatch(patch); repo.shadowIfHistoryOff(id); const result = repo.update(id, sessionPatch); emitState(); return fullSession(result.id) })
   handle('session-list', [2, 3], (_event, query, trash, filter) => repo.list(validate.text(query, 500, true), validate.bool(trash), validate.sessionListFilter(filter)))
   handle('session-delete', [1, 1], async (_event, value) => { const id = validate.id(value); cancelRequests(id); if (captureState.sessionId === id || capturePolicy.state().sessionId === id) await stopCapture(); repo.trash(id); clearSessionAux(id); if (currentSessionId === id) currentSessionId = null; emitState() })
   handle('session-restore', [1, 1], (_event, value) => { repo.restore(validate.id(value)); emitState() })
@@ -1297,6 +1299,7 @@ function setupIPC(): void {
   handle('preset-select', [3, 3], (_event, sessionValue, kindValue, presetValue) => {
     if (presetRecoveryRequired) throw new Error('Recover the saved preset catalog before selecting presets.')
     const id = validate.id(sessionValue), session = repo.get(id), next = new PresetCatalog(presetCatalog.snapshot())
+    repo.shadowIfHistoryOff(id)
     next.select(id, session.mode, validate.oneOf(kindValue, ['response', 'notes']), presetValue === null ? null : validate.id(presetValue))
     savePresetCatalog(next); emitState()
   })
@@ -1321,8 +1324,8 @@ function setupIPC(): void {
     if (selection.canceled || !selection.filePath) return null
     await writeFile(selection.filePath, content, { mode: 0o600 }); return { path: selection.filePath }
   })
-  handle('session-reset', [1, 1], async (_event, value) => { const id = validate.id(value); cancelRequests(id); const result = repo.reset(id); clearSessionAux(id); if (captureState.sessionId === id || capturePolicy.state().sessionId === id) await stopCapture(); emitState(); return result })
-  handle('transcript', [2, 2], (_event, value, text) => { const turn = repo.transcript(validate.id(value), 'manual', validate.text(text, 100_000)); emit({ type: 'transcript-final', turn }); emitState(); return turn })
+  handle('session-reset', [1, 1], async (_event, value) => { const id = validate.id(value); cancelRequests(id); repo.shadowIfHistoryOff(id); const result = repo.reset(id); clearSessionAux(id); if (captureState.sessionId === id || capturePolicy.state().sessionId === id) await stopCapture(); emitState(); return result })
+  handle('transcript', [2, 2], (_event, value, text) => { const id = validate.id(value), body = validate.text(text, 100_000); repo.shadowIfHistoryOff(id); const turn = repo.transcript(id, 'manual', body); emit({ type: 'transcript-final', turn }); emitState(); return turn })
   handle('generate', [1, 1], (_event, input) => generateManual(validate.generateInput(input)))
   handle('cancel', [1, 1], (_event, value) => {
     const request = requests.get(validate.id(value))
@@ -1613,6 +1616,7 @@ else {
           await writeFile(process.env.FAANGIN_SMOKE_READY!, JSON.stringify({
             version: app.getVersion(), windowCount: BrowserWindow.getAllWindows().length,
             keyConfigured: diagnostics.state.keyConfigured, sqliteReady: true,
+            startupSession: { id: diagnostics.state.currentSession?.id ?? null, historyEnabled: diagnostics.state.settings.historyEnabled, persistent: diagnostics.state.currentSession?.persistent ?? null },
             security: { sandbox: diagnostics.security?.sandbox === true, contextIsolation: diagnostics.security?.contextIsolation === true, nodeIntegration: diagnostics.nodeIntegration },
             rendererReady: true, workflow, ...(documentImports ? { documentImports } : {})
           }), { mode: 0o600 })
