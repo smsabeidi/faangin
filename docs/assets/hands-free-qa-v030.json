@@ -1,0 +1,70 @@
+{
+  "version": "0.3.0",
+  "readyState": {
+    "ready": true,
+    "start": true,
+    "consent": "Transcribes microphone + computer audio with OpenAI. Automatically sends conversation context to your chat provider; uses credits. Screenshots stay manual."
+  },
+  "lifecycle": {
+    "phases": [
+      "listening",
+      "listening",
+      "waiting",
+      "generating",
+      "understanding",
+      "generating",
+      "listening"
+    ],
+    "text": "Listen → understand → helpFollow-ups keep your current solution in context. Stop listeningCapture & solveAnswer follow-upTranscribes microphone + computer audio with OpenAI. Automatically sends conversation context to your chat provider; uses credits. Screenshots stay manual.Automatic help · ListeningHelp appears automatically when the question is ready. Keep speaking naturally.",
+    "focus": true,
+    "draft": "Keep this note while I listen",
+    "answerText": "Automatic suggestionCurrent answerfixture-fast · 01:10 PMLOCAL FIXTURE: transport connected.Included context · 2 transcript turns · 0 images · 0 prior excerpts0 prior answers from this session. Selected context fit within the request budget.First text 29 ms · Finished in 42 ms11 input / 7 output tokens",
+    "bodyWidth": 1280
+  },
+  "geometry": [
+    {
+      "width": 1280,
+      "height": 808,
+      "pageWidth": 1280,
+      "paneHeight": 733,
+      "paneContent": 733,
+      "answerHeight": 245,
+      "railBottom": 386.640625,
+      "buttonVisible": true
+    },
+    {
+      "width": 1000,
+      "height": 650,
+      "pageWidth": 1000,
+      "paneHeight": 575,
+      "paneContent": 747,
+      "answerHeight": 210,
+      "railBottom": 435.640625,
+      "buttonVisible": true
+    },
+    {
+      "width": 900,
+      "height": 550,
+      "pageWidth": 900,
+      "paneHeight": 475,
+      "paneContent": 689,
+      "answerHeight": 210,
+      "railBottom": 377.640625,
+      "buttonVisible": true
+    }
+  ],
+  "overlay": {
+    "kind": true,
+    "startOrStop": true,
+    "consent": true,
+    "source": true,
+    "status": "Automatic help · ListeningHelp appears automatically when the question is ready. Keep speaking naturally.",
+    "pageWidth": 480
+  },
+  "finalState": {
+    "stopped": true,
+    "automaticEnabled": true,
+    "keyConfigured": false
+  },
+  "requests": 1
+}

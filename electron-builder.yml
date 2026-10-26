@@ -1,0 +1,36 @@
+appId: com.faangin.desktop
+productName: Faangin
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+  - '!node_modules/**/test/**'
+  - '!node_modules/**/tests/**'
+asar: true
+npmRebuild: false
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  identity: null
+  extendInfo:
+    LSUIElement: true
+    NSMicrophoneUsageDescription: Faangin uses your microphone when you start listening. Setup checks permission before you begin.
+    NSScreenCaptureUsageDescription: Faangin captures your screen when you choose Capture. Setup checks access without saving screen images.
+    NSAudioCaptureUsageDescription: Faangin checks computer audio access during setup and on launch after your approval. Audio is transcribed only when you start listening.
+    NSHighResolutionCapable: true
+    LSMinimumSystemVersion: '14.4'
+win:
+  icon: resources/icon.png
+  target: nsis
+  artifactName: Faangin-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+publish: null

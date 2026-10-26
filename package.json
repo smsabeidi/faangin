@@ -1,0 +1,51 @@
+{
+  "name": "faangin",
+  "version": "0.4.2",
+  "description": "A desktop workspace for meeting context and technical interview practice",
+  "author": "Muhammed Salim",
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "scripts": {
+    "icons": "node scripts/icons.mjs",
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm test && npm run build && npm run smoke",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "package:mac": "npm run build && electron-builder --mac --arm64 --dir",
+    "dist:mac": "npm run build && electron-builder --mac --arm64",
+    "release:mac": "node scripts/release-mac.mjs",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "lucide-react": "1.55.0",
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-to-markdown": "2.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@swc/core": "1.16.18",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/ws": "8.18.2",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "mammoth": "1.13.0",
+    "pdfjs-dist": "5.4.296",
+    "sharp": "0.35.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "7.3.7"
+  }
+}
