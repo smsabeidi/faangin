@@ -6,9 +6,9 @@ Access setup is now the first screen, before the workspace, overlay, or optional
 
 Microphone and screen access use OS permission states. Computer audio is a separate capability: a bounded local check requests a display-audio stream, confirms a live audio track, and immediately stops every track. It does not read audio samples or screen pixels, create an audio processing graph, transcribe, save media, or call an AI provider.
 
-Continue becomes available only after all required access is ready. Completion is saved in the main-process `access-setup` configuration independently of session history and the optional guide. Faangin configures both audio inputs and the remote-call question source, keeps automatic replies off, applies the user's screen-share privacy choice, and routes to the workspace or the existing provider connection screen. Listening starts only when the user chooses it.
+Continue becomes available only after all required access is ready. Completion is saved in the main-process `access-setup` configuration independently of session history and the optional guide. Faangin configures both audio inputs and the remote-call question source, keeps automatic replies off, and routes to the workspace or the existing provider connection screen. Listening starts only when the user chooses it.
 
-The screen-share privacy checkbox requests native content protection where supported. It is an app setting, not a separate OS permission. Modern macOS capture applications can still include the window; the UI asks users to check their sharing preview and does not promise universal invisibility.
+Setup does not offer screen-capture exclusion. That setting stays off by default and lives only in Settings. The first time listening would include computer audio, Faangin shows a one-time notice: computer audio includes other people's voices, so tell participants and get their consent where the law requires it, and follow the rules of the interview, meeting, or platform. The main process refuses to start computer-audio capture until the notice is acknowledged, and keeps the acknowledgment in its own configuration record, independent of session history.
 
 ## Future launches and revoked access
 

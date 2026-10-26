@@ -10,6 +10,8 @@ type Row = Record<string, string | number | null>
 type StoredSession = Session & { persistent: boolean }
 type StoredSummary = SessionSummary & { persistent: boolean }
 export type RepositoryIssue = 'settings-corrupt' | 'answer-corrupt' | 'interview-corrupt' | 'configuration-corrupt' | 'deletion-checkpoint-pending'
+const CONFIGURATION_LABELS = { 'preset-catalog': 'preset catalog', 'access-setup': 'access setup', 'system-audio-consent': 'computer audio acknowledgment' } as const
+export type ConfigurationName = keyof typeof CONFIGURATION_LABELS
 export class RepositoryError extends Error {
   constructor(public readonly code: 'unsupported-schema' | 'storage-corrupt' | 'storage-unavailable' | 'storage-busy' | 'storage-full' | 'save-failed', message: string) { super(message); this.name = 'RepositoryError' }
 }
@@ -24,6 +26,7 @@ export class Repository {
   private db!: DatabaseSync
   private readonly ephemeral = new Map<string, Session>()
   private readonly issues = new Set<RepositoryIssue>()
+  private readonly corruptConfigurations = new Set<ConfigurationName>()
   private historyEnabled = true
   private closed = false
   constructor(path: string, options: { historyEnabled?: boolean } = {}) {
@@ -106,18 +109,20 @@ export class Repository {
     const count = (table: string, condition = '') => Number((this.db.prepare(`SELECT COUNT(*) count FROM ${table} ${condition}`).get() as Row).count)
     return { schemaVersion, issueCodes: [...this.issues].sort(), persistentSessions: count('sessions'), ephemeralSessions: this.ephemeral.size, trashedSessions: count('sessions', 'WHERE deleted_at IS NOT NULL') + [...this.ephemeral.values()].filter(s => s.deletedAt !== undefined).length, transcriptTurns: count('transcripts') + [...this.ephemeral.values()].reduce((n, s) => n + s.transcript.length, 0), answers: count('answers') + [...this.ephemeral.values()].reduce((n, s) => n + s.answers.length, 0) }
   }
-  configuration(name: 'preset-catalog' | 'access-setup'): unknown | undefined {
-    if (name !== 'preset-catalog' && name !== 'access-setup') throw new Error('Unsupported configuration namespace.')
+  configuration(name: ConfigurationName): unknown | undefined {
+    if (!(name in CONFIGURATION_LABELS)) throw new Error('Unsupported configuration namespace.')
     const row = this.db.prepare('SELECT json FROM configuration WHERE name=?').get(name) as Row | undefined
     if (!row) return undefined
-    try { return JSON.parse(String(row.json)) } catch { this.issues.add('configuration-corrupt'); throw new RepositoryError('storage-corrupt', `The saved ${name === 'preset-catalog' ? 'preset catalog' : 'access setup'} is unreadable. Its record was preserved.`) }
+    try { return JSON.parse(String(row.json)) } catch { this.corruptConfigurations.add(name); this.issues.add('configuration-corrupt'); throw new RepositoryError('storage-corrupt', `The saved ${CONFIGURATION_LABELS[name]} is unreadable. Its record was preserved.`) }
   }
-  saveConfiguration(name: 'preset-catalog' | 'access-setup', value: unknown): void {
-    if (name !== 'preset-catalog' && name !== 'access-setup') throw new Error('Unsupported configuration namespace.')
+  saveConfiguration(name: ConfigurationName, value: unknown): void {
+    if (!(name in CONFIGURATION_LABELS)) throw new Error('Unsupported configuration namespace.')
     const json = JSON.stringify(value)
     if (!json || json.length > 1_000_000) throw new Error('Configuration is missing or too large.')
     this.write(() => this.db.prepare('INSERT INTO configuration(name,json) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET json=excluded.json').run(name, json))
-    this.issues.delete('configuration-corrupt')
+    // The warning stays while any other configuration record is still unreadable.
+    this.corruptConfigurations.delete(name)
+    if (!this.corruptConfigurations.size) this.issues.delete('configuration-corrupt')
   }
   settings(): Settings {
     const row = this.db.prepare('SELECT json FROM settings WHERE id=1').get() as Row | undefined

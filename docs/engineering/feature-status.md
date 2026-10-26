@@ -10,7 +10,7 @@ The PRD remains the scope contract. Preserved 0.2.0/0.2.1/0.2.2 records retain 3
 | --- | --- | --- |
 | F01 | Packaged startup, sandbox/preload checks, missing-key cleanup, distinct source/status and permission UI | Fresh signed install; native denial and recovery matrix |
 | F02 | Workspace/overlay, native collapse/expand, remembered height, atomic reachable bounds with monitor fixtures | Physical monitor changes, full-screen apps, restart geometry acceptance |
-| F03 | Four shortcut presets, overrides/disable, atomic conflict rollback, menu fallback; fixture checks | Physical shortcut conflicts and every compatibility binding |
+| F03 | Faangin and Cue shortcut presets (Cluely and InterviewCoder presets retired; saved choices fall back to Faangin), overrides/disable, atomic conflict rollback, menu fallback; fixture checks | Physical shortcut conflicts and every compatibility binding |
 | F04 | Explicit click-through and authoritative interaction state; showing overlay restores interaction | Underlying-app click/focus and keyboard recovery certification |
 | F05 | Content-protection preference and platform limits disclosed | Every supported screen-sharing path and owned dialog; no universal invisibility claim |
 | F06 | Display/window selection, own-window hiding/restoration, source exclusion, timeout mutex; local preview crop with sender/session/epoch/topology-bound two-minute lease and chosen-pixel commit; consent/coordinate/expiry fixtures, generated Retina canonical-pixel crop and final source/build/package | Actual physical region interaction, compositor exclusion, Retina and mixed-DPI verification |

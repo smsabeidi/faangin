@@ -1,6 +1,9 @@
 export const SHORTCUT_ACTIONS = ['capture-solve', 'assist', 'reply', 'screenshot', 'solve', 'hide', 'toggle-interaction', 'show-workspace', 'stop', 'reset', 'toggle-capture', 'move-left', 'move-right', 'move-up', 'move-down', 'scroll-up', 'scroll-down'] as const
 export type ShortcutAction = typeof SHORTCUT_ACTIONS[number]
-export type ShortcutPreset = 'faangin' | 'cluely' | 'interviewcoder' | 'cue'
+export type ShortcutPreset = 'faangin' | 'cue'
+export const SHORTCUT_PRESETS: readonly ShortcutPreset[] = ['faangin', 'cue']
+/** Retired keymaps; saved settings that still name one use Faangin's keymap. */
+export const RETIRED_SHORTCUT_PRESETS = ['cluely', 'interviewcoder'] as const
 export type ShortcutOverrides = Partial<Record<ShortcutAction, string | null>>
 export interface ShortcutBinding { action: ShortcutAction; label: string; accelerator: string }
 export interface ShortcutRegistrar { register(accelerator: string, callback: () => void): boolean; unregister(accelerator: string): void }
@@ -14,8 +17,6 @@ const labels: Record<ShortcutAction, string> = {
 }
 const presets: Record<ShortcutPreset, ShortcutOverrides> = {
   faangin: { assist: 'CommandOrControl+Enter', screenshot: 'CommandOrControl+Shift+S', hide: 'CommandOrControl+Shift+Space', solve: 'CommandOrControl+Shift+Enter', stop: 'CommandOrControl+Shift+Escape' },
-  cluely: { assist: 'CommandOrControl+Enter', hide: 'CommandOrControl+Backslash', 'toggle-capture': 'CommandOrControl+Shift+Backslash', 'scroll-up': 'CommandOrControl+Shift+Up', 'scroll-down': 'CommandOrControl+Shift+Down', stop: 'CommandOrControl+Shift+Escape' },
-  interviewcoder: { screenshot: 'CommandOrControl+H', reset: 'CommandOrControl+G', hide: 'CommandOrControl+B', 'move-left': 'CommandOrControl+Left', 'move-right': 'CommandOrControl+Right', 'move-up': 'CommandOrControl+Up', 'move-down': 'CommandOrControl+Down', stop: 'CommandOrControl+Shift+Escape' },
   cue: { assist: 'CommandOrControl+Shift+Enter', reply: 'CommandOrControl+Enter', solve: 'CommandOrControl+H', hide: 'CommandOrControl+Shift+Slash', stop: 'CommandOrControl+Shift+Escape' }
 }
 const modifiers: Record<string, string> = { commandorcontrol: 'CommandOrControl', cmdorctrl: 'CommandOrControl', command: 'Command', cmd: 'Command', control: 'Control', ctrl: 'Control', shift: 'Shift', alt: 'Alt', option: 'Alt', meta: 'Super', super: 'Super' }
@@ -50,6 +51,17 @@ export function resolveShortcutBindings(preset: ShortcutPreset, overrides: Short
   for (const key of Object.keys(overrides)) if (!SHORTCUT_ACTIONS.includes(key as ShortcutAction)) throw new Error('This shortcut action is not supported.')
   const mapping = { 'capture-solve': 'Control+Alt+S', 'toggle-interaction': 'Control+Alt+I', 'show-workspace': 'Control+Alt+W', ...presets[preset], ...overrides }
   return SHORTCUT_ACTIONS.filter(action => mapping[action] != null).map(action => ({ action, label: labels[action], accelerator: normalizeAccelerator(mapping[action]!, platform) }))
+}
+
+/** A custom key the retired keymap left free keeps its action; the Faangin default it now collides with is turned off. */
+export function overridesAfterRetiredPreset(overrides: ShortcutOverrides, platform = process.platform): ShortcutOverrides {
+  const result = { ...overrides }
+  const custom = Object.entries(overrides).filter(([, accelerator]) => accelerator).map(([action, accelerator]) => [action, normalizeAccelerator(accelerator!, platform)])
+  for (const [action, accelerator] of Object.entries(presets.faangin) as Array<[ShortcutAction, string]>) {
+    if (Object.hasOwn(overrides, action)) continue
+    if (custom.some(([other, key]) => other !== action && key === normalizeAccelerator(accelerator, platform))) result[action] = null
+  }
+  return result
 }
 
 /** A new optional default must not disable a previously working startup keymap. */

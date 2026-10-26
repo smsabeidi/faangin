@@ -48,8 +48,8 @@ test('appearance settings expose deliberate interactive recovery and macOS Dock 
   }
   const mac = render('darwin', true)
   assert.match(mac, /Make overlay interactive/)
-  assert.match(mac, /Hide Dock icon/)
-  assert.match(mac, /macOS menu bar/)
+  assert.doesNotMatch(mac, /Hide Dock icon/)
+  assert.match(mac, /menu bar/)
   assert.match(mac, /⌃⌥I/)
   assert.doesNotMatch(mac, /undetectable|Activity Monitor|no traces/i)
   const windows = render('win32', false)

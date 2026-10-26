@@ -22,7 +22,6 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [help, setHelp] = useState<AccessPermission | null>(null)
-  const [privacyMode, setPrivacyMode] = useState(state.accessSetup?.completed ? state.settings.privacyMode : true)
   const dialog = useRef<HTMLElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const alive = useRef(true)
@@ -133,7 +132,7 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
     if (actionLocked.current || !accessSetupReady(report)) return
     actionLocked.current = true; setPending('complete'); setError('')
     try {
-      await window.faangin.completeAccessSetup({ privacyMode })
+      await window.faangin.completeAccessSetup()
       await parentRefresh.current()
       complete.current()
     } catch (value) {
@@ -181,7 +180,6 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
         return <div className="access-setup-row" key={kind} data-permission={kind}><span className="access-setup-row-icon"><Icon size={21} strokeWidth={1.6}/></span><div className="access-setup-row-copy"><div><strong>{label}</strong><span className={`access-setup-status ${checking ? 'checking' : allowed ? 'granted' : blocked ? 'blocked' : ''}`} role="status">{checking ? <LoaderCircle size={10} className="spin"/> : allowed ? <Check size={10}/> : null}{permissionStatusLabel(report, kind, checking)}</span></div><p>{description}</p></div><button type="button" className={`access-setup-allow ${allowed ? 'ready' : ''}`} aria-label={allowed ? `${label} access ready` : `${needsSettings ? 'Open settings for' : blocked ? 'Retry access to' : 'Allow access to'} ${label.toLowerCase()}`} disabled={!!pending || allowed} onClick={() => void (needsSettings ? openSettings(kind) : request(kind))}>{checking && pending === kind ? <><LoaderCircle size={13} className="spin"/>Checking…</> : allowed ? <><CircleCheck size={16}/>Ready</> : <>{needsSettings ? 'Open settings' : blocked ? 'Try again' : 'Allow access'}<ArrowUpRight size={12}/></>}</button></div>
       })}</div>
       {helpKind && <div className="access-setup-help"><Info size={16}/><div><p>{isMac ? <>Open <strong>System Settings → Privacy &amp; Security → {systemSettingsSection}</strong> and enable Faangin. Return here when you’re done; we’ll check automatically. {unsavedSession ? 'Save your current session below before restarting.' : ''} If macOS asks to quit and reopen Faangin, choose <strong>Quit &amp; Reopen</strong>. Your setup will resume.</> : <>Open your system’s privacy settings and allow {helpKind === 'microphone' ? 'microphone' : 'screen and computer audio'} access for Faangin. Return here; we’ll check automatically.</>} {helpKind === 'system-audio' && 'Then choose Retry audio check below to verify computer audio.'}</p><button type="button" disabled={!!pending} onClick={() => void openSettings(helpKind)}>Open {isMac ? 'System Settings' : 'privacy settings'}<ArrowUpRight size={12}/></button>{helpKind === 'system-audio' && <button type="button" disabled={!!pending} onClick={() => void request('system-audio')}>Retry audio check<ArrowRight size={12}/></button>}</div></div>}
-      <div className="access-setup-privacy"><ShieldCheck size={19}/><div className="access-setup-privacy-copy"><strong>Request screen-share privacy (where supported)</strong><p>Some sharing apps, including on macOS, may still show Faangin. Check your sharing preview.</p></div><label><input type="checkbox" aria-label="Request screen-share privacy where supported" checked={privacyMode} disabled={pending === 'complete'} onChange={event => setPrivacyMode(event.target.checked)}/>Recommended</label></div>
       <p className="access-setup-note"><ShieldCheck size={12}/>{ready ? 'We’ll configure your audio inputs when you continue. Listening stays off.' : 'Setup does not transcribe or save audio. Listening starts only when you choose.'} After setup, access is checked once when Faangin opens.</p>
       {error && <p className="access-setup-error" role="alert">{error}</p>}
       {notice && <p className="access-setup-note" role="status">{notice}</p>}

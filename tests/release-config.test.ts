@@ -38,6 +38,8 @@ test('public distribution config cannot silently skip signing or alter unsigned 
   assert.equal(signed.publish, null)
   assert.equal(signed.appId, local.appId)
   assert.deepEqual(signed.mac.extendInfo, local.mac.extendInfo)
+  // Faangin runs as a regular app with a Dock icon, not a menu-bar agent.
+  assert.equal('LSUIElement' in local.mac.extendInfo, false)
 })
 
 test('release configuration is accepted by the installed electron-builder schema', async () => {

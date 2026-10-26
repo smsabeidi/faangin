@@ -216,7 +216,7 @@ try {
     ['Reset overlay', 'window.faangin.resetOverlayLayout()'],
     ['Chat provider test', 'window.faangin.testChatConnection()'],
     ['Transcription provider test', 'window.faangin.testConnection()'],
-    ['Premature setup completion', 'window.faangin.completeAccessSetup({privacyMode:false})'],
+    ['Premature setup completion', 'window.faangin.completeAccessSetup()'],
   ]
   for (const [label, expression] of blocked) await assertBlocked(client, label, expression)
   for (const action of ['capture-solve', 'screenshot', 'toggle-capture', 'assist', 'solve', 'reply', 'hide', 'toggle-interaction', 'move-right']) {
@@ -229,10 +229,10 @@ try {
   assert.equal(hidden.visible, false)
   report.checks.backendCaptureGenerationOverlayAndShortcutGuards = true
 
-  const privacy = await client.evaluate(`(() => {const card=document.querySelector('.access-setup-privacy');return {text:card?.textContent,checkbox:!!card?.querySelector('input[type="checkbox"]'),osRows:document.querySelectorAll('.access-setup-row[data-permission]').length,claimsGranted:!!card?.querySelector('.granted')};})()`)
-  assert.equal(privacy.checkbox, true); assert.equal(privacy.osRows, 3); assert.equal(privacy.claimsGranted, false)
-  assert.match(privacy.text, /where supported|may still show|sharing preview/i)
-  report.checks.privacyIsSeparateHonestAppSetting = true
+  const setupOffer = await client.evaluate(`(() => ({text:document.querySelector('.access-setup')?.textContent ?? '',checkboxes:document.querySelectorAll('.access-setup input[type="checkbox"]').length,osRows:document.querySelectorAll('.access-setup-row[data-permission]').length}))()`)
+  assert.equal(setupOffer.checkboxes, 0); assert.equal(setupOffer.osRows, 3)
+  assert.doesNotMatch(setupOffer.text, /screen-share privacy|hide from screen|undetect/i)
+  report.checks.setupDoesNotOfferScreenShareHiding = true
 
   report.permissionMatrix = []
   for (const [missing, value] of [['microphone', 'denied'], ['screen', 'denied'], ['systemAudio', 'unavailable']]) {
@@ -282,7 +282,6 @@ try {
   noWork(checked)
   assert.ok(checked.probeTracksStarted >= 2); assert.equal(checked.probeTracksStarted, checked.probeTracksStopped)
   report.probeTelemetry = checked
-  await client.evaluate(`(() => {const input=document.querySelector('.access-setup-privacy input');if(input.checked)input.click();})()`)
   await checkLayout(client, 'ready-access')
   await primary(client)
   await until('access gate completed', () => client.evaluate('!document.querySelector(".access-setup")&&!!document.querySelector(".sidebar")'))

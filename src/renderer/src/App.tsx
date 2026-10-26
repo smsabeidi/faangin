@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, BookOpen, Check, ChevronDown, ChevronUp, CircleHelp, Code2, Copy, Crop, Download, FileText, FolderOpen, ImagePlus, Layers3, LoaderCircle, Maximize2, MessageSquare, Mic, Monitor, MoreHorizontal, PanelLeftClose, PanelRightClose, PanelRightOpen, Pause, Play, Plus, RotateCcw, Search, Send, Settings2, ShieldCheck, Sparkles, Square, Terminal, Trash2, Volume2, WandSparkles, X, Zap } from 'lucide-react'
 import type { Action, Answer, AppEvent, AppState, Attachment, GenerateInput, Session, SessionSummary, WorkspaceMode } from '../../shared/types'
 import { Brand, IconButton, MarkdownText, Modal, shortDate, shortTime, Spinner, Toggle } from './components'
+import { SYSTEM_AUDIO_CONSENT_MESSAGE } from '../../main/system-audio-consent'
 import Settings, { type SettingsSection } from './Settings'
 import InterviewEditor from './InterviewEditor'
 import { clearPartials, revisePartial, type PartialTurn } from './live-transcript'
@@ -54,6 +55,7 @@ export default function App() {
   const [draftPrompt, setDraftPrompt] = useState('')
   const [regionRequest, setRegionRequest] = useState<{ sessionId: string; contextEpoch: number; sourceId?: string } | null>(null)
   const [requestedReset, setRequestedReset] = useState(false)
+  const [systemAudioNotice, setSystemAudioNotice] = useState<{ sessionId: string; resume: boolean; epoch: number | null } | null>(null)
   const answerStreams = useRef<AnswerStreamBatcher | null>(null)
   const stateRevision = useRef(0)
   const currentId = useRef<string | null>(null)
@@ -68,6 +70,7 @@ export default function App() {
     stateRevision.current++
     activeSessionOwner.current = incoming.currentSession ? { sessionId: incoming.currentSession.id, contextEpoch: incoming.currentSession.contextEpoch } : null
     if (answerStreams.current) incoming = { ...incoming, currentSession: answerStreams.current.reconcile(incoming.currentSession) }
+    if (incoming.systemAudioConsented) setError(current => current.includes(SYSTEM_AUDIO_CONSENT_MESSAGE) ? '' : current)
     setState(incoming)
   }, [])
 
@@ -108,7 +111,8 @@ export default function App() {
       if (event.type === 'state') applyState(event.state)
       else if (event.type === 'navigate') setView(event.view)
       else if (event.type === 'shortcut') window.dispatchEvent(new CustomEvent('faangin-shortcut', { detail: event.action }))
-      else if (event.type === 'error') setError(event.message)
+      else if (event.type === 'error') { if (!consentNoticeShownHere(event.message)) setError(event.message) }
+      else if (event.type === 'system-audio-consent') { setView('workspace'); setSystemAudioNotice({ sessionId: event.sessionId, resume: event.resume, epoch: currentId.current === event.sessionId ? currentEpoch.current : null }) }
       else if (event.type === 'audio-level') setLevels(previous => ({ ...previous, [event.channel]: Math.max(0, Math.min(1, event.level)) }))
       else if (event.type === 'capture-status') setState(previous => previous ? { ...previous, capture: { active: event.active, sessionId: event.sessionId, microphone: event.microphone, system: event.system } } : previous)
       else if (event.type === 'live-suggestions') setState(previous => previous ? { ...previous, liveSuggestions: event.state } : previous)
@@ -187,7 +191,7 @@ export default function App() {
     setBusy(label)
     setError('')
     try { const result = await task(); if (shouldRefresh) await refresh(); return result }
-    catch (e) { setError(errorMessage(e)); return undefined }
+    catch (e) { const message = errorMessage(e); if (!consentNoticeShownHere(message)) setError(message); return undefined }
     finally { setBusy(pendingOperations.current.finish(operationId)) }
   }, [refresh])
 
@@ -294,6 +298,16 @@ export default function App() {
   const style = { '--user-font-size': `${state.settings.fontSize}px`, '--overlay-opacity': state.settings.opacity } as CSSProperties
   const common = { state, session, mode, busy, working, activeAnswer, generate, answerLatest, capture, captureAndSolve, captureRegion, importImage, start, startHandsFree, stop, run, copy, changeMode, smart, cancel, selectedAttachmentIds, setSelectedAttachmentIds: selectAttachments, draftPrompt, setDraftPrompt, notify: setNotice }
   const regionDialog = regionRequest && <RegionCapture key={`${regionRequest.sessionId}:${regionRequest.contextEpoch}`} sessionId={regionRequest.sessionId} sourceId={regionRequest.sourceId} onClose={() => setRegionRequest(null)} onAdded={() => { setRegionRequest(null); void refresh().catch(value => setError(errorMessage(value))) }}/>
+  const listenAfterNotice = (request: { sessionId: string; epoch: number | null }) => run('Starting capture', async () => {
+    await window.faangin.acknowledgeSystemAudioConsent()
+    const latest = await window.faangin.getState()
+    if (latest.capture.sessionId === request.sessionId) { await window.faangin.resumeCapture(request.sessionId); return }
+    // A start never moves to a session that was switched or reset while the notice was open.
+    const current = latest.currentSession
+    if (!current || current.id !== request.sessionId || (request.epoch !== null && current.contextEpoch !== request.epoch)) return
+    await window.faangin.startCapture(request.sessionId)
+  })
+  const systemAudioNoticeDialog = systemAudioNotice && <Modal title="Before Faangin listens to computer audio" description="Computer audio is everything your computer plays, including other people on a call. While you listen, Faangin sends it to OpenAI to transcribe." onClose={() => setSystemAudioNotice(null)}><div className="system-audio-notice"><p>Transcripts stay on this device when session history is on, and go to your chat provider when you ask for help or turn on automatic help.</p><p>Tell the other people on the call that you are transcribing, and get their consent where the law requires it. In some places everyone on a call has to agree.</p><p>Follow the rules of the interview, meeting, class or platform you are using.</p><p className="settings-footnote">You will see this notice once. To use only your microphone, turn off Computer audio in Settings.</p></div><div className="modal-actions"><button className="button subtle" onClick={() => setSystemAudioNotice(null)}>Not now</button><button className="button primary" disabled={!!busy} onClick={() => { const request = systemAudioNotice; setSystemAudioNotice(null); void listenAfterNotice(request) }}>I understand, start listening</button></div></Modal>
 
   if (state.accessSetup?.required) {
     if (overlay) return <div className={`app overlay-app access-required-overlay ${appearanceClasses}`} style={style}><div className="access-required-content"><ShieldCheck size={28}/><h1>Finish setting up access.</h1><p>Faangin needs permission to capture your screen and use audio.</p><button type="button" className="button primary" onClick={() => { void window.faangin.openWindow('workspace').catch(value => setError(errorMessage(value))) }}>Open setup<ArrowUpRight size={16}/></button>{error && <p role="alert">{error}</p>}</div></div>
@@ -335,6 +349,7 @@ export default function App() {
 
   if (onboardingOpen !== false) return <div className={`app onboarding-app ${appearanceClasses}`} style={style}>
     {onboardingOpen && <Onboarding state={state} replay={replayingOnboarding} onRefresh={refresh} onComplete={selectedMode => { setDefaultMode(selectedMode); setOnboardingOpen(false); setReplayingOnboarding(false); setView('workspace') }} onConnect={() => { setSettingsSection('connection'); setView('settings') }}/>}
+    {systemAudioNoticeDialog}
   </div>
 
   return <div className={`app ${appearanceClasses}`} style={style}>
@@ -352,6 +367,7 @@ export default function App() {
     </div>
     {regionDialog}
     {requestedReset && <Modal title="Reset this session’s context?" description="This clears its transcript, screenshots, interview brief, selected prior context, notes, and answers." onClose={() => setRequestedReset(false)}><div className="modal-actions"><button className="button subtle" onClick={() => setRequestedReset(false)}>Keep context</button><button className="button danger" disabled={!session || !!busy} onClick={() => { if (session) void run('Resetting context', () => window.faangin.resetContext(session.id)); setRequestedReset(false) }}>Reset context</button></div></Modal>}
+    {systemAudioNoticeDialog}
   </div>
 }
 
@@ -597,6 +613,8 @@ function Library({ state, run, openSession, createSession, notify }: { state: Ap
 }
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+':\s*/, '') : String(error) }
+/** The workspace shows the computer audio notice itself; the overlay keeps the message as a pointer to it. */
+function consentNoticeShownHere(message: string) { return message.includes(SYSTEM_AUDIO_CONSENT_MESSAGE) && window.location.hash !== '#overlay' && new URLSearchParams(window.location.search).get('window') !== 'overlay' }
 
 
 function displayModel(state: AppState, smart = state.settings.smartMode): string { return state.settings.chatProvider === 'compatible' ? (smart ? state.settings.compatibleChatSmartModel : state.settings.compatibleChatModel) || 'Model needs setup' : smart ? state.settings.smartModel : state.settings.fastModel }

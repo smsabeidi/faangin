@@ -36,13 +36,6 @@
 .access-setup-allow { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; min-width: 116px; min-height: 38px; padding: 9px 12px; border: 1px solid var(--as-line); border-radius: 10px; background: var(--as-bg); color: var(--as-text); font-size: 12px; font-weight: 550; }
 .access-setup-allow:hover:not(:disabled) { background: var(--as-tint); color: var(--as-blue); border-color: var(--as-blue); }
 .access-setup-allow.ready { min-width: 116px; color: var(--as-ready); border-color: transparent; background: transparent; opacity: 1; }
-.access-setup-privacy { display: flex; align-items: center; gap: 11px; margin-top: 16px; padding: 14px 16px; border: 1px solid var(--as-line); border-radius: 13px; background: var(--as-card); }
-.access-setup-privacy > svg { flex-shrink: 0; color: var(--as-blue); }
-.access-setup-privacy-copy { flex: 1; }
-.access-setup-privacy strong { display: block; font-size: 12px; line-height: 1.4; font-weight: 600; }
-.access-setup-privacy p { margin-top: 4px; font-size: 11px; line-height: 1.5; color: var(--as-muted); }
-.access-setup-privacy input { width: 17px; height: 17px; margin: 0; flex-shrink: 0; accent-color: var(--as-blue); }
-.access-setup-privacy label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--as-muted); white-space: nowrap; }
 .access-setup-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 15px; color: var(--as-muted); font-size: 11px; line-height: 1.5; text-align: center; }
 .access-setup-note > svg { color: var(--as-blue); flex-shrink: 0; }
 .access-setup-help { display: flex; gap: 10px; align-items: flex-start; padding: 13px 15px; margin-top: 13px; border-radius: 12px; background: var(--as-tint); font-size: 12px; line-height: 1.6; }
@@ -84,7 +77,6 @@
   .access-setup-row-copy strong { font-size: 13px; }
   .access-setup-row-copy > p { margin-top: 3px; font-size: 11px; }
   .access-setup-allow { min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
-  .access-setup-privacy { margin-top: 12px; padding: 10px 13px; }
   .access-setup-note { margin-top: 10px; font-size: 10px; }
   .access-setup-footer { min-height: 66px; padding: 11px 26px; }
   .access-setup-primary { min-height: 40px; }
@@ -98,8 +90,6 @@
   .access-setup-row-copy > div { gap: 6px; }
   .access-setup-row-copy { flex-basis: calc(100% - 54px); }
   .access-setup-allow { margin-left: 47px; }
-  .access-setup-privacy { flex-wrap: wrap; }
-  .access-setup-privacy label { margin-left: 30px; }
   .access-setup-footer { padding-left: 20px; padding-right: 20px; gap: 12px; }
   .access-setup-footer-status { font-size: 11px; }
   .access-setup-primary { min-width: 142px; font-size: 12px; }

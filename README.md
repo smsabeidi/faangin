@@ -20,16 +20,20 @@ The existing hands-free interview, neutral themes, current-solution follow-ups, 
 - Prepare a factual profile, job description, response preferences, language, and note template. Import selectable text from TXT, PDF, or DOCX files.
 - Edit notes, search sessions, move sessions to Trash, restore them, and export Markdown or JSON.
 - Prepare follow-up messages from finalized conversation text. Open each source link to inspect the included passage; source snapshots remain available in saved drafts and copied/exported Markdown. Review and copy the draft yourself; the app does not send it.
-- Open a movable floating overlay and use global shortcuts. Adjust its appearance, capture protection setting, and interaction mode.
+- Open a movable floating overlay and use global shortcuts. Adjust its appearance and interaction mode.
 - Set overlay background opacity anywhere from 0–100%; text stays fully opaque. macOS accessibility preferences can replace transparency with solid surfaces.
 
 Chat can use your OpenAI account or an explicitly configured compatible chat service, including a local server. OpenAI remains the speech provider. Separate provider keys are entered in Settings, encrypted with OS-backed credential storage, and never returned to the interface. A compatible key is bound to the exact saved endpoint; the OpenAI key is never reused there. Context goes to the selected chat destination on manual requests, or automatically while listening with **Live suggestions** enabled. Automatic suggestions exclude images and provisional text, but can include bounded finalized conversation, saved background/brief/notes, opted-in history and selected prior-session excerpts. Selected images are included only in manual actions that admit them. Enabled audio goes to OpenAI while capture runs. OpenAI Responses requests set `store: false`.
+
+Faangin is built for interview practice and meetings. Computer audio includes other people's voices, so tell the people on a call that you are transcribing, get their consent where the law requires it, and follow the rules of the interview, employer, school, or platform you are using. Faangin shows this notice once and asks you to acknowledge it before it first listens to computer audio.
 
 Saved transcripts, answers, and notes remain in a local SQLite workspace. Turn off **Save session history** to keep new sessions and further edits to the active session in RAM until exit. Existing saved snapshots remain unchanged; turning history back on does not save a RAM session automatically. Preferences and presets stay saved. Raw audio is not saved. Screen attachments are held in memory and disappear when the app closes. Session exports can contain private text, so review them before sharing.
 
 ## Run locally
 
-Version 0.4.2 makes access setup the first screen. Screen capture, microphone, and computer audio must be ready before opening the workspace or overlay. The app guides OS approvals, rechecks automatically, configures the inputs, and keeps listening off until started. Screen-share privacy is an explicit setting with platform limitations. See [permission-first setup](docs/design/access-setup-042.md).
+Unreleased changes after 0.4.2 position Faangin as an interview-practice and meeting assistant. Faangin always shows its Dock icon and runs as a regular app, so the overlay no longer floats over other apps' full-screen spaces. The setting that asks the OS to exclude Faangin windows from screen capture is off by default and no longer offered during setup. The Cluely and InterviewCoder shortcut presets are removed; a saved choice of either falls back to the Faangin keymap. Listening to computer audio waits for the one-time notice above.
+
+Version 0.4.2 makes access setup the first screen. Screen capture, microphone, and computer audio must be ready before opening the workspace or overlay. The app guides OS approvals, rechecks automatically, configures the inputs, and keeps listening off until started. See [permission-first setup](docs/design/access-setup-042.md).
 
 Version 0.4.1 repairs oversized saved overlay windows and adds a visible native resize grip, size presets, and reset controls in More, Settings, and the menu bar. The native menu displays the running version; quit any older candidate before launching the newly installed app. See [overlay recovery and verification](docs/design/overlay-041.md).
 
@@ -97,7 +101,7 @@ The standard local packaging command produces `dist/mac-arm64/Faangin.app`. `npm
 
 The overlay opens interactive. Move it only by dragging the logo/status area. Click-through is an explicit opt-in; opening the overlay again restores its controls. Background answer updates preserve your chosen interaction mode.
 
-Shortcut registration status is visible in Settings. Availability depends on conflicts with other apps. Capture protection depends on the operating system and screen-sharing application; it is not a guarantee of invisibility.
+Shortcut registration status is visible in Settings. Availability depends on conflicts with other apps.
 
 When the matching native shortcut is unavailable, an empty focused composer supports **⌘/Ctrl+Enter** for Assist from existing context; typed text requests Ask, and adding Shift requests Solve. An empty Send button remains disabled. Audio meters and the new conditional low-volume diagnostic do not prove recognized speech; check Conversation text before Reply.
 

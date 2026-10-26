@@ -41,17 +41,13 @@ test('audio capability failures never claim an independent OS permission was gra
   assert.equal(permissionStatusLabel(missing, 'screen', true), 'Checking')
 })
 
-test('first-run gate presents permission setup without a tour or bypass and keeps privacy a separate choice', () => {
+test('first-run gate presents permission setup without a tour, a bypass or a screen-share hiding offer', () => {
   const html = render(state(missing))
   assert.match(html, /role="dialog" aria-modal="true"/)
   assert.match(html, /Set up access/)
   assert.doesNotMatch(html, />Continue<|Explore first|Set up later|Finish setup later/)
   for (const kind of ['screen', 'microphone', 'system-audio']) assert.match(html, new RegExp(`data-permission="${kind}"`))
-  assert.match(html, /Request screen-share privacy \(where supported\)/)
-  assert.match(html, /may still show Faangin/)
-  assert.match(html, /aria-label="Request screen-share privacy where supported" checked=""/)
   assert.match(html, /does not transcribe or save audio/)
+  for (const report of [missing, ready, { ...missing, completed: true }]) assert.doesNotMatch(render(state(report)), /screen-share privacy|type="checkbox"/i)
   assert.match(render(state(ready)), />Continue</)
-  const revoked = { ...missing, completed: true }
-  assert.doesNotMatch(render(state(revoked)), /aria-label="Request screen-share privacy where supported" checked=""/)
 })

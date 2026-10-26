@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ShortcutManager, applyStartupShortcutBindings, normalizeAccelerator, resolveShortcutBindings, shortcutLabel, type ShortcutAction, type ShortcutBinding, type ShortcutRegistrar } from '../src/main/shortcut-manager'
+import { RETIRED_SHORTCUT_PRESETS, SHORTCUT_PRESETS, ShortcutManager, applyStartupShortcutBindings, normalizeAccelerator, resolveShortcutBindings, shortcutLabel, type ShortcutAction, type ShortcutBinding, type ShortcutRegistrar } from '../src/main/shortcut-manager'
+import { settingsPatch } from '../src/main/validation'
 
 class Registrar implements ShortcutRegistrar {
   callbacks = new Map<string, () => void>(); occupied = new Set<string>(); throwing = new Set<string>(); released: string[] = []
@@ -29,13 +30,20 @@ test('platform labels reflect actual registered modifiers', () => {
   assert.equal(shortcutLabel('CommandOrControl+Shift+Enter', 'darwin'), '⌘⇧↩')
   assert.equal(shortcutLabel('CommandOrControl+Shift+Enter', 'win32'), 'Ctrl+Shift+Enter')
 })
-test('compatibility presets remain distinct and always expose a stop action', () => {
+test('the Faangin and Cue presets remain distinct and always expose a stop action', () => {
   const baseline = resolveShortcutBindings('faangin', {}, 'darwin')
   assert.equal(baseline.find(item => item.action === 'screenshot')!.accelerator, 'Command+Shift+S')
-  const interview = resolveShortcutBindings('interviewcoder', {}, 'darwin')
-  assert.equal(interview.find(item => item.action === 'screenshot')!.accelerator, 'Command+H')
-  assert.equal(interview.some(item => item.action === 'solve'), false)
-  for (const preset of ['faangin', 'cluely', 'interviewcoder', 'cue'] as const) assert.ok(resolveShortcutBindings(preset, {}, 'darwin').some(item => item.action === 'stop'))
+  const cue = resolveShortcutBindings('cue', {}, 'darwin')
+  assert.equal(cue.find(item => item.action === 'solve')!.accelerator, 'Command+H')
+  assert.equal(cue.some(item => item.action === 'screenshot'), false)
+  assert.deepEqual(SHORTCUT_PRESETS, ['faangin', 'cue'])
+  for (const preset of SHORTCUT_PRESETS) assert.ok(resolveShortcutBindings(preset, {}, 'darwin').some(item => item.action === 'stop'))
+})
+
+test('saved settings that name a retired keymap fall back to Faangin instead of failing validation', () => {
+  for (const preset of RETIRED_SHORTCUT_PRESETS) assert.deepEqual(settingsPatch({ shortcutPreset: preset }), { shortcutPreset: 'faangin' })
+  assert.deepEqual(settingsPatch({ shortcutPreset: 'cue' }), { shortcutPreset: 'cue' })
+  assert.throws(() => settingsPatch({ shortcutPreset: 'unknown' }))
 })
 test('custom override disables one shortcut and enables another without modifying preset defaults', () => {
   const custom = resolveShortcutBindings('faangin', { screenshot: null, reset: 'Cmd+G' }, 'darwin')
@@ -45,7 +53,7 @@ test('custom override disables one shortcut and enables another without modifyin
 })
 
 test('every preset includes independent interaction and workspace recovery shortcuts without physical collisions', () => {
-  for (const platform of ['darwin', 'win32'] as const) for (const preset of ['faangin', 'cluely', 'interviewcoder', 'cue'] as const) {
+  for (const platform of ['darwin', 'win32'] as const) for (const preset of SHORTCUT_PRESETS) {
     const resolved = resolveShortcutBindings(preset, {}, platform)
     assert.equal(resolved.find(item => item.action === 'capture-solve')?.accelerator, 'Control+Alt+S')
     assert.equal(resolved.find(item => item.action === 'toggle-interaction')?.accelerator, 'Control+Alt+I')

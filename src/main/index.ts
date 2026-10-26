@@ -37,6 +37,7 @@ import { CaptureSolveCoordinator, CaptureSolveImages, captureSolveConnectionIden
 import { capturePermissionRequestAllowed, capturePermissionCheckAllowed } from './capture-permissions'
 import { requestSetupPermission, type SetupPermission } from './permission-setup'
 import { AccessSetupCoordinator, ACCESS_SETUP_MESSAGE, checkSystemAudioReadiness, setupAudioPermissionAllowed, setupAudioPermissionCheckAllowed, type SystemAudioReadinessResult } from './access-setup'
+import { assertSystemAudioConsent, systemAudioConsented, systemAudioConsentReceipt } from './system-audio-consent'
 import { probeNativeSystemAudio } from './native-audio-probe'
 import { diagnosticJSON } from './diagnostics'
 import { normalizeCompatibleChatEndpoint, validateCompatibleChatConfiguration, generateCompatibleAnswer, type CompatibleChatCredential } from './compatible-chat'
@@ -78,6 +79,7 @@ let accessSetup: AccessSetupCoordinator
 let accessSetupWindow: BrowserWindow | null = null
 let accessSetupLease: { contents: Electron.WebContents; expiresAt: number } | null = null
 let accessRequestPending = false
+let systemAudioConsent = false
 const overlayInteraction = new OverlayInteractionPolicy()
 const dockPolicy = new MacDockPolicy({
   platform: process.platform,
@@ -176,6 +178,11 @@ function accessSetupBlocked(): boolean {
   return true
 }
 function requireAccessSetup(): void { if (accessSetupBlocked()) throw new Error(ACCESS_SETUP_MESSAGE) }
+/** Starts from the overlay or a shortcut open the notice in the workspace, where it can be read and acknowledged. */
+function requireSystemAudioConsent(sessionId: string, resume = false): void {
+  try { assertSystemAudioConsent(settings.systemAudio, systemAudioConsent) }
+  catch (error) { showWindow('workspace'); if (workspace) sendUI(workspace, { type: 'system-audio-consent', sessionId, resume }); throw error }
+}
 function refreshAccessReadiness(): AccessSetupState {
   accessTelemetry.statusChecks++
   const current = accessSetupState()
@@ -231,7 +238,7 @@ async function requestComputerAudioAccess(background = false): Promise<void> {
   }
 }
 function state(kind: WindowKind = 'workspace'): AppState {
-  return { settings, accessSetup: accessSetupState(), accessibility: { ...accessibility }, keyConfigured: keyConfigured(), chatConfigured: chatConfigured(), compatibleKeyConfigured: compatibleKeyConfigured(), overlayClickThrough: overlayInteraction.passive, captureSolve: captureSolve.state(), permissions: permissions(), sessions: repo.list(), currentSession: currentSessionId ? fullSession(currentSessionId) : null, version: app.getVersion(), windowKind: kind, capture: { ...captureState }, liveSuggestions: liveSuggestionStatus(), shortcuts, presets: presetCatalog.snapshot(), storageWarnings: [...repo.diagnostics().issueCodes, ...(presetRecoveryRequired ? ['preset-recovery-required'] : [])] }
+  return { settings, accessSetup: accessSetupState(), systemAudioConsented: systemAudioConsent, accessibility: { ...accessibility }, keyConfigured: keyConfigured(), chatConfigured: chatConfigured(), compatibleKeyConfigured: compatibleKeyConfigured(), overlayClickThrough: overlayInteraction.passive, captureSolve: captureSolve.state(), permissions: permissions(), sessions: repo.list(), currentSession: currentSessionId ? fullSession(currentSessionId) : null, version: app.getVersion(), windowKind: kind, capture: { ...captureState }, liveSuggestions: liveSuggestionStatus(), shortcuts, presets: presetCatalog.snapshot(), storageWarnings: [...repo.diagnostics().issueCodes, ...(presetRecoveryRequired ? ['preset-recovery-required'] : [])] }
 }
 function savePresetCatalog(next: PresetCatalog): void {
   const snapshot = durablePresetSnapshot(next.snapshot(), savedPresetSnapshot, id => {
@@ -431,7 +438,7 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     applyWindowAppearance(window, isOverlay)
     window.on('focus', () => { scheduleAppearanceRefresh(); refreshAccessReadiness() })
     if (isOverlay) {
-      overlayWindowLayout = layout; window.setAlwaysOnTop(true, 'floating'); window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); overlayInteraction.attach(window)
+      overlayWindowLayout = layout; window.setAlwaysOnTop(true, 'floating'); window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true }); overlayInteraction.attach(window)
       window.setMaximizable(false); window.setFullScreenable(false)
       window.on('maximize', () => { window.unmaximize(); applyOverlayLayout() })
       window.on('enter-full-screen', () => { window.setFullScreen(false) })
@@ -468,9 +475,9 @@ function makeOverlayInteractive(): void {
   refreshMenu(); emitState()
 }
 function applyDockPreference(): void {
-  // Production always installs a status menu first. Hidden smoke jobs do not
-  // change the developer's Dock; visible isolated native QA exercises this path.
-  if (!smoke || smokeVisible) dockPolicy.apply(settings.hideDockIcon)
+  // Faangin always shows its Dock icon. Hidden smoke jobs do not change the
+  // developer's Dock; visible isolated native QA exercises this path.
+  if (!smoke || smokeVisible) dockPolicy.apply(false)
 }
 function applyOverlayLayout(): void {
   if (!overlay || overlay.isDestroyed() || !overlayWindowLayout) return
@@ -878,6 +885,7 @@ async function startCapture(sessionId: string): Promise<void> {
   if (quitting) throw new Error('Faangin is closing.')
   const policy = capturePolicy.state()
   if (policy.phase !== 'idle' && policy.sessionId !== sessionId) throw new Error('Stop the current session before capturing another.')
+  requireSystemAudioConsent(sessionId)
   repo.shadowIfHistoryOff(sessionId); currentSessionId = sessionId
   await captureLifecycle.start(sessionId)
 }
@@ -925,6 +933,7 @@ async function resumeCapture(sessionId: string): Promise<void> {
   requireAccessSetup()
   if (capturePolicy.state().sessionId !== sessionId) throw new Error('This session is not paused. Start capture explicitly to resume its saved context.')
   if (quitting) throw new Error('Faangin is closing.')
+  requireSystemAudioConsent(sessionId, true)
   await captureLifecycle.resume()
 }
 function onCaptureSuspend(): void { void captureLifecycle.suspend().catch(error => emit({ type: 'error', message: safeError(error), code: 'capture_failed' })) }
@@ -1433,13 +1442,11 @@ function setupIPC(): void {
     } finally { accessRequestPending = false; refreshAccessReadiness() }
   })
   handle('access-refresh', [0, 0], () => refreshAccessReadiness())
-  handle('access-complete', [1, 1], (_event, value) => {
-    const options = validate.record(value); validate.onlyKeys(options, ['privacyMode'])
-    const privacyMode = validate.bool(options.privacyMode)
+  handle('system-audio-consent', [0, 0], () => { repo.saveConfiguration('system-audio-consent', systemAudioConsentReceipt()); systemAudioConsent = true; emitState() })
+  handle('access-complete', [0, 0], () => {
     if (accessRequestPending || !accessSetupState().ready) throw new Error('Allow screen and microphone access, then verify computer audio before continuing.')
-    settings = repo.saveSettings({ ...settings, microphone: true, systemAudio: true, liveSuggestionSource: 'system', liveSuggestions: false, privacyMode })
+    settings = repo.saveSettings({ ...settings, microphone: true, systemAudio: true, liveSuggestionSource: 'system', liveSuggestions: false })
     accessSetup.complete(permissions())
-    for (const window of uiWindows()) window.setContentProtection(privacyMode)
     refreshMenu(); emitState()
   })
   ipcMain.on('faangin:document-result', (event, idValue, textValue, errorValue) => {
@@ -1511,8 +1518,9 @@ function shortcutAction(action: string): void {
   }
   if (!currentSessionId) { emit({ type: 'error', message: 'Create a session in the workspace first.' }); showWindow('overlay'); return }
   if (action === 'toggle-capture') {
-    const phase = capturePolicy.state().phase
-    void (phase === 'idle' ? startCapture(currentSessionId) : phase === 'paused' ? captureLifecycle.resume() : stopCapture()).catch(error => emit({ type: 'error', message: safeError(error) })); return
+    const { phase, sessionId: pausedId } = capturePolicy.state()
+    const sessionId = currentSessionId
+    void (phase === 'idle' ? startCapture(sessionId) : phase === 'paused' ? (async () => { requireSystemAudioConsent(pausedId ?? sessionId, true); await captureLifecycle.resume() })() : stopCapture()).catch(error => emit({ type: 'error', message: safeError(error) })); return
   }
   if (action === 'reset') { showWindow('workspace'); if (workspace) sendUI(workspace, { type: 'shortcut', action: 'reset' }); return }
   if (action === 'capture-solve') { void captureAndSolve(currentSessionId).catch(error => emit({ type: 'error', message: safeError(error) })); return }
@@ -1536,10 +1544,6 @@ function refreshMenu(): void {
     { id: 'overlay-reset-layout', label: 'Reset overlay size & position', click: () => { try { resetOverlayLayout(); makeOverlayInteractive() } catch (error) { emit({ type: 'error', message: `Overlay layout could not be reset: ${safeError(error)}` }) } } },
     { label: 'Make overlay interactive', click: () => makeOverlayInteractive() },
     { label: 'Click-through overlay', type: 'checkbox', checked: overlayInteraction.passive, accelerator: active.find(binding => binding.action === 'toggle-interaction')?.accelerator, click: () => shortcutAction('toggle-interaction') },
-    ...(process.platform === 'darwin' ? [{ label: 'Show in Dock', type: 'checkbox' as const, checked: !settings.hideDockIcon, click: () => {
-      try { settings = repo.saveSettings({ ...settings, hideDockIcon: !settings.hideDockIcon }); applyDockPreference(); refreshMenu(); emitState() }
-      catch (error) { emit({ type: 'error', message: `Dock preference could not be saved: ${safeError(error)}` }); refreshMenu() }
-    } }] : []),
     { type: 'separator' },
     ...actions.map(item => ({ label: item.label, accelerator: active.find(binding => binding.action === item.action)?.accelerator, click: () => shortcutAction(item.action) })),
     { type: 'separator' }, { label: 'Settings', click: () => { showWindow('workspace'); emit({ type: 'navigate', view: 'settings' }) } }, { role: 'quit' }
@@ -1566,6 +1570,7 @@ else {
     try { savedAccessSetup = repo.configuration('access-setup') } catch { /* Preserve an unreadable receipt and require setup again. */ }
     if (accessFixtureMode === 'ready') savedAccessSetup = { version: 1, completed: true, systemAudioVerifiedAt: Date.now() }
     accessSetup = new AccessSetupCoordinator(savedAccessSetup, value => repo.saveConfiguration('access-setup', value))
+    try { systemAudioConsent = systemAudioConsented(repo.configuration('system-audio-consent')) } catch { /* An unreadable acknowledgment shows the notice again. */ }
     if (accessFixtureMode === 'ready') accessSetup.finishAudioCheck(true)
     try { presetCatalog = new PresetCatalog(repo.configuration('preset-catalog')) } catch { presetRecoveryRequired = true }
     savedPresetSnapshot = presetCatalog.snapshot()
@@ -1628,7 +1633,7 @@ else {
 app.on('activate', () => {
   // Accessory-policy changes and explicit overlay interaction can activate the
   // app too. They must not open a workspace over the app beneath the overlay.
-  if (repo && !quitting && (!smoke || smokeVisible) && !(process.platform === 'darwin' && settings.hideDockIcon) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
+  if (repo && !quitting && (!smoke || smokeVisible) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin' || smoke) app.quit() })
 app.on('web-contents-created', (_event, contents) => { contents.session.on('will-download', event => event.preventDefault()) })

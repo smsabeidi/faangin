@@ -50,7 +50,7 @@ if (surface === 'capture') {
     exportDiagnostics: () => invoke('diagnostics-export'),
     exportSession: (id, format) => invoke('export', id, format), importProfile: () => invoke('profile-import'),
     openWindow: (kind, view) => invoke('window-open', kind, view), hideOverlay: () => invoke('overlay-hide'), resizeOverlay: size => invoke('overlay-resize', size), resetOverlayLayout: () => invoke('overlay-reset-layout'), setClickThrough: enabled => invoke('click-through', enabled),
-    openPermissionSettings: kind => invoke('permissions', kind), requestPermission: kind => invoke('permission-request', kind), refreshAccessSetup: () => invoke('access-refresh'), completeAccessSetup: options => invoke('access-complete', options), onEvent: (listener: (event: AppEvent) => void) => listen('faangin:event', listener)
+    openPermissionSettings: kind => invoke('permissions', kind), requestPermission: kind => invoke('permission-request', kind), refreshAccessSetup: () => invoke('access-refresh'), completeAccessSetup: () => invoke('access-complete'), acknowledgeSystemAudioConsent: () => invoke('system-audio-consent'), onEvent: (listener: (event: AppEvent) => void) => listen('faangin:event', listener)
   }
   contextBridge.exposeInMainWorld('faangin', Object.freeze(api))
 }

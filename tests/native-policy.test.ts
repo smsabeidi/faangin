@@ -175,8 +175,8 @@ test('non-macOS platforms never call macOS activation or Dock APIs', () => {
   }
 })
 
-test('Dock preference is strictly boolean and defaults to hidden for the macOS utility behavior', () => {
-  assert.equal(DEFAULT_SETTINGS.hideDockIcon, true)
+test('Faangin shows its Dock icon by default and saved Dock preferences stay readable', () => {
+  assert.equal(DEFAULT_SETTINGS.hideDockIcon, false)
   assert.deepEqual(settingsPatch({ hideDockIcon: true }), { hideDockIcon: true })
   assert.deepEqual(settingsPatch({ hideDockIcon: false }), { hideDockIcon: false })
   for (const hideDockIcon of ['true', 1, null, undefined]) assert.throws(() => settingsPatch({ hideDockIcon }))

@@ -22,6 +22,18 @@ export async function runDesktopWorkflow(api, providerEndpoint, options = {}) {
   await api.pauseCapture(); await api.pauseCapture(); await api.stopCapture(); await api.stopCapture()
   const stopped = await api.getState()
   check(stopped.capture.active === false && stopped.capture.sessionId === null && stopped.capture.microphone === 'Off' && stopped.capture.system === 'Off' && stopped.currentSession.status === 'ended' && stopped.currentSession.endedAt === endedAt, 'Repeated pause or stop changed an already-ended capture.')
+  // Computer audio waits for the one-time notice; the main process enforces it and the workspace shows it.
+  await api.updateSettings({ systemAudio: true })
+  check((await api.getState()).systemAudioConsented === false, 'A fresh profile treated the computer audio notice as acknowledged.')
+  await rejected(() => api.startCapture(baseline.id), /computer audio notice/i, 'Computer audio before the notice')
+  const noticeDeadline = Date.now() + 2_000
+  while (!document.querySelector('.system-audio-notice') && Date.now() < noticeDeadline) await new Promise(resolve => setTimeout(resolve, 15))
+  check(!!document.querySelector('.system-audio-notice'), 'The computer audio notice did not open in the workspace.')
+  await api.acknowledgeSystemAudioConsent()
+  check((await api.getState()).systemAudioConsented === true, 'The computer audio acknowledgment was not recorded.')
+  await rejected(() => api.startCapture(baseline.id), /OpenAI API key.*Settings/i, 'Acknowledged computer audio capture')
+  document.querySelector('.system-audio-notice')?.closest('.modal')?.querySelector('.button.subtle')?.click()
+  await api.updateSettings({ systemAudio: false })
   const awaitAnswer = async (requestId, predicate) => {
     const deadline = Date.now() + 5_000
     while (Date.now() < deadline) {
@@ -377,7 +389,7 @@ export async function runDesktopWorkflow(api, providerEndpoint, options = {}) {
   await api.updateSettings({ historyEnabled: true })
   check((await api.getState()).currentSession.persistent === false && (await api.selectSession(baseline.id)).persistent === false, 'Re-enabling history silently promoted a RAM session.')
   return {
-    capture: { missingKeyRejected: true, intentEnded: true, repeatedPauseStop: true, nativeDisplayPermissionReached: true, permissionProbeOpenedNoStream: true },
+    capture: { missingKeyRejected: true, intentEnded: true, repeatedPauseStop: true, systemAudioNoticeRequired: true, nativeDisplayPermissionReached: true, permissionProbeOpenedNoStream: true },
     inference: { fast: true, smart: true, context: true, cancellation: true, safeQuota: true, sourceLinkedDraft: true, screenshotSolve: true, interviewFollowup: true, automaticInterviewFollowup: true },
     presets: { create: true, choice: true, update: true, staleEditRejected: true, duplicate: true, restoreDefaults: true, delete: true },
     context: { reset: true, trash: true, restore: true, purge: true, purgeGuard: true },
@@ -392,6 +404,7 @@ export async function verifyDesktopPersistence(api, ids) {
   const check = (condition, message) => { if (!condition) throw new Error(message) }
   const initial = await api.getState(), active = await api.listSessions(), trash = await api.listSessions('', true)
   check(initial.settings.historyEnabled === true, 'The saved history preference was not restored.')
+  check(initial.systemAudioConsented === true, 'The computer audio acknowledgment was not kept across restart.')
   check([...active, ...trash].every(session => session.id !== ids.ephemeral && session.id !== ids.purged), 'A RAM-only or purged session survived application restart.')
   for (const id of [ids.ephemeral, ids.purged]) {
     let unavailable = false
@@ -407,5 +420,5 @@ export async function verifyDesktopPersistence(api, ids) {
   const interview = await api.selectSession(ids.interviewFlow)
   check(interview.answers.some(answer => answer.id === ids.interrupted && answer.status === 'cancelled' && answer.interruption?.reason === 'new-question' && answer.text.includes('UNFINISHED_PLAN')), 'Interrupted code and its reason were not durable across restart.')
   check(interview.answers.some(answer => answer.id === ids.latestScenario && answer.status === 'complete' && answer.context.interruptedAnswerIds?.includes(ids.automaticInterrupted) && answer.context.interviewSnapshot?.problem.includes('unweighted graph')), 'The updated scenario lost its baseline snapshot or interrupted-draft provenance across restart.')
-  return { savedBaseline: true, answerDurable: true, draftDurable: true, interruptedDraftDurable: true, scenarioContextDurable: true, ramSessionDiscarded: true, ramShadowDiscarded: true, transientPresetChoiceDiscarded: true, purgedSessionAbsent: true }
+  return { savedBaseline: true, systemAudioConsentKept: true, answerDurable: true, draftDurable: true, interruptedDraftDurable: true, scenarioContextDurable: true, ramSessionDiscarded: true, ramShadowDiscarded: true, transientPresetChoiceDiscarded: true, purgedSessionAbsent: true }
 }

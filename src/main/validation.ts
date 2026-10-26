@@ -1,6 +1,6 @@
 import type { Action, AudioChannel, GenerateInput, InterviewContext, SessionListFilter, Settings, WorkspaceMode, WindowKind } from '../shared/types'
 import { DEFAULT_INTERVIEW_CONTEXT, OVERLAY_OPACITY } from '../shared/types'
-import { normalizeAccelerator, SHORTCUT_ACTIONS } from './shortcut-manager'
+import { normalizeAccelerator, overridesAfterRetiredPreset, RETIRED_SHORTCUT_PRESETS, SHORTCUT_ACTIONS, SHORTCUT_PRESETS } from './shortcut-manager'
 import { normalizeCompatibleChatEndpoint } from './compatible-chat'
 
 export function record(value: unknown): Record<string, unknown> {
@@ -55,7 +55,8 @@ export function settingsPatch(value: unknown): Partial<Settings> {
     else if (key === 'opacity') result.opacity = finite(value, OVERLAY_OPACITY.min, OVERLAY_OPACITY.max)
     else if (key === 'overlayExpandedHeight') result.overlayExpandedHeight = Math.round(finite(value, 400, 10_000))
     else if (key === 'fontSize') result.fontSize = finite(value, 11, 24)
-    else if (key === 'shortcutPreset') result.shortcutPreset = oneOf(value, ['faangin', 'cluely', 'interviewcoder', 'cue'] as const)
+    // A retired keymap maps to Faangin's so older saved settings never fail validation and reset.
+    else if (key === 'shortcutPreset') result.shortcutPreset = (RETIRED_SHORTCUT_PRESETS as readonly unknown[]).includes(value) ? 'faangin' : oneOf(value, SHORTCUT_PRESETS)
     else if (key === 'shortcutOverrides') {
       const overrides = record(value); onlyKeys(overrides, [...SHORTCUT_ACTIONS])
       result.shortcutOverrides = Object.fromEntries(Object.entries(overrides).map(([action, accelerator]) => [action, accelerator === null ? null : normalizeAccelerator(text(accelerator, 160))]))
@@ -65,6 +66,7 @@ export function settingsPatch(value: unknown): Partial<Settings> {
       result.captureIdleMinutes = minutes
     }
   }
+  if ((RETIRED_SHORTCUT_PRESETS as readonly unknown[]).includes(object.shortcutPreset) && result.shortcutOverrides) result.shortcutOverrides = overridesAfterRetiredPreset(result.shortcutOverrides)
   return result
 }
 export function interviewContext(value: unknown): InterviewContext {
