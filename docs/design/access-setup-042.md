@@ -12,7 +12,7 @@ The screen-share privacy checkbox requests native content protection where suppo
 
 ## Future launches and revoked access
 
-A saved computer-audio timestamp is historical evidence, not current permission. Each process begins without a current audio proof. After completed setup and consent, one bounded background check verifies computer audio on the next launch, provided microphone and screen access remain granted. Failure closes the gate and does not retry in a loop. New installs never start this check before the user's setup action.
+A saved computer-audio timestamp is historical evidence, not current permission. Each process begins without a current audio proof. After completed setup and consent, one bounded background check verifies computer audio on the next launch, provided microphone and screen access remain granted. Failure closes the gate and does not retry in a loop. Later launches wait for a manual check, and once one passes the consented startup check resumes; a failed check never revokes consent. New installs never start this check before the user's setup action.
 
 Focus and visible setup polling re-read OS status without reopening streams or prompts. Runtime permission loss stops capture, cancels pending assistance, hides the overlay, and returns to setup. Existing RAM-only session data is retained; the setup screen exposes a Save current session action before any manual OS-requested restart.
 

@@ -53,6 +53,52 @@ test('revocation closes the gate without discarding completion or replacing the 
   assert.equal(coordinator.mayRecheckOnStartup(allowed), false)
 })
 
+test('a failed computer audio check waits for one passing check, then the consented startup check resumes', () => {
+  for (const denied of [false, true]) {
+    let saved: AccessSetupReceipt | undefined
+    const store = (value: AccessSetupReceipt) => { saved = value }
+    const setup = new AccessSetupCoordinator(undefined, store)
+    setup.beginAudioCheck(); setup.finishAudioCheck(true); setup.complete(allowed)
+    const failedLaunch = new AccessSetupCoordinator(saved, store)
+    assert.equal(failedLaunch.mayRecheckOnStartup(allowed), true)
+    failedLaunch.beginAudioCheck(); failedLaunch.finishAudioCheck(false, 'Computer audio could not be verified.', denied)
+    assert.equal(saved?.backgroundCheckConsented, true)
+    const manualLaunch = new AccessSetupCoordinator(saved, store)
+    assert.equal(manualLaunch.mayRecheckOnStartup(allowed), false)
+    assert.equal(manualLaunch.snapshot(allowed).required, true)
+    manualLaunch.beginAudioCheck(); manualLaunch.finishAudioCheck(true)
+    assert.equal(manualLaunch.snapshot(allowed).required, false)
+    assert.equal(new AccessSetupCoordinator(saved, store).mayRecheckOnStartup(allowed), true)
+  }
+})
+
+test('a computer audio source lost during capture keeps consent and skips only the next unattended check', () => {
+  let saved: AccessSetupReceipt | undefined
+  const store = (value: AccessSetupReceipt) => { saved = value }
+  const running = new AccessSetupCoordinator({ version: 1, completed: true, systemAudioVerifiedAt: Date.now(), backgroundCheckConsented: true }, store)
+  running.finishAudioCheck(true)
+  running.finishAudioCheck(false, 'Computer audio access needs to be checked again after the audio source stopped.')
+  assert.equal(saved?.backgroundCheckConsented, true); assert.equal(saved?.systemAudioVerifiedAt, null)
+  assert.equal(new AccessSetupCoordinator(saved, store).mayRecheckOnStartup(allowed), false)
+})
+
+test('receipts damaged by the 0.4.2 failure path recover consent, while setup that never completed gains none', () => {
+  let saved: AccessSetupReceipt | undefined
+  const store = (value: AccessSetupReceipt) => { saved = value }
+  const damaged = new AccessSetupCoordinator({ version: 1, completed: true, systemAudioVerifiedAt: null, backgroundCheckConsented: false }, store)
+  assert.equal(damaged.mayRecheckOnStartup(allowed), false)
+  damaged.beginAudioCheck(); damaged.finishAudioCheck(true)
+  assert.equal(saved?.backgroundCheckConsented, true)
+  assert.equal(new AccessSetupCoordinator(saved, store).mayRecheckOnStartup(allowed), true)
+  for (const receipt of [undefined, { version: 1, completed: false, systemAudioVerifiedAt: null, backgroundCheckConsented: false }, { version: 1, completed: true, systemAudioVerifiedAt: null }]) {
+    const writes: AccessSetupReceipt[] = []
+    const unconsented = new AccessSetupCoordinator(receipt, value => { writes.push(value) })
+    unconsented.beginAudioCheck(); unconsented.finishAudioCheck(false, 'Computer audio could not be verified.')
+    unconsented.beginAudioCheck(); unconsented.finishAudioCheck(true)
+    assert.equal(writes.length, 2); assert.ok(writes.every(write => write.backgroundCheckConsented === false))
+  }
+})
+
 test('invalid, future-dated and unavailable persistence never manufacture permission readiness', () => {
   for (const invalid of [undefined, {}, { version: 2, completed: true, systemAudioVerifiedAt: 1 }, { version: 1, completed: 'true', systemAudioVerifiedAt: 1 }, { version: 1, completed: true, systemAudioVerifiedAt: Date.now() + 100_000 }]) {
     assert.equal(new AccessSetupCoordinator(invalid, () => {}).snapshot(allowed).required, true)

@@ -2,10 +2,12 @@ import type { AccessSetupState, PermissionStatus, SystemAudioAccessStatus } from
 
 export interface AccessSetupReceipt { version: 1; completed: boolean; systemAudioVerifiedAt: number | null; backgroundCheckConsented: boolean }
 export const ACCESS_SETUP_MESSAGE = 'Finish access setup in the workspace before opening the overlay, capturing, or requesting answers.'
+// Completing setup is the only way to give consent. 0.4.2 cleared it after a failed audio check,
+// so a completed receipt with consent stored as false gets the user's original consent back.
 function receipt(value: unknown): AccessSetupReceipt {
   if (value && typeof value === 'object') {
     const entry = value as Partial<AccessSetupReceipt>
-    if (entry.version === 1 && typeof entry.completed === 'boolean' && (entry.systemAudioVerifiedAt === null || (typeof entry.systemAudioVerifiedAt === 'number' && Number.isFinite(entry.systemAudioVerifiedAt) && entry.systemAudioVerifiedAt > 0 && entry.systemAudioVerifiedAt <= Date.now()))) return { version: 1, completed: entry.completed, systemAudioVerifiedAt: entry.systemAudioVerifiedAt, backgroundCheckConsented: entry.backgroundCheckConsented === true }
+    if (entry.version === 1 && typeof entry.completed === 'boolean' && (entry.systemAudioVerifiedAt === null || (typeof entry.systemAudioVerifiedAt === 'number' && Number.isFinite(entry.systemAudioVerifiedAt) && entry.systemAudioVerifiedAt > 0 && entry.systemAudioVerifiedAt <= Date.now()))) return { version: 1, completed: entry.completed, systemAudioVerifiedAt: entry.systemAudioVerifiedAt, backgroundCheckConsented: entry.backgroundCheckConsented === true || (entry.completed && entry.backgroundCheckConsented === false) }
   }
   return { version: 1, completed: false, systemAudioVerifiedAt: null, backgroundCheckConsented: false }
 }
@@ -32,7 +34,8 @@ export class AccessSetupCoordinator {
     return this.saved.completed && this.saved.backgroundCheckConsented && !!this.saved.systemAudioVerifiedAt && ['granted', 'not-required'].includes(current.permissions.microphone) && ['granted', 'not-required'].includes(current.permissions.screen)
   }
   finishAudioCheck(success: boolean, issue?: string, denied = false): void {
-    const next = { ...this.saved, systemAudioVerifiedAt: success ? Date.now() : null, backgroundCheckConsented: success && this.saved.backgroundCheckConsented }
+    // Failure clears only the verified timestamp: no unattended recheck runs until a check passes again, and consent stays recorded.
+    const next = { ...this.saved, systemAudioVerifiedAt: success ? Date.now() : null }
     try { this.save(next) } catch (error) { this.audioStatus = 'unavailable'; this.issue = 'The access check could not be saved. Check local storage and retry.'; throw error }
     this.saved = next
     this.audioStatus = success ? 'verified' : denied ? 'denied' : 'unavailable'; this.issue = issue
