@@ -42,7 +42,6 @@ export interface Settings {
   privacyMode: boolean
   includeHistory: boolean
   launchAtLogin: boolean
-  /** Kept so saved settings stay readable; Faangin always shows its Dock icon. */
   hideDockIcon: boolean
   smartMode: boolean
   historyEnabled: boolean
@@ -64,7 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system', opacity: 0.94, overlayCollapsed: false, overlayExpandedHeight: 560, fontSize: 14, microphone: true, systemAudio: false,
   liveSuggestions: false, liveSuggestionSource: 'system',
   microphoneDeviceId: '', screenshotSourceId: '', privacyMode: false, includeHistory: false,
-  launchAtLogin: false, hideDockIcon: false, smartMode: false, historyEnabled: true,
+  launchAtLogin: false, hideDockIcon: true, smartMode: false, historyEnabled: true,
   shortcutPreset: 'faangin', shortcutOverrides: {}, captureIdleMinutes: 10,
   chatProvider: 'openai', compatibleChatEndpoint: '', compatibleChatModel: '', compatibleChatSmartModel: '', compatibleChatVision: false
 }

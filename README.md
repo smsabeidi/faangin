@@ -31,7 +31,7 @@ Saved transcripts, answers, and notes remain in a local SQLite workspace. Turn o
 
 ## Run locally
 
-Unreleased changes after 0.4.2 position Faangin as an interview-practice and meeting assistant. Faangin always shows its Dock icon and runs as a regular app, so the overlay no longer floats over other apps' full-screen spaces. The setting that asks the OS to exclude Faangin windows from screen capture is off by default and no longer offered during setup. The Cluely and InterviewCoder shortcut presets are removed; a saved choice of either falls back to the Faangin keymap. Listening to computer audio waits for the one-time notice above.
+Unreleased changes after 0.4.2 position Faangin as an interview-practice and meeting assistant. The setting that asks the OS to exclude Faangin windows from screen capture is off by default and no longer offered during setup. The Cluely and InterviewCoder shortcut presets are removed; a saved choice of either falls back to the Faangin keymap. Listening to computer audio waits for the one-time notice above.
 
 Version 0.4.2 makes access setup the first screen. Screen capture, microphone, and computer audio must be ready before opening the workspace or overlay. The app guides OS approvals, rechecks automatically, configures the inputs, and keeps listening off until started. See [permission-first setup](docs/design/access-setup-042.md).
 

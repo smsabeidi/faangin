@@ -438,7 +438,7 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     applyWindowAppearance(window, isOverlay)
     window.on('focus', () => { scheduleAppearanceRefresh(); refreshAccessReadiness() })
     if (isOverlay) {
-      overlayWindowLayout = layout; window.setAlwaysOnTop(true, 'floating'); window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true }); overlayInteraction.attach(window)
+      overlayWindowLayout = layout; window.setAlwaysOnTop(true, 'floating'); window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); overlayInteraction.attach(window)
       window.setMaximizable(false); window.setFullScreenable(false)
       window.on('maximize', () => { window.unmaximize(); applyOverlayLayout() })
       window.on('enter-full-screen', () => { window.setFullScreen(false) })
@@ -475,9 +475,9 @@ function makeOverlayInteractive(): void {
   refreshMenu(); emitState()
 }
 function applyDockPreference(): void {
-  // Faangin always shows its Dock icon. Hidden smoke jobs do not change the
-  // developer's Dock; visible isolated native QA exercises this path.
-  if (!smoke || smokeVisible) dockPolicy.apply(false)
+  // Production always installs a status menu first. Hidden smoke jobs do not
+  // change the developer's Dock; visible isolated native QA exercises this path.
+  if (!smoke || smokeVisible) dockPolicy.apply(settings.hideDockIcon)
 }
 function applyOverlayLayout(): void {
   if (!overlay || overlay.isDestroyed() || !overlayWindowLayout) return
@@ -1544,6 +1544,10 @@ function refreshMenu(): void {
     { id: 'overlay-reset-layout', label: 'Reset overlay size & position', click: () => { try { resetOverlayLayout(); makeOverlayInteractive() } catch (error) { emit({ type: 'error', message: `Overlay layout could not be reset: ${safeError(error)}` }) } } },
     { label: 'Make overlay interactive', click: () => makeOverlayInteractive() },
     { label: 'Click-through overlay', type: 'checkbox', checked: overlayInteraction.passive, accelerator: active.find(binding => binding.action === 'toggle-interaction')?.accelerator, click: () => shortcutAction('toggle-interaction') },
+    ...(process.platform === 'darwin' ? [{ label: 'Show in Dock', type: 'checkbox' as const, checked: !settings.hideDockIcon, click: () => {
+      try { settings = repo.saveSettings({ ...settings, hideDockIcon: !settings.hideDockIcon }); applyDockPreference(); refreshMenu(); emitState() }
+      catch (error) { emit({ type: 'error', message: `Dock preference could not be saved: ${safeError(error)}` }); refreshMenu() }
+    } }] : []),
     { type: 'separator' },
     ...actions.map(item => ({ label: item.label, accelerator: active.find(binding => binding.action === item.action)?.accelerator, click: () => shortcutAction(item.action) })),
     { type: 'separator' }, { label: 'Settings', click: () => { showWindow('workspace'); emit({ type: 'navigate', view: 'settings' }) } }, { role: 'quit' }
@@ -1633,7 +1637,7 @@ else {
 app.on('activate', () => {
   // Accessory-policy changes and explicit overlay interaction can activate the
   // app too. They must not open a workspace over the app beneath the overlay.
-  if (repo && !quitting && (!smoke || smokeVisible) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
+  if (repo && !quitting && (!smoke || smokeVisible) && !(process.platform === 'darwin' && settings.hideDockIcon) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin' || smoke) app.quit() })
 app.on('web-contents-created', (_event, contents) => { contents.session.on('will-download', event => event.preventDefault()) })

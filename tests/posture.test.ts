@@ -15,9 +15,8 @@ function databaseFixture(run: (file: string) => void): void {
   try { run(join(directory, 'workspace.sqlite')) } finally { rmSync(directory, { recursive: true, force: true }) }
 }
 
-test('screen-share hiding stays off and the Dock icon stays visible by default', () => {
+test('screen-capture exclusion stays off by default', () => {
   assert.equal(DEFAULT_SETTINGS.privacyMode, false)
-  assert.equal(DEFAULT_SETTINGS.hideDockIcon, false)
 })
 
 test('listening to computer audio requires an acknowledgment of the current notice', () => {

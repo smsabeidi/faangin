@@ -29,6 +29,7 @@ mac:
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
+    LSUIElement: true
     NSMicrophoneUsageDescription: Faangin uses your microphone when you start listening. Setup checks permission before you begin.
     NSScreenCaptureUsageDescription: Faangin captures your screen when you choose Capture. Setup checks access without saving screen images.
     NSAudioCaptureUsageDescription: Faangin checks computer audio access during setup and on launch after your approval. Audio is transcribed only when you start listening.
