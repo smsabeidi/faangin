@@ -1,0 +1,429 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "measuredAt": "2026-10-27T19:41:03.840Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "weighted-correction",
+      "category": "requirement correction",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "For edge weights of zero or one, use 0–1 BFS: keep vertices in a deque, pushing a zero-cost relaxation to the front and a one-cost relaxation to the back. Relax distances when a shorter route is found; ordinary BFS’s first-visit rule no longer applies. It runs in O(V + E) time with an adjacency list.",
+      "firstTextMs": 744.912,
+      "totalMs": 1562.278,
+      "model": "gpt-6-luna",
+      "inputTokens": 2830,
+      "outputTokens": 79,
+      "footprint": {
+        "instructionsCharacters": 8760,
+        "inputCharacters": 6489,
+        "serializedUtf8Bytes": 15305,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "307786ab6fbc8754c7aa33be2ab41f999a430b2255eb808fd7c43a72605edc4e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "0-1 BFS",
+            "observed": true
+          },
+          {
+            "label": "deque",
+            "observed": true
+          },
+          {
+            "label": "distance relaxation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 55,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use 0-1 BFS relaxation; avoid treating enqueue-time visited as sufficient for weighted shortest paths.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "weighted-correction",
+      "category": "requirement correction",
+      "variant": "current",
+      "disposition": "assist",
+      "answer": "Because edges can be 0 or 1, use 0-1 BFS with a deque instead of ordinary BFS. Track distances and relax an edge only when it improves the neighbor’s distance; push improved zero-weight neighbors to the front and unit-weight neighbors to the back. Keep parent pointers updated on each improvement for path reconstruction—unlike unit-weight BFS, marking a vertex permanently visited when first enqueued is not valid. This runs in O(V + E) time and O(V) auxiliary space.",
+      "firstTextMs": 815.488,
+      "totalMs": 1753.3,
+      "model": "gpt-6-luna",
+      "inputTokens": 3120,
+      "outputTokens": 108,
+      "footprint": {
+        "instructionsCharacters": 10416,
+        "inputCharacters": 6489,
+        "serializedUtf8Bytes": 16963,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "9d88dd11133d3219e5ee16601a1a40254c251cb6968857ab4f539b3a5bd37d0c",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "0-1 BFS",
+            "observed": true
+          },
+          {
+            "label": "deque",
+            "observed": true
+          },
+          {
+            "label": "distance relaxation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 77,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use 0-1 BFS relaxation; avoid treating enqueue-time visited as sufficient for weighted shortest paths.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "behavioral-grounding",
+      "category": "behavioral",
+      "variant": "current",
+      "disposition": null,
+      "answer": "At Cedar, I was an engineer on the billing team, and a teammate preferred a large release. I proposed phasing the rollout instead and wrote a rollback checklist. We discussed the approaches and agreed to release in phases. The rollout completed.",
+      "firstTextMs": 1689.415,
+      "totalMs": 2197.002,
+      "model": "gpt-6-luna",
+      "inputTokens": 969,
+      "outputTokens": 52,
+      "footprint": {
+        "instructionsCharacters": 4044,
+        "inputCharacters": 1408,
+        "serializedUtf8Bytes": 5498,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "928709f738d435939e18a058411842d2931480d62307cb2769f7007894ec6e45",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported action",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented quantified impact",
+            "flagged": false
+          },
+          {
+            "label": "unsupported positive outcome",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 41,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "A compact spoken narrative from supplied facts; no invented title, metrics or outcome.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "behavioral-grounding",
+      "category": "behavioral",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "At Cedar, a teammate and I disagreed about whether to do a large release or roll it out in phases. I thought phasing would make it easier to respond if something went wrong, so I proposed that approach and wrote a rollback checklist. We discussed the options and agreed on phases. The rollout completed.",
+      "firstTextMs": 678.693,
+      "totalMs": 1361.675,
+      "model": "gpt-6-luna",
+      "inputTokens": 1305,
+      "outputTokens": 66,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2389,
+        "serializedUtf8Bytes": 7395,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "7566b4faa048debead0354c7db3cb6bea287f63990034cfea4362a27988e341f",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported action",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented quantified impact",
+            "flagged": false
+          },
+          {
+            "label": "unsupported positive outcome",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 54,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "A compact spoken narrative from supplied facts; no invented title, metrics or outcome.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "unfinished-question",
+      "category": "partial transcript",
+      "variant": "baseline",
+      "disposition": "wait",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": 736.643,
+      "model": "gpt-6-luna",
+      "inputTokens": 2120,
+      "outputTokens": 5,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 3818,
+        "serializedUtf8Bytes": 11857,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "8ad1f59727ecf976718bb7c1df93c1c0a09bd375e6e08315ad21f1bc7340ef8e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 0,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Finalized utterance is grammatically incomplete and partial continuation is excluded; WAIT with no confident invented completion.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "unfinished-question",
+      "category": "partial transcript",
+      "variant": "current",
+      "disposition": "wait",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": 798.379,
+      "model": "gpt-6-luna",
+      "inputTokens": 2410,
+      "outputTokens": 5,
+      "footprint": {
+        "instructionsCharacters": 9641,
+        "inputCharacters": 3818,
+        "serializedUtf8Bytes": 13515,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "3fefeda424971956e8521db7bd122790f01a27e05b6d531c0df1610fa919bbce",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 0,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Finalized utterance is grammatically incomplete and partial continuation is excluded; WAIT with no confident invented completion.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "already-strong",
+      "category": "regression control",
+      "variant": "current",
+      "disposition": null,
+      "answer": "A unique constraint prevents duplicate values in the constrained column or column combination, though how it treats `NULL` varies by database. It doesn’t ensure that a value is valid or correct.",
+      "firstTextMs": 715.415,
+      "totalMs": 1094.346,
+      "model": "gpt-6-luna",
+      "inputTokens": 806,
+      "outputTokens": 41,
+      "footprint": {
+        "instructionsCharacters": 3260,
+        "inputCharacters": 1352,
+        "serializedUtf8Bytes": 4652,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2490ab4d570f8675b965129131736aeb41f7984df8445ddce98292e829d4500e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate rejection",
+            "observed": true
+          },
+          {
+            "label": "null qualification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 31,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "The existing concise answer is strong; retain its qualification, do not expand into an essay.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "already-strong",
+      "category": "regression control",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "A unique constraint prevents duplicate values in the constrained column or column combination. NULL handling varies by database, and uniqueness does not verify that a value is otherwise valid or correct.",
+      "firstTextMs": 832.85,
+      "totalMs": 1137.591,
+      "model": "gpt-6-luna",
+      "inputTokens": 1288,
+      "outputTokens": 38,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2535,
+        "serializedUtf8Bytes": 7341,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "c894b6e6a9e96e2583484910900789e6a5df11c5125a37c761d7e64b08127893",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate rejection",
+            "observed": true
+          },
+          {
+            "label": "null qualification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 31,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "The existing concise answer is strong; retain its qualification, do not expand into an essay.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

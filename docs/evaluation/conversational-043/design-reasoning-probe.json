@@ -1,0 +1,147 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "complete": true,
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "holdout",
+  "fixtureCatalogSha256": "8ee3081004a51a567c6ab77093caa4ba3e9f389b2c849e2fb7eb21684bea0b4d",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "reasoningOverride": "low",
+  "measuredAt": "2026-10-28T02:05:34.590Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "holdout-thumbnail-design",
+      "category": "system design with independent capacity and 90-second cue",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "I’d put uploads in object storage and process them asynchronously from a durable queue, so image conversion can slow down without blocking uploads.\n\n**Requirements and scope:** Handle 75 uploads per second, each 6 MB, and generate three thumbnail sizes. Output dimensions and retention are unspecified, so I’d make sizes configurable and avoid assuming a retention period.\n\n**Sizing assumptions:** At the stated sustained rate, ingress is **75 × 6 MB = 450 MB/s**, or **36,000 uploads and 216,000 MB—about 216 GB—per hour** before replication and metadata. If uploads arrive in bursts, provision storage and queue capacity for the burst separately. Each image creates three resize jobs, so workers must complete at least **225 resize jobs/s** to keep up. I’d benchmark conversion time and image complexity to determine worker count rather than assume a fixed rate.\n\n**Flow:** The client uploads directly to object storage using a short-lived signed URL. An upload-complete event creates a job in a durable queue; workers fetch the original, validate and decode it, produce the three configured sizes, then write outputs to storage. A status API reports processing state, and a CDN serves completed thumbnails.\n\n**Backpressure and retries:** Bound queue growth and monitor queue age and depth. If workers lag, scale them within safe resource limits; if storage or processing is saturated, reject or defer new work rather than exhaust memory or disk. Retry transient failures with exponential backoff and jitter, with a retry limit and dead-letter queue. Make output writes idempotent, keyed by image and size, so retries don’t create inconsistent duplicates.\n\n**Safe processing and reliability:** Treat uploads as untrusted: check actual file type and size, enforce pixel and decode-time limits, reject malformed or decompression-bomb images, and run conversion in isolated, resource-limited workers. Keep originals and outputs separate, restrict access, and use checksums and monitoring. Retention and output-size targets need product decisions; they affect storage cost and lifecycle policies.",
+      "rawAnswer": "I’d put uploads in object storage and process them asynchronously from a durable queue, so image conversion can slow down without blocking uploads.\n\n**Requirements and scope:** Handle 75 uploads per second, each 6 MB, and generate three thumbnail sizes. Output dimensions and retention are unspecified, so I’d make sizes configurable and avoid assuming a retention period.\n\n**Sizing assumptions:** At the stated sustained rate, ingress is **75 × 6 MB = 450 MB/s**, or **36,000 uploads and 216,000 MB—about 216 GB—per hour** before replication and metadata. If uploads arrive in bursts, provision storage and queue capacity for the burst separately. Each image creates three resize jobs, so workers must complete at least **225 resize jobs/s** to keep up. I’d benchmark conversion time and image complexity to determine worker count rather than assume a fixed rate.\n\n**Flow:** The client uploads directly to object storage using a short-lived signed URL. An upload-complete event creates a job in a durable queue; workers fetch the original, validate and decode it, produce the three configured sizes, then write outputs to storage. A status API reports processing state, and a CDN serves completed thumbnails.\n\n**Backpressure and retries:** Bound queue growth and monitor queue age and depth. If workers lag, scale them within safe resource limits; if storage or processing is saturated, reject or defer new work rather than exhaust memory or disk. Retry transient failures with exponential backoff and jitter, with a retry limit and dead-letter queue. Make output writes idempotent, keyed by image and size, so retries don’t create inconsistent duplicates.\n\n**Safe processing and reliability:** Treat uploads as untrusted: check actual file type and size, enforce pixel and decode-time limits, reject malformed or decompression-bomb images, and run conversion in isolated, resource-limited workers. Keep originals and outputs separate, restrict access, and use checksums and monitoring. Retention and output-size targets need product decisions; they affect storage cost and lifecycle policies.",
+      "decoderFailure": null,
+      "firstTextMs": 2142.477,
+      "totalMs": 7035.589,
+      "model": "gpt-6-luna",
+      "inputTokens": 1334,
+      "outputTokens": 413,
+      "footprint": {
+        "instructionsCharacters": 4918,
+        "inputCharacters": 2590,
+        "serializedUtf8Bytes": 7552,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "fddff44252c83ca2e41d88da0b9aadb0c80340533dbd0a9d299982e28afbb5ca",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "durable handoff",
+            "observed": true
+          },
+          {
+            "label": "backpressure",
+            "observed": true
+          },
+          {
+            "label": "retry deduplication",
+            "observed": true
+          },
+          {
+            "label": "safe decoding",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 312,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Raw ingress is 450 MB/s and nominal work is225renditions/s. Output byte volume is unknown; do not multiply raw bytes by three without an assumption. Cover bounded queues/workers, durable handoff, idempotent retries and hostile image resource limits. Keep about90seconds; no unsupported exactly-once guarantee.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-thumbnail-design",
+      "category": "system design with independent capacity and 90-second cue",
+      "variant": "current",
+      "disposition": null,
+      "answer": "I’ll assume 75 uploads per second is sustained, each image is 6 MB decimal, and each upload needs all three variants. The output dimensions, retention, and traffic peaks aren’t specified, so I wouldn’t estimate output storage yet.\n\nThat’s 450 MB per second of incoming image data, or about 3.6 Gbps before protocol overhead. If the service relays uploads, that bandwidth crosses it; I’d instead issue short-lived upload URLs so clients write directly to object storage. Each completed upload creates one durable job to generate three renditions: 75 source jobs, or 225 output operations, per second.\n\nThe flow is upload, verify completion, enqueue an image ID and object key, then let workers fetch, validate, resize, and write outputs. A status API can report pending, complete, or failed; output URLs should only be returned after the renditions are written. Keep source and rendition metadata in a database, with object storage holding the files.\n\nFor a concrete buffer target, ten minutes at steady load is 45,000 source jobs. Store payloads in object storage, not the queue. If workers fall behind, queue depth and oldest-job age trigger scaling or upload throttling; don’t accept work beyond storage or queue limits.\n\nRetries can repeat processing, so use deterministic output keys and idempotent job handling, with bounded retries and a dead-letter queue. Decode images in isolated workers; enforce byte, pixel, and format limits to reduce decompression-bomb and parser risks. The main unknowns for final sizing are peak upload rate, output dimensions, retention, and acceptable completion latency.",
+      "rawAnswer": "I’ll assume 75 uploads per second is sustained, each image is 6 MB decimal, and each upload needs all three variants. The output dimensions, retention, and traffic peaks aren’t specified, so I wouldn’t estimate output storage yet.\n\nThat’s 450 MB per second of incoming image data, or about 3.6 Gbps before protocol overhead. If the service relays uploads, that bandwidth crosses it; I’d instead issue short-lived upload URLs so clients write directly to object storage. Each completed upload creates one durable job to generate three renditions: 75 source jobs, or 225 output operations, per second.\n\nThe flow is upload, verify completion, enqueue an image ID and object key, then let workers fetch, validate, resize, and write outputs. A status API can report pending, complete, or failed; output URLs should only be returned after the renditions are written. Keep source and rendition metadata in a database, with object storage holding the files.\n\nFor a concrete buffer target, ten minutes at steady load is 45,000 source jobs. Store payloads in object storage, not the queue. If workers fall behind, queue depth and oldest-job age trigger scaling or upload throttling; don’t accept work beyond storage or queue limits.\n\nRetries can repeat processing, so use deterministic output keys and idempotent job handling, with bounded retries and a dead-letter queue. Decode images in isolated workers; enforce byte, pixel, and format limits to reduce decompression-bomb and parser risks. The main unknowns for final sizing are peak upload rate, output dimensions, retention, and acceptable completion latency.",
+      "decoderFailure": null,
+      "firstTextMs": 4729.336,
+      "totalMs": 8488.884,
+      "model": "gpt-6-luna",
+      "inputTokens": 1004,
+      "outputTokens": 651,
+      "footprint": {
+        "instructionsCharacters": 4365,
+        "inputCharacters": 1385,
+        "serializedUtf8Bytes": 5790,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "a9a0551f32a0c4bc2952797e9831d113a7a12583d68c009c89ae53cdc3bda225",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "durable handoff",
+            "observed": true
+          },
+          {
+            "label": "backpressure",
+            "observed": true
+          },
+          {
+            "label": "retry deduplication",
+            "observed": true
+          },
+          {
+            "label": "safe decoding",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 249,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Raw ingress is 450 MB/s and nominal work is225renditions/s. Output byte volume is unknown; do not multiply raw bytes by three without an assumption. Cover bounded queues/workers, durable handoff, idempotent retries and hostile image resource limits. Keep about90seconds; no unsupported exactly-once guarantee.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

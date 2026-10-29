@@ -1,0 +1,410 @@
+{
+  "kind": "offline_unchanged_waveform_endpoint_comparison",
+  "generatedAt": "2026-10-28T02:17:06.684Z",
+  "question": "For the same shortest path solution actually do not assume unit weights anymore because every edge has weight zero or one rather than arbitrary positive weights in a graph with ten thousand vertices and fifteen thousand sorry fifty thousand edges so what changes about the queue the distance updates and the time complexity?",
+  "source": "macOS say output file only, no playback or physical capture",
+  "durationMs": 18106.458333333332,
+  "wavSha256": "9246249027e43ec981aa944818cd955816748794bc2547f595d2ae1f40bd2418",
+  "pcmSha256": "934cdc78569dfc6534baa8510d6127a51bdc48c552df328c79ece58d836c3783",
+  "quietCriterion": "frame RMS < 0.004, production VAD release threshold",
+  "quietRunsOver100Ms": [
+    {
+      "startMs": 4060,
+      "endMs": 4460,
+      "durationMs": 400
+    },
+    {
+      "startMs": 6360,
+      "endMs": 6740,
+      "durationMs": 380
+    },
+    {
+      "startMs": 9280,
+      "endMs": 9420,
+      "durationMs": 140
+    },
+    {
+      "startMs": 10800,
+      "endMs": 11140,
+      "durationMs": 340
+    },
+    {
+      "startMs": 13520,
+      "endMs": 13840,
+      "durationMs": 320
+    },
+    {
+      "startMs": 16100,
+      "endMs": 16200,
+      "durationMs": 100
+    },
+    {
+      "startMs": 16560,
+      "endMs": 16780,
+      "durationMs": 220
+    }
+  ],
+  "trials": [
+    {
+      "silenceMs": 320,
+      "endpointCount": 5,
+      "transportChunkCount": 0,
+      "commits": [
+        {
+          "atMs": 4380,
+          "complete": true,
+          "admittedFrames": 219
+        },
+        {
+          "atMs": 6680,
+          "complete": true,
+          "admittedFrames": 334
+        },
+        {
+          "atMs": 11120,
+          "complete": true,
+          "admittedFrames": 556
+        },
+        {
+          "atMs": 13840,
+          "complete": true,
+          "admittedFrames": 692
+        },
+        {
+          "atMs": 18360,
+          "complete": true,
+          "admittedFrames": 918
+        }
+      ]
+    },
+    {
+      "silenceMs": 400,
+      "endpointCount": 2,
+      "transportChunkCount": 2,
+      "commits": [
+        {
+          "atMs": 4460,
+          "complete": true,
+          "admittedFrames": 223
+        },
+        {
+          "atMs": 10460,
+          "complete": false,
+          "admittedFrames": 523
+        },
+        {
+          "atMs": 16460,
+          "complete": false,
+          "admittedFrames": 823
+        },
+        {
+          "atMs": 18440,
+          "complete": true,
+          "admittedFrames": 922
+        }
+      ]
+    },
+    {
+      "silenceMs": 420,
+      "endpointCount": 1,
+      "transportChunkCount": 3,
+      "commits": [
+        {
+          "atMs": 6000,
+          "complete": false,
+          "admittedFrames": 300
+        },
+        {
+          "atMs": 12000,
+          "complete": false,
+          "admittedFrames": 600
+        },
+        {
+          "atMs": 18000,
+          "complete": false,
+          "admittedFrames": 900
+        },
+        {
+          "atMs": 18460,
+          "complete": true,
+          "admittedFrames": 923
+        }
+      ]
+    },
+    {
+      "silenceMs": 500,
+      "endpointCount": 1,
+      "transportChunkCount": 3,
+      "commits": [
+        {
+          "atMs": 6000,
+          "complete": false,
+          "admittedFrames": 300
+        },
+        {
+          "atMs": 12000,
+          "complete": false,
+          "admittedFrames": 600
+        },
+        {
+          "atMs": 18000,
+          "complete": false,
+          "admittedFrames": 900
+        },
+        {
+          "atMs": 18540,
+          "complete": true,
+          "admittedFrames": 927
+        }
+      ]
+    },
+    {
+      "silenceMs": 600,
+      "endpointCount": 1,
+      "transportChunkCount": 3,
+      "commits": [
+        {
+          "atMs": 6000,
+          "complete": false,
+          "admittedFrames": 300
+        },
+        {
+          "atMs": 12000,
+          "complete": false,
+          "admittedFrames": 600
+        },
+        {
+          "atMs": 18000,
+          "complete": false,
+          "admittedFrames": 900
+        },
+        {
+          "atMs": 18640,
+          "complete": true,
+          "admittedFrames": 932
+        }
+      ]
+    },
+    {
+      "silenceMs": 700,
+      "endpointCount": 1,
+      "transportChunkCount": 3,
+      "commits": [
+        {
+          "atMs": 6000,
+          "complete": false,
+          "admittedFrames": 300
+        },
+        {
+          "atMs": 12000,
+          "complete": false,
+          "admittedFrames": 600
+        },
+        {
+          "atMs": 18000,
+          "complete": false,
+          "admittedFrames": 900
+        },
+        {
+          "atMs": 18740,
+          "complete": true,
+          "admittedFrames": 937
+        }
+      ]
+    }
+  ],
+  "continuousFixture": {
+    "transformation": {
+      "kind": "vad_quiet_gap_compression",
+      "quietRmsThreshold": 0.004,
+      "maxQuietGapMs": 100,
+      "definition": "Only runs of synthetic 20 ms frames with RMS < 0.004 are shortened. All frames at or above the VAD release threshold retain exact samples and source order. Quiet frames may still contain low-level speech; this is an artificial transport fixture.",
+      "originalPcmBytes": 869110,
+      "transformedPcmBytes": 811510,
+      "removedBytes": 57600,
+      "originalDurationMs": 18106.458333333332,
+      "transformedDurationMs": 16906.458333333332,
+      "originalPcmSha256": "934cdc78569dfc6534baa8510d6127a51bdc48c552df328c79ece58d836c3783",
+      "transformedPcmSha256": "d467ac3ef1b9b43f864c33faa469bb14b443b016a224c5df308003081aaa49e0",
+      "sourceVadVoicedFrames": 774,
+      "originalVadVoicedPcmSha256": "a58c04f0db7191b17a624d4a9783f4c28119a81316c9389111514120f039759f",
+      "transformedVadVoicedPcmSha256": "a58c04f0db7191b17a624d4a9783f4c28119a81316c9389111514120f039759f",
+      "allVadVoicedFramesPreserved": true,
+      "gaps": [
+        {
+          "startFrame": 0,
+          "inputFrames": 3,
+          "retainedFrames": 3
+        },
+        {
+          "startFrame": 49,
+          "inputFrames": 2,
+          "retainedFrames": 2
+        },
+        {
+          "startFrame": 93,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 172,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 177,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 203,
+          "inputFrames": 20,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 226,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 237,
+          "inputFrames": 2,
+          "retainedFrames": 2
+        },
+        {
+          "startFrame": 290,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 318,
+          "inputFrames": 19,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 403,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 434,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 464,
+          "inputFrames": 7,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 477,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 479,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 540,
+          "inputFrames": 17,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 573,
+          "inputFrames": 3,
+          "retainedFrames": 3
+        },
+        {
+          "startFrame": 620,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 628,
+          "inputFrames": 2,
+          "retainedFrames": 2
+        },
+        {
+          "startFrame": 676,
+          "inputFrames": 16,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 717,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 750,
+          "inputFrames": 2,
+          "retainedFrames": 2
+        },
+        {
+          "startFrame": 756,
+          "inputFrames": 3,
+          "retainedFrames": 3
+        },
+        {
+          "startFrame": 787,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 805,
+          "inputFrames": 5,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 819,
+          "inputFrames": 2,
+          "retainedFrames": 2
+        },
+        {
+          "startFrame": 828,
+          "inputFrames": 11,
+          "retainedFrames": 5
+        },
+        {
+          "startFrame": 850,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 888,
+          "inputFrames": 1,
+          "retainedFrames": 1
+        },
+        {
+          "startFrame": 902,
+          "inputFrames": 4,
+          "retainedFrames": 4
+        }
+      ]
+    },
+    "trialAtCurrentEndpoint": {
+      "silenceMs": 320,
+      "endpointCount": 1,
+      "transportChunkCount": 2,
+      "commits": [
+        {
+          "atMs": 6000,
+          "complete": false,
+          "admittedFrames": 300
+        },
+        {
+          "atMs": 12000,
+          "complete": false,
+          "admittedFrames": 600
+        },
+        {
+          "atMs": 17160,
+          "complete": true,
+          "admittedFrames": 858
+        }
+      ]
+    }
+  },
+  "apiCalls": 0
+}

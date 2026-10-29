@@ -1,0 +1,258 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "complete": false,
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "development",
+  "fixtureCatalogSha256": "bea0d7fa34843c2a4990fd1b1bb4549db29ea540153a72d82e135f7ee9a4fa8b",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "reasoningOverride": null,
+  "measuredAt": "2026-10-28T02:10:22.530Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": false,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "technical-correctness",
+      "category": "technical",
+      "variant": "baseline",
+      "resolvedReasoning": "none",
+      "disposition": null,
+      "answer": "BFS finds a shortest path in an unweighted graph because it explores vertices in order of their distance from the source: first all vertices one edge away, then all vertices two edges away, and so on. Thus, the first time it reaches a vertex, it has found a path using the fewest edges. DFS may follow a long path before exploring a shorter one, so its first path to a vertex need not be shortest.\n\nWith an adjacency-list representation, BFS takes **O(V + E)** time. With a visited set, its worst-case auxiliary space is **O(V)**: the visited set and queue can each hold up to O(V) vertices. DFS can also take **O(V + E)** time and O(V) worst-case auxiliary space; it does not guarantee shortest paths.",
+      "rawAnswer": "BFS finds a shortest path in an unweighted graph because it explores vertices in order of their distance from the source: first all vertices one edge away, then all vertices two edges away, and so on. Thus, the first time it reaches a vertex, it has found a path using the fewest edges. DFS may follow a long path before exploring a shorter one, so its first path to a vertex need not be shortest.\n\nWith an adjacency-list representation, BFS takes **O(V + E)** time. With a visited set, its worst-case auxiliary space is **O(V)**: the visited set and queue can each hold up to O(V) vertices. DFS can also take **O(V + E)** time and O(V) worst-case auxiliary space; it does not guarantee shortest paths.",
+      "decoderFailure": null,
+      "firstTextMs": 2970.516,
+      "totalMs": 5104.058,
+      "model": "gpt-6-luna",
+      "inputTokens": 1250,
+      "outputTokens": 165,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2287,
+        "serializedUtf8Bytes": 7093,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "07c9dadf4e64c43066733679764a6646354a31bda49392fd6e8234114a8d0120",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "distance order",
+            "observed": true
+          },
+          {
+            "label": "time bound",
+            "observed": true
+          },
+          {
+            "label": "space bound",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 126,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Both algorithms remain O(V) worst-case auxiliary space; DFS can find a longer path first.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "technical-correctness",
+      "category": "technical",
+      "variant": "current",
+      "resolvedReasoning": "none",
+      "disposition": null,
+      "answer": "BFS explores the graph level by level, so the first time it reaches a vertex, it has found a path with the fewest edges. In an unweighted graph, every edge has equal cost; any shorter path would have been explored in an earlier level. DFS can follow a long path first and reach the same vertex without finding its shortest path.\n\nWith an adjacency-list representation, BFS takes **O(V + E)** time and **O(V)** worst-case auxiliary space for the visited set, queue, and related traversal state.",
+      "rawAnswer": "BFS explores the graph level by level, so the first time it reaches a vertex, it has found a path with the fewest edges. In an unweighted graph, every edge has equal cost; any shorter path would have been explored in an earlier level. DFS can follow a long path first and reach the same vertex without finding its shortest path.\n\nWith an adjacency-list representation, BFS takes **O(V + E)** time and **O(V)** worst-case auxiliary space for the visited set, queue, and related traversal state.",
+      "decoderFailure": null,
+      "firstTextMs": 1287.449,
+      "totalMs": 2425.176,
+      "model": "gpt-6-luna",
+      "inputTokens": 949,
+      "outputTokens": 111,
+      "footprint": {
+        "instructionsCharacters": 4204,
+        "inputCharacters": 1228,
+        "serializedUtf8Bytes": 5472,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "623b4f8028797f2bc178b7a5c76b6af3fd30deed6c12947dac34489ead7222ec",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "distance order",
+            "observed": true
+          },
+          {
+            "label": "time bound",
+            "observed": true
+          },
+          {
+            "label": "space bound",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 85,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Both algorithms remain O(V) worst-case auxiliary space; DFS can find a longer path first.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "focused-followup",
+      "category": "follow-up",
+      "variant": "current",
+      "resolvedReasoning": "none",
+      "disposition": "assist",
+      "answer": "Marking a vertex when it’s enqueued ensures each vertex enters the queue only once, preventing duplicate work and keeping the queue bounded by O(V). In an unweighted graph, the first time BFS discovers a vertex is along a shortest path, so its distance and parent are already final. Marking only when dequeuing can let multiple vertices enqueue the same neighbor before it’s processed, requiring duplicate handling and potentially overwriting its parent.",
+      "rawAnswer": "ASSIST\nMarking a vertex when it’s enqueued ensures each vertex enters the queue only once, preventing duplicate work and keeping the queue bounded by O(V). In an unweighted graph, the first time BFS discovers a vertex is along a shortest path, so its distance and parent are already final. Marking only when dequeuing can let multiple vertices enqueue the same neighbor before it’s processed, requiring duplicate handling and potentially overwriting its parent.",
+      "decoderFailure": null,
+      "firstTextMs": 1265.155,
+      "totalMs": 2269.664,
+      "model": "gpt-6-luna",
+      "inputTokens": 3328,
+      "outputTokens": 94,
+      "footprint": {
+        "instructionsCharacters": 11784,
+        "inputCharacters": 6295,
+        "serializedUtf8Bytes": 18139,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "08b618d7a709ba668eb9d7ec81cac141d894c05a3c69f3d641aea029262d0ba4",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate enqueue prevention",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 71,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Answer only the invariant and duplicate work tradeoff; continue the existing solution.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "focused-followup",
+      "category": "follow-up",
+      "variant": "baseline",
+      "resolvedReasoning": "none",
+      "disposition": "assist",
+      "answer": "Marking a vertex visited when enqueuing ensures it enters the queue only once, even if multiple neighbors discover it. Because BFS explores vertices in increasing distance, its first discovery already gives the shortest path; delaying the mark can cause duplicate queue entries and redundant work.",
+      "rawAnswer": "ASSIST\nMarking a vertex visited when enqueuing ensures it enters the queue only once, even if multiple neighbors discover it. Because BFS explores vertices in increasing distance, its first discovery already gives the shortest path; delaying the mark can cause duplicate queue entries and redundant work.",
+      "decoderFailure": null,
+      "firstTextMs": 871.751,
+      "totalMs": 1555.795,
+      "model": "gpt-6-luna",
+      "inputTokens": 2800,
+      "outputTokens": 60,
+      "footprint": {
+        "instructionsCharacters": 8760,
+        "inputCharacters": 6295,
+        "serializedUtf8Bytes": 15111,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "d9bb2116715902537e37998bd3355aa763aa2cce47dd42d7bb22b1b61c728d64",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate enqueue prevention",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 45,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Answer only the invariant and duplicate work tradeoff; continue the existing solution.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "weighted-correction",
+      "variant": "baseline",
+      "resolvedReasoning": "none",
+      "rawAnswer": "ASSIST Use",
+      "decoderFailure": {
+        "code": "invalid_interview_response",
+        "message": "The automatic interview response did not use its expected reply format."
+      },
+      "error": {
+        "code": "invalid_interview_response",
+        "transportCode": "malformed_response"
+      },
+      "firstTextMs": null,
+      "totalMs": 1087.852,
+      "partialAnswer": ""
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

@@ -1,0 +1,22 @@
+# Local research captures and downloaded references
+.firecrawl/
+.research/
+
+# Credentials and machine state
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Build output
+node_modules/
+dist/
+out/
+coverage/
+output/qa/
+*.log
+
+# Local generated launch media and review artifacts
+brag-output/
+cinematic-launch/
+output/

@@ -1,0 +1,6 @@
+{
+  "fastModel": "gpt-4.1-mini",
+  "smartModel": "gpt-4.1",
+  "smartMode": true,
+  "otherSettingsSha256": "a4b2f1f9714ddd8dcb404e89833764575e6991dc6b84297201182a670a7133c4"
+}

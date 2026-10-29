@@ -1,0 +1,7 @@
+{
+  "fastModel": "gpt-6-luna",
+  "smartModel": "gpt-6.1-sol",
+  "smartMode": true,
+  "otherSettingsSha256": "a4b2f1f9714ddd8dcb404e89833764575e6991dc6b84297201182a670a7133c4",
+  "otherSettingsUnchanged": true
+}

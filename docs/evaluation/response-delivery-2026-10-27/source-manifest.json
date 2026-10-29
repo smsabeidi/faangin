@@ -1,0 +1,41 @@
+{
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "sourceSha256": {
+    "package.json": "5957548502a7e04e6cbb090b6260713608b629f42a8923a09dbab848bca43c09",
+    "scripts/response-delivery-eval.ts": "55f6d5d951d74e8183a0cdbe0f881dc53c5baa8ef4645eb9337bf2eae2a61d2d",
+    "scripts/response-delivery-fixtures.ts": "928700d43da98a0869cdd0a3ac0baadc77566482579f51a0ccaad50f4daa8740",
+    "scripts/response-delivery-live-eval.cjs": "0394df6f6382cf4d9ed3e3030b44fb094d13e662551ff5b8c636fcb8c3c3c1c9",
+    "src/capture/index.ts": "51c25adb7d2074c7d8a1608ffb4f9459736955f50f58c45fa551e5a61ac0f686",
+    "src/capture/pipeline.ts": "f39adbd4b2a310c42e1e21d35336ae3aebe6cd7adfe0ffead88dbf776c897a8d",
+    "src/capture/vad.ts": "dc12652194a03196b08ce45ed3a7d37edcc2397731cdd69e50a70f06046aae89",
+    "src/main/index.ts": "71ca6e48d65957f363f32bfedcd394154d29bfd3fb072a6f2f18d2eb614fe40a",
+    "src/main/inference.ts": "73b1eb2c81cfdb6baf2f9f6bebe9feea9a79279938ca817071a1202d474ff519",
+    "src/main/interview-situation.ts": "5b09929982ff9058155ae894c0faf8965bef829f0264b72dc076c4ff329e9ee9",
+    "src/main/live-replies.ts": "3f23c2598cbc2d302e3f86631fcc38134cf2e7458393f66329f4454869b0268d",
+    "src/main/prompts.ts": "0e062f720cbeeed3ef919e4ea3dadd6f7718fd8048995d3172fe422931d42925",
+    "src/main/response-delivery.ts": "c9c3c677801e3b8ef296a5e6ce3bea4738f51caab67c248c9fbdb40d102f5d82",
+    "src/preload/index.ts": "bf244498eb9d56c6aa7d5fc0d6ac365d4f5cefe87b9ef8fb35285de8c8bf175e",
+    "src/shared/types.ts": "4732789fec95959698c7480fad9c46bbcb3f81292bc172be5690c3a37c925a4d",
+    "tests/audio-ingestion.test.ts": "1491cf906ee78ecb069fae00b43a53e914d908d6d52d54de57c2414d3236159e",
+    "tests/inference.test.ts": "c684fcc4697cdf7ed377bd1e9d5bdd675f6667b3c954b55613fe8dc118ebc820",
+    "tests/interview-situation.test.ts": "6ecbc31e33ac9f0e017647289079ee817f486803c97f2a6d0039ac462b5f4655",
+    "tests/live-replies.test.ts": "14d3edf87251fb48902c13ac8864c8c79b997ba2a081cb50b6ce169e9b2e688b",
+    "tests/live-reply-context.test.ts": "65a9f1ffebe0d8a312e19a8980d75885afe9c11a52b66555c0bf1c00380b904d",
+    "tests/response-delivery-eval.test.ts": "86e3f573084ec3bcda1cdc03d93554c6f645a5bb9491b68f255b95455cd5fbcc",
+    "tests/response-delivery.test.ts": "39fa0e4616ed4dab13e502068c052f4ff6615ced20324613c5191d4e4353e0b4"
+  },
+  "packagedApp": "dist/response-delivery-candidate/mac-arm64/Faangin.app",
+  "packagedAsarSha256": "b4c8648ffb6312cb4f3aee87b28b462bee84ba9f6f6c940dd65036a6f8d5acf6",
+  "tests": {
+    "passed": 651,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceDesktopFixtureRequests": 21,
+  "packagedDesktopFixtureRequests": 21,
+  "currentPromptSnapshotsMatchedToFinalSource": 32,
+  "liveSyntheticRequests": 112,
+  "physicalAudioTested": false,
+  "independentHumanRatings": false,
+  "signed": false
+}

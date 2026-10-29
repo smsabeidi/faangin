@@ -1,0 +1,846 @@
+{
+  "kind": "offline_compiler_evaluation",
+  "model": "gpt-6.1-sol",
+  "syntheticOnly": true,
+  "generatedAnswers": false,
+  "fixtureSuite": "development",
+  "fixtureCatalogSha256": "5cc15c346a2085bb0f670d65b09e5142d682dc7d5383b39eb08f5aae4bb240b9",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "currentPromptSha256": "64b12c77d14a2f33625fac1760cfb320981331c4cea1ded871f67be9b50af38e",
+  "measuredAt": "2026-10-28T13:16:55.004Z",
+  "caseCount": 12,
+  "passed": true,
+  "cases": [
+    {
+      "id": "technical-correctness",
+      "category": "technical",
+      "expectedDisposition": null,
+      "reviewFocus": "Both algorithms remain O(V) worst-case auxiliary space; DFS can find a longer path first.",
+      "illustration": {
+        "kind": "hand_authored_not_model_output",
+        "before": "Great question! Let us explore the key distinctions. First, BFS offers the shortest-path guarantee. Second, both algorithms have O(V + E) time complexity and O(V) auxiliary space. In conclusion, BFS is the optimal choice for this scenario.",
+        "after": "I’d use BFS because it visits vertices in distance order, so the first visit gives a shortest path when every edge has the same weight. DFS can reach a vertex through a longer path first. With an adjacency list and a visited set, both take O(V + E) time and O(V) worst-case auxiliary space."
+      },
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4762,
+            "inputCharacters": 2287,
+            "serializedUtf8Bytes": 7093,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.016,
+            "p95": 0.081
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4483,
+            "inputCharacters": 1228,
+            "serializedUtf8Bytes": 5751,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.014,
+            "p95": 0.111
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "focused-followup",
+      "category": "follow-up",
+      "expectedDisposition": "assist",
+      "reviewFocus": "Answer only the invariant and duplicate work tradeoff; continue the existing solution.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "line",
+          "footprint": {
+            "instructionsCharacters": 8760,
+            "inputCharacters": 6295,
+            "serializedUtf8Bytes": 15111,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": [
+              "bfs-solution"
+            ]
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.03,
+            "p95": 0.053
+          }
+        },
+        "current": {
+          "responseProtocol": "json",
+          "footprint": {
+            "instructionsCharacters": 12884,
+            "inputCharacters": 6295,
+            "serializedUtf8Bytes": 19261,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": [
+              "bfs-solution"
+            ]
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.031,
+            "p95": 0.048
+          }
+        }
+      },
+      "contextPayloadIdentical": true,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "weighted-correction",
+      "category": "requirement correction",
+      "expectedDisposition": "assist",
+      "reviewFocus": "Use 0-1 BFS relaxation; avoid treating enqueue-time visited as sufficient for weighted shortest paths.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "line",
+          "footprint": {
+            "instructionsCharacters": 8760,
+            "inputCharacters": 6489,
+            "serializedUtf8Bytes": 15305,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": [
+              "bfs-solution"
+            ]
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.026,
+            "p95": 0.037
+          }
+        },
+        "current": {
+          "responseProtocol": "json",
+          "footprint": {
+            "instructionsCharacters": 12884,
+            "inputCharacters": 6489,
+            "serializedUtf8Bytes": 19455,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": [
+              "bfs-solution"
+            ]
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.027,
+            "p95": 0.041
+          }
+        }
+      },
+      "contextPayloadIdentical": true,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "behavioral-grounding",
+      "category": "behavioral",
+      "expectedDisposition": null,
+      "reviewFocus": "A compact spoken narrative from supplied facts; no invented title, metrics or outcome.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4962,
+            "inputCharacters": 2389,
+            "serializedUtf8Bytes": 7395,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.01,
+            "p95": 0.011
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 5503,
+            "inputCharacters": 1408,
+            "serializedUtf8Bytes": 6957,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.01
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "missing-personal-story",
+      "category": "grounding with absent evidence",
+      "expectedDisposition": null,
+      "reviewFocus": "Ask for a real experience or provide an explicitly hypothetical outline; never claim an achievement.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4962,
+            "inputCharacters": 2129,
+            "serializedUtf8Bytes": 7135,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.01
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 5503,
+            "inputCharacters": 1153,
+            "serializedUtf8Bytes": 6702,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.008,
+            "p95": 0.008
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "system-design-units",
+      "category": "system design",
+      "expectedDisposition": null,
+      "reviewFocus": "Capacity uses explicit units and assumptions, retry ordering, at-least-once delivery and tenant isolation; fit two-minute cue.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4918,
+            "inputCharacters": 2303,
+            "serializedUtf8Bytes": 7265,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 4096,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.011,
+            "p95": 0.013
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 5702,
+            "inputCharacters": 1241,
+            "serializedUtf8Bytes": 6985,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 4096,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.011
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "ambiguous-question",
+      "category": "ambiguity",
+      "expectedDisposition": null,
+      "reviewFocus": "One concise clarification or explicit conditional assumption; do not invent the system.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4762,
+            "inputCharacters": 2058,
+            "serializedUtf8Bytes": 6864,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.011,
+            "p95": 0.02
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4483,
+            "inputCharacters": 1114,
+            "serializedUtf8Bytes": 5637,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.019
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "imperfect-transcript",
+      "category": "transcript fidelity",
+      "expectedDisposition": "assist",
+      "reviewFocus": "Honor final correction to fifty, negation and exact identifier; explain only supported rationale.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "line",
+          "footprint": {
+            "instructionsCharacters": 7985,
+            "inputCharacters": 4108,
+            "serializedUtf8Bytes": 12157,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.02,
+            "p95": 0.052
+          }
+        },
+        "current": {
+          "responseProtocol": "json",
+          "footprint": {
+            "instructionsCharacters": 10363,
+            "inputCharacters": 4108,
+            "serializedUtf8Bytes": 14557,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.021,
+            "p95": 0.114
+          }
+        }
+      },
+      "contextPayloadIdentical": true,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "unfinished-question",
+      "category": "partial transcript",
+      "expectedDisposition": "wait",
+      "reviewFocus": "Finalized utterance is grammatically incomplete and partial continuation is excluded; WAIT with no confident invented completion.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "line",
+          "footprint": {
+            "instructionsCharacters": 7985,
+            "inputCharacters": 3818,
+            "serializedUtf8Bytes": 11857,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.015,
+            "p95": 0.037
+          }
+        },
+        "current": {
+          "responseProtocol": "json",
+          "footprint": {
+            "instructionsCharacters": 10363,
+            "inputCharacters": 3818,
+            "serializedUtf8Bytes": 14257,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.015,
+            "p95": 0.024
+          }
+        }
+      },
+      "contextPayloadIdentical": true,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "proportional-uncertainty",
+      "category": "uncertainty",
+      "expectedDisposition": null,
+      "reviewFocus": "Do not become more certain for smoothness; suggest the next evidence to distinguish causes.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4762,
+            "inputCharacters": 2205,
+            "serializedUtf8Bytes": 7011,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.009
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4483,
+            "inputCharacters": 1187,
+            "serializedUtf8Bytes": 5710,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.007,
+            "p95": 0.008
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "code-and-invariant",
+      "category": "coding solution",
+      "expectedDisposition": null,
+      "reviewFocus": "Preserve the exact invariant, duplicates/empty/all-smaller cases and insertion index. The result may equal high = len(nums); a claim that the answer index is always inside half-open [low, high) is false. Keep unexecuted-code qualification.",
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 5126,
+            "inputCharacters": 2435,
+            "serializedUtf8Bytes": 7605,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 4096,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.011
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 5233,
+            "inputCharacters": 1303,
+            "serializedUtf8Bytes": 6576,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 4096,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.007,
+            "p95": 0.008
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    },
+    {
+      "id": "already-strong",
+      "category": "regression control",
+      "expectedDisposition": null,
+      "reviewFocus": "The existing concise answer is strong; retain its qualification, do not expand into an essay.",
+      "illustration": {
+        "kind": "hand_authored_not_model_output",
+        "before": "A unique constraint rejects duplicate non-null key values. NULL handling depends on the database; it does not validate whether the value is correct.",
+        "after": "A unique constraint rejects duplicate non-null key values. How it handles NULL depends on the database, and uniqueness alone doesn’t tell us whether the value is correct."
+      },
+      "variants": {
+        "baseline": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4762,
+            "inputCharacters": 2535,
+            "serializedUtf8Bytes": 7341,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.009,
+            "p95": 0.011
+          }
+        },
+        "current": {
+          "responseProtocol": "plain",
+          "footprint": {
+            "instructionsCharacters": 4483,
+            "inputCharacters": 1352,
+            "serializedUtf8Bytes": 5875,
+            "serializedScope": "instructions and input only; excludes response format and transport metadata",
+            "maxOutputTokens": 2048,
+            "tokenUsage": {
+              "measured": false,
+              "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+            }
+          },
+          "sourceAudit": {
+            "passed": true,
+            "missingSourceText": [],
+            "automaticPartialLeak": false,
+            "missingTranscriptIds": [],
+            "attachmentCount": 0,
+            "retainedPriorAnswerIds": []
+          },
+          "localCompileMs": {
+            "samples": 120,
+            "median": 0.007,
+            "p95": 0.008
+          }
+        }
+      },
+      "contextPayloadIdentical": false,
+      "contextPayloadEquivalent": true,
+      "allowedContextAdjustments": [
+        "omitted_empty_interview_situation"
+      ],
+      "outputBudgetUnchanged": true
+    }
+  ],
+  "limitations": [
+    "Local compile timings exclude provider latency, transcription, IPC, rendering and physical paint.",
+    "No model outputs or token usage are measured in offline mode.",
+    "Source-preservation checks establish prompt integrity, not model compliance or response quality."
+  ]
+}

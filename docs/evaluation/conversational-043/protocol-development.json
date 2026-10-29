@@ -1,0 +1,95 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "complete": false,
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "development",
+  "fixtureCatalogSha256": "b8bbcb0265449052dda5be5d81453af1e54c5ab3c663b3c46200f97000952d47",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "reasoningOverride": null,
+  "measuredAt": "2026-10-28T02:05:35.292Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": false
+  },
+  "trials": [
+    {
+      "id": "imperfect-transcript",
+      "category": "transcript fidelity",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "I’ll set `maxRetries` to 50, exclude HTTP 401 because retrying won’t resolve an authentication failure, and use `request_id` to match the required field name.",
+      "rawAnswer": "ASSIST\nI’ll set `maxRetries` to 50, exclude HTTP 401 because retrying won’t resolve an authentication failure, and use `request_id` to match the required field name.",
+      "decoderFailure": null,
+      "firstTextMs": 4770.126,
+      "totalMs": 5217.893,
+      "model": "gpt-6-luna",
+      "inputTokens": 2215,
+      "outputTokens": 45,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 4108,
+        "serializedUtf8Bytes": 12157,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "c38c47c2473b3133f8bcd21cb3ef130bd3b122953fdccfeddf118434ce252da8",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "nonretryable authentication",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "incorrect retry claim",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 24,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Honor final correction to fifty, negation and exact identifier; explain only supported rationale.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "imperfect-transcript",
+      "variant": "current",
+      "rawAnswer": "ASSIST The",
+      "decoderFailure": {
+        "code": "invalid_interview_response",
+        "message": "The automatic interview response did not use its expected reply format."
+      },
+      "error": {
+        "code": "invalid_interview_response",
+        "transportCode": "malformed_response"
+      },
+      "firstTextMs": null,
+      "totalMs": 779.369,
+      "partialAnswer": ""
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

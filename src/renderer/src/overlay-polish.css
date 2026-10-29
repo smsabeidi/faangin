@@ -1,0 +1,228 @@
+/* New installs start with readable material; the user's opacity setting remains authoritative. */
+.app.overlay-app {
+  position: relative;
+  --surface: #1d1f24;
+  --base: #17191d;
+  --text: #f5f6f8;
+  --muted: #c1c5ce;
+  --faint: #9da4b1;
+  --overlay-panel-solid: #292c33;
+  --overlay-code-solid: #17191e;
+  --panel: color-mix(in srgb, var(--overlay-panel-solid) calc(var(--overlay-opacity, .94) * 100%), transparent);
+  --code: color-mix(in srgb, var(--overlay-code-solid) calc(var(--overlay-opacity, .94) * 100%), transparent);
+  --border: rgb(255 255 255 / .1);
+  --glass-border: rgb(255 255 255 / .13);
+  --highlight: rgb(255 255 255 / .09);
+  --accent: #9cbeff;
+  --accent-border: rgb(120 168 255 / .3);
+  --accent-subtle: rgb(103 155 255 / calc(var(--overlay-opacity, .94) * .12));
+  --glass-selected: var(--accent-subtle);
+  --glass-control: rgb(255 255 255 / calc(var(--overlay-opacity, .94) * .055));
+  --surface-hover: rgb(255 255 255 / .08);
+  --primary: #176edb;
+  --primary-hover: #1060c5;
+  --on-primary: #fff;
+  --focus: #89b4ff;
+  --content: transparent;
+  --input: var(--panel);
+  background: color-mix(in srgb, var(--surface) calc(var(--overlay-opacity, .94) * 100%), transparent);
+  border-radius: 20px;
+  text-shadow: none;
+  box-shadow: inset 0 1px 0 var(--highlight), 0 16px 48px rgb(0 0 0 / .18);
+  font-size: 13px;
+}
+.app.overlay-app.theme-light {
+  --surface: #fbfbfc;
+  --base: #f5f6f8;
+  --text: #20232a;
+  --muted: #565d6b;
+  --faint: #687180;
+  --overlay-panel-solid: #f0f2f6;
+  --overlay-code-solid: #f2f4f8;
+  --border: rgb(27 38 58 / .1);
+  --glass-border: rgb(27 38 58 / .13);
+  --highlight: rgb(255 255 255 / .95);
+  --accent: #1768cc;
+  --accent-border: rgb(31 113 224 / .24);
+  --accent-subtle: rgb(31 113 224 / calc(var(--overlay-opacity, .94) * .07));
+  --glass-selected: var(--accent-subtle);
+  --glass-control: rgb(29 50 82 / calc(var(--overlay-opacity, .94) * .035));
+  --surface-hover: rgb(29 50 82 / .06);
+  --primary: #176edb;
+  --primary-hover: #1060c5;
+  --focus: #176edb;
+}
+@media (prefers-color-scheme: light) {
+  .app.overlay-app.theme-system {
+    --surface: #fbfbfc; --base: #f5f6f8; --text: #20232a; --muted: #565d6b; --faint: #687180;
+    --overlay-panel-solid: #f0f2f6; --overlay-code-solid: #f2f4f8; --border: rgb(27 38 58 / .1); --glass-border: rgb(27 38 58 / .13);
+    --highlight: rgb(255 255 255 / .95); --accent: #1768cc; --accent-border: rgb(31 113 224 / .24);
+    --accent-subtle: rgb(31 113 224 / calc(var(--overlay-opacity, .94) * .07)); --glass-selected: var(--accent-subtle);
+    --glass-control: rgb(29 50 82 / calc(var(--overlay-opacity, .94) * .035)); --surface-hover: rgb(29 50 82 / .06);
+    --primary: #176edb; --primary-hover: #1060c5; --focus: #176edb;
+  }
+}
+.overlay-app .overlay-topbar {
+  gap: 5px;
+  min-height: 66px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--surface) calc(var(--overlay-opacity, .94) * 12%), transparent);
+  border-bottom-color: var(--border);
+}
+.overlay-app .overlay-identity { min-width: 78px; gap: 4px; }
+.overlay-app .overlay-brand-line { gap: 8px; }
+.overlay-app .overlay-brand-line .brand-wordmark { font-size: 22px; }
+.overlay-app .overlay-brand-line .status-dot { width: 5px; height: 5px; background: var(--faint); }
+.overlay-app .overlay-brand-line .status-dot.live { background: #63bf99; box-shadow: 0 0 0 3px rgb(99 191 153 / .12); }
+.overlay-app .overlay-status { font-size: 10px; line-height: 1.4; color: var(--muted); }
+.overlay-app .overlay-topbar .icon-button,
+.overlay-app .overlay-more > summary { width: 34px; height: 34px; flex-basis: 34px; border-radius: 10px; color: var(--muted); }
+.overlay-app .overlay-topbar .icon-button:hover,
+.overlay-app .overlay-more > summary:hover,
+.overlay-app .overlay-more[open] > summary { color: var(--text); background: var(--surface-hover); }
+.overlay-app .overlay-topbar .overlay-listen-button { display: inline-flex; }
+.overlay-app .overlay-topbar .overlay-listen-on { color: var(--accent); background: var(--accent-subtle); }
+.overlay-app .overlay-capture-button {
+  min-height: 34px;
+  padding: 7px 11px;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .15), 0 2px 5px rgb(0 0 0 / .08);
+}
+.overlay-app .overlay-capture-button:hover:not(:disabled) { background: var(--primary-hover); filter: none; }
+.overlay-app .overlay-capture-button:active:not(:disabled) { transform: translateY(1px); }
+.overlay-app .overlay-capture-button kbd { font-size: 10px; padding-left: 8px; }
+.overlay-app .overlay-stop-answer { background: var(--danger-subtle); border-color: var(--danger-border); color: var(--danger); }
+.overlay-app .overlay-stop-answer:hover:not(:disabled) { background: var(--danger-subtle); filter: brightness(1.08); }
+.overlay-app .overlay-more-panel {
+  right: -36px;
+  top: calc(100% + 13px);
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 86px);
+  padding: 4px 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 16px 48px rgb(0 0 0 / .2), 0 2px 8px rgb(0 0 0 / .08);
+  overscroll-behavior: contain;
+}
+.overlay-app .overlay-menu-section { padding: 13px 0; }
+.overlay-app .overlay-menu-section h2 { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 9px; }
+.overlay-app .overlay-menu-section .hands-free-consent { font-size: 11px; line-height: 1.6; color: var(--muted); }
+.overlay-app .overlay-menu-section .button { min-height: 34px; padding: 7px 10px; font-size: 12px; border-radius: 9px; }
+.overlay-app .overlay-menu-section .live-suggestions-status { font-size: 11px; line-height: 1.5; }
+.overlay-app .overlay-menu-row,
+.overlay-app .overlay-menu-section > .overlay-interaction-toggle { min-height: 36px; padding: 8px; gap: 9px; font-size: 12px; border-radius: 9px; }
+.overlay-app .overlay-menu-row > svg { width: 16px; height: 16px; color: var(--muted); }
+.overlay-app .overlay-menu-row > span:last-of-type:not(:first-of-type) { font-size: 11px; }
+.overlay-app .overlay-menu-hint { font-size: 11px; line-height: 1.55; padding: 2px 8px 8px; }
+.overlay-app .overlay-answer { min-height: 0; padding: 21px 19px 22px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.overlay-app .overlay-answer .answer-card-heading { gap: 9px; margin-bottom: 18px; }
+.overlay-app .overlay-answer .answer-avatar { width: 31px; height: 31px; border-radius: 10px; background: var(--accent-subtle); border-color: var(--accent-border); box-shadow: none; }
+.overlay-app .overlay-answer .answer-card-heading strong { font-size: 13px; line-height: 1.4; font-weight: 600; }
+.overlay-app .overlay-answer .answer-card-heading > div:nth-child(2) > span { font-size: 11px; margin-top: 3px; }
+.overlay-app .overlay-answer .answer-options { gap: 0; }
+.overlay-app .overlay-answer .answer-options .icon-button { width: 30px; height: 32px; }
+.overlay-app .overlay-answer .answer-options .stop { font-size: 11px; min-height: 32px; padding: 5px; }
+.overlay-app .overlay-answer .answer-current-label { display: block; width: fit-content; margin: 4px 0 0; padding: 0; border: 0; background: transparent; font-size: 10px; font-weight: 500; color: var(--accent); }
+.overlay-app .overlay-answer .markdown { font-size: var(--user-font-size, 14px); line-height: 1.65; letter-spacing: -.08px; }
+.overlay-app .overlay-answer .markdown p { margin: 10px 0; }
+.overlay-app .overlay-answer .markdown h2 { font-size: 1.16em; line-height: 1.4; margin-top: 21px; }
+.overlay-app .overlay-answer .markdown ul,
+.overlay-app .overlay-answer .markdown ol { padding-left: 21px; }
+.overlay-app .overlay-answer .code-block { margin: 14px 0; border-radius: 11px; }
+.overlay-app .overlay-answer .code-block pre { line-height: 1.6; padding: 12px; }
+.overlay-app .overlay-answer .answer-prompt { font-size: 12px; line-height: 1.6; padding: 10px 12px; margin-bottom: 18px; }
+.overlay-app .overlay-answer .answer-footnote { font-size: 11px; line-height: 1.6; margin-top: 14px; color: var(--faint); }
+.overlay-app .overlay-answer .answer-footnote > summary { min-height: 28px; padding: 5px 0; color: var(--muted); }
+.overlay-app .overlay-answer .answer-performance { border-top: 1px solid var(--border); padding-top: 10px; }
+.overlay-app .overlay-answer .answer-performance[open] { padding-bottom: 4px; }
+.overlay-app .overlay-answer .answer-performance .answer-footnote { margin-top: 8px; }
+.overlay-app .overlay-answer .answer-model { margin-top: 8px; overflow-wrap: anywhere; }
+.overlay-app .overlay-answer .answer-interruption { font-size: 12px; line-height: 1.6; }
+.overlay-app .overlay-empty { min-height: 220px; padding: 24px 4px; gap: 0; }
+.overlay-app .overlay-empty-glyph { width: 54px; height: 54px; margin-bottom: 20px; border-radius: 17px; color: var(--accent); background: var(--accent-subtle); border-color: var(--accent-border); box-shadow: inset 0 1px 0 var(--highlight); }
+.overlay-app .overlay-empty-glyph svg { width: 24px; height: 24px; stroke-width: 1.6; }
+.overlay-app .overlay-empty p { font-size: 19px; font-weight: 600; line-height: 1.3; letter-spacing: -.5px; max-width: 260px; }
+.overlay-app .overlay-empty > span:not(.overlay-empty-glyph) { margin-top: 10px; max-width: 240px; font-size: 13px; line-height: 1.6; }
+.overlay-app .overlay-empty > kbd { gap: 12px; margin-top: 22px; padding: 10px 13px; border-radius: 10px; font-size: 13px; background: var(--panel); border-color: var(--border); }
+.overlay-app .overlay-empty > kbd span { font-size: 11px; }
+.overlay-app .overlay-empty small { max-width: 240px; margin-top: 18px; font-size: 11px; line-height: 1.6; }
+.overlay-app .composer {
+  flex-shrink: 0;
+  margin: 0 12px 24px;
+  padding: 8px 10px;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 var(--highlight);
+}
+.overlay-app .composer:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 2px var(--accent-subtle); }
+.overlay-app .composer textarea { min-height: 34px; padding: 6px 2px; font-size: 13px; line-height: 1.6; }
+.overlay-app .composer .send-button { width: 32px; height: 32px; border-radius: 10px; background: var(--primary); color: #fff; }
+.overlay-app .overlay-onboarding { flex-shrink: 0; padding: 12px 15px; font-size: 12px; line-height: 1.5; background: var(--accent-subtle); color: var(--text); }
+.overlay-app .overlay-context-status { flex-shrink: 0; padding: 10px 15px; font-size: 12px; }
+.overlay-app .overlay-feedback { flex-shrink: 0; padding: 0 16px 11px; font-size: 11px; }
+.overlay-app .overlay-feedback { padding-right: 38px; }
+.overlay-resize-handle {
+  position: absolute;
+  z-index: 6;
+  right: 3px;
+  bottom: 1px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border-radius: 8px 0 15px 0;
+  color: var(--faint);
+  cursor: nwse-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+.overlay-resize-handle:hover, .overlay-resize-handle[data-resizing] { color: var(--accent); background: var(--accent-subtle); }
+.overlay-resize-handle:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
+.overlay-resize-help { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+html.overlay-resizing, html.overlay-resizing * { cursor: nwse-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+.overlay-size-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 7px; }
+.overlay-size-presets > button { display: flex; gap: 8px; align-items: center; min-height: 48px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--glass-control); font-size: 12px; text-align: left; }
+.overlay-size-presets > button:hover:not(:disabled) { border-color: var(--accent-border); background: var(--accent-subtle); }
+.overlay-size-presets small { display: block; margin-top: 3px; font-size: 10px; line-height: 1.3; color: var(--faint); }
+.overlay-app .overlay-capture-button:focus-visible,
+.overlay-app .icon-button:focus-visible,
+.overlay-app summary:focus-visible { outline-width: 2px; outline-offset: 2px; }
+.app.overlay-app.overlay-collapsed .overlay-topbar { height: 52px; min-height: 52px; max-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+.app.overlay-app.overlay-collapsed .overlay-identity { gap: 2px; }
+.app.overlay-app.overlay-collapsed .overlay-brand-line .brand-wordmark { font-size: 20px; line-height: 1.15; }
+.app.overlay-app.overlay-collapsed .overlay-status { line-height: 1.2; }
+.app.overlay-app.overlay-collapsed .overlay-listen-button,
+.app.overlay-app.overlay-collapsed .overlay-more { display: none; }
+@media (max-width: 479px) {
+  .overlay-app .overlay-capture-long, .overlay-app .overlay-capture-button kbd { display: none; }
+  .overlay-app .overlay-topbar { gap: 4px; padding-left: 10px; padding-right: 10px; }
+  .overlay-app .overlay-capture-button { padding-left: 10px; padding-right: 10px; }
+}
+@media (max-width: 339px) {
+  .overlay-app .overlay-topbar .icon-button, .overlay-app .overlay-more > summary { width: 30px; flex-basis: 30px; }
+  .overlay-app .overlay-identity { min-width: 72px; }
+  .overlay-app .overlay-brand-line .brand-wordmark { font-size: 20px; }
+  .overlay-app .overlay-capture-button { padding-left: 8px; padding-right: 8px; font-size: 11px; }
+}
+.app.overlay-app.reduce-transparency,
+.app.overlay-app.increase-contrast { background: var(--surface); --content: var(--surface); }
+.app.overlay-app.increase-contrast { --border: var(--muted); --glass-border: var(--muted); --faint: var(--muted); --accent-border: var(--accent); }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .app.overlay-app { background: var(--surface); --content: var(--surface); }
+}
+@media (prefers-contrast: more) {
+  .app.overlay-app { --border: var(--muted); --glass-border: var(--muted); --faint: var(--muted); --accent-border: var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app.overlay-app *, .app.overlay-app *::before, .app.overlay-app *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}

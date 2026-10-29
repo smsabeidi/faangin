@@ -1,0 +1,107 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "complete": false,
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "holdout",
+  "fixtureCatalogSha256": "f763a7afc7daa51b7a4195c134d74462c9d84d7374bc0a36ab83ddcc54d46edb",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "reasoningOverride": null,
+  "measuredAt": "2026-10-28T02:05:34.364Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": false
+  },
+  "trials": [
+    {
+      "id": "holdout-corrected-payment-transcript",
+      "category": "technical transcript correction and negation",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "Preserve the exact `retry_after_ms` field name and use an 80 ms delay, not 18 ms. The policy must also leave failed payments unretried.",
+      "rawAnswer": "ASSIST\nPreserve the exact `retry_after_ms` field name and use an 80 ms delay, not 18 ms. The policy must also leave failed payments unretried.",
+      "decoderFailure": null,
+      "firstTextMs": 3888.697,
+      "totalMs": 4268.432,
+      "model": "gpt-6-luna",
+      "inputTokens": 2265,
+      "outputTokens": 42,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 4498,
+        "serializedUtf8Bytes": 12547,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "b7effbb663bdf58c1a28f4167923596ffa9370cb6262278e9d01b96875786ca9",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "exact identifier",
+            "observed": true
+          },
+          {
+            "label": "corrected delay",
+            "observed": true
+          },
+          {
+            "label": "nonretryable payment",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "wrong corrected delay",
+            "flagged": false
+          },
+          {
+            "label": "retries payment despite explicit negation",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 23,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Preserve the final numeric correction, snake_case identifier and explicit no-retry payment rule. Do not treat the discarded eighteen as the accepted delay or invent payment-provider behavior.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-corrected-payment-transcript",
+      "variant": "current",
+      "rawAnswer": "ASSIST Preserve",
+      "decoderFailure": {
+        "code": "invalid_interview_response",
+        "message": "The automatic interview response did not use its expected reply format."
+      },
+      "error": {
+        "code": "invalid_interview_response",
+        "transportCode": "malformed_response"
+      },
+      "firstTextMs": null,
+      "totalMs": 771.828,
+      "partialAnswer": ""
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

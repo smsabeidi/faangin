@@ -1,0 +1,11 @@
+.modal:has(.region-capture) { width: min(940px, 100%); }
+.region-capture { margin-top: 18px; }
+.region-source { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); margin-bottom: 10px; font-size: 12px; }
+.region-preview { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--input); cursor: crosshair; touch-action: none; user-select: none; }
+.region-preview img { display: block; width: 100%; height: auto; pointer-events: none; }
+.region-selection { position: absolute; pointer-events: none; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgb(var(--neutral-ink, 0 8 24) / .5); background: var(--region-fill, rgb(100 190 255 / .08)); }
+.region-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 12px; }
+.region-fields label > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.region-hint { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 10px; }
+.region-error { color: var(--danger); font-size: 13px; line-height: 1.6; margin-top: 12px; }
+@media (max-width: 600px) { .region-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .region-source { flex-direction: column; gap: 4px; } }

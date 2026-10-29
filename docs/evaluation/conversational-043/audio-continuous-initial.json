@@ -1,0 +1,448 @@
+{
+  "kind": "synthetic_speech_pipeline_acceptance",
+  "mode": "continuous-transport",
+  "syntheticOnly": true,
+  "physicalAudioCapture": false,
+  "audioPlayed": false,
+  "privateSessionLoaded": false,
+  "savedSettingsModified": false,
+  "model": "gpt-6-luna",
+  "measuredAt": "2026-10-28T02:10:25.512Z",
+  "question": "For the same shortest path solution actually do not assume unit weights anymore because every edge has weight zero or one rather than arbitrary positive weights in a graph with ten thousand vertices and fifteen thousand sorry fifty thousand edges so what changes about the queue the distance updates and the time complexity?",
+  "source": "system",
+  "frameMs": 20,
+  "vad": {
+    "silenceMs": 320,
+    "maxSegmentMs": 6000
+  },
+  "maxProviderCalls": 2,
+  "providerCallCount": 2,
+  "transcript": [
+    {
+      "id": "synthetic-speech:1:system:item_EdnPT6uEzoDm6VUYZRNQI",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "For the same shortest path solution, actually do not assume unit weights anymore",
+      "timestamp": 1793153431631
+    },
+    {
+      "id": "synthetic-speech:1:system:item_EdnPYCQq91TCHx5BLCSEP",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "Because every edge has weight zero.",
+      "timestamp": 1793153436030
+    },
+    {
+      "id": "synthetic-speech:1:system:item_EdnPa6iG77JUnxfTeaue8",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "Our one rather than an arbitrary positive weights in a graph with ten thousand vertices.",
+      "timestamp": 1793153438312
+    }
+  ],
+  "commits": [
+    {
+      "number": 1,
+      "utterance": 1,
+      "atMs": 4816.142,
+      "admittedFrames": 219,
+      "utteranceAudioMs": 4380,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    },
+    {
+      "number": 2,
+      "utterance": 2,
+      "atMs": 7116.431,
+      "admittedFrames": 334,
+      "utteranceAudioMs": 2300,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    },
+    {
+      "number": 3,
+      "utterance": 3,
+      "atMs": 11556.106,
+      "admittedFrames": 556,
+      "utteranceAudioMs": 4440,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    }
+  ],
+  "finals": [
+    {
+      "atMs": 5489.443,
+      "commitToFinalMs": 673.304,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": "For the same shortest path solution, actually do not assume unit weights anymore",
+      "utteranceComplete": true,
+      "commit": 1,
+      "utterance": 1
+    },
+    {
+      "atMs": 7643.469,
+      "commitToFinalMs": 527.041,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": "Because every edge has weight zero.",
+      "utteranceComplete": true,
+      "commit": 2,
+      "utterance": 2
+    },
+    {
+      "atMs": 12007.294,
+      "commitToFinalMs": 451.197,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": "Our one rather than an arbitrary positive weights in a graph with ten thousand vertices.",
+      "utteranceComplete": true,
+      "commit": 3,
+      "utterance": 3
+    }
+  ],
+  "partials": [
+    {
+      "atMs": 1251.704,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For"
+    },
+    {
+      "atMs": 1258.213,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the"
+    },
+    {
+      "atMs": 1661.659,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same"
+    },
+    {
+      "atMs": 2053.608,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest"
+    },
+    {
+      "atMs": 2459.169,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path"
+    },
+    {
+      "atMs": 2906.089,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution"
+    },
+    {
+      "atMs": 3261.774,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution,"
+    },
+    {
+      "atMs": 3277.503,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually"
+    },
+    {
+      "atMs": 3545.754,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually do"
+    },
+    {
+      "atMs": 3680.679,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually do not"
+    },
+    {
+      "atMs": 4055.249,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually do not assume"
+    },
+    {
+      "atMs": 4462.456,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually do not assume unit"
+    },
+    {
+      "atMs": 4672.742,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually do not assume unit weights"
+    },
+    {
+      "atMs": 5051.589,
+      "itemId": "item_EdnPT6uEzoDm6VUYZRNQI",
+      "text": " For the same shortest path solution, actually do not assume unit weights anymore"
+    },
+    {
+      "atMs": 5628.317,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because"
+    },
+    {
+      "atMs": 5988.753,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because every"
+    },
+    {
+      "atMs": 6388.554,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because every edge"
+    },
+    {
+      "atMs": 6589.197,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because every edge has"
+    },
+    {
+      "atMs": 6980.511,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because every edge has weight"
+    },
+    {
+      "atMs": 7293.101,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because every edge has weight zero"
+    },
+    {
+      "atMs": 7311.544,
+      "itemId": "item_EdnPYCQq91TCHx5BLCSEP",
+      "text": " Because every edge has weight zero."
+    },
+    {
+      "atMs": 7889.576,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our"
+    },
+    {
+      "atMs": 8082.21,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one"
+    },
+    {
+      "atMs": 8300.44,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather"
+    },
+    {
+      "atMs": 8483.072,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than"
+    },
+    {
+      "atMs": 8687.921,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an"
+    },
+    {
+      "atMs": 9078.101,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary"
+    },
+    {
+      "atMs": 9470.346,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive"
+    },
+    {
+      "atMs": 9866.201,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights"
+    },
+    {
+      "atMs": 10069.747,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in"
+    },
+    {
+      "atMs": 10079.907,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a"
+    },
+    {
+      "atMs": 10267.381,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a graph"
+    },
+    {
+      "atMs": 10657.292,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a graph with"
+    },
+    {
+      "atMs": 11319.493,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a graph with ten"
+    },
+    {
+      "atMs": 11487.513,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a graph with ten thousand"
+    },
+    {
+      "atMs": 11716.871,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a graph with ten thousand vertices"
+    },
+    {
+      "atMs": 11732.636,
+      "itemId": "item_EdnPa6iG77JUnxfTeaue8",
+      "text": " Our one rather than an arbitrary positive weights in a graph with ten thousand vertices."
+    }
+  ],
+  "coordinator": [
+    {
+      "atMs": 0.164,
+      "phase": "listening"
+    },
+    {
+      "atMs": 1252.794,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 5489.53,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 5610.435,
+      "phase": "generating"
+    },
+    {
+      "atMs": 5628.716,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 7643.635,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 7764.582,
+      "phase": "generating"
+    },
+    {
+      "atMs": 7890.686,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 12007.551,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 12127.408,
+      "phase": "generating"
+    },
+    {
+      "atMs": 12128.296,
+      "phase": "paused",
+      "reason": "The last automatic reply failed. Choose Resume automatic help to try again."
+    }
+  ],
+  "generations": [
+    {
+      "number": 1,
+      "targetId": "synthetic-speech:1:system:item_EdnPT6uEzoDm6VUYZRNQI",
+      "targetUtterance": 1,
+      "dispatchMs": 5610.586,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPT6uEzoDm6VUYZRNQI"
+      ],
+      "providerCallStarted": true,
+      "interrupted": true
+    },
+    {
+      "number": 2,
+      "targetId": "synthetic-speech:1:system:item_EdnPYCQq91TCHx5BLCSEP",
+      "targetUtterance": 2,
+      "dispatchMs": 7764.657,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPT6uEzoDm6VUYZRNQI",
+        "synthetic-speech:1:system:item_EdnPYCQq91TCHx5BLCSEP"
+      ],
+      "providerCallStarted": true,
+      "interrupted": true
+    },
+    {
+      "number": 3,
+      "targetId": "synthetic-speech:1:system:item_EdnPa6iG77JUnxfTeaue8",
+      "targetUtterance": 3,
+      "dispatchMs": 12127.467,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "providerCallStarted": false,
+      "limitRejected": true
+    }
+  ],
+  "guards": {
+    "provisionalDidNotDispatch": true,
+    "otherSourceDidNotDispatch": true,
+    "foreignSessionDidNotDispatch": true
+  },
+  "limitations": [
+    "A single system-generated voice is not evidence for accents, noise, overlapping people, microphone or conferencing capture.",
+    "Input is public synthesized speech replayed as PCM; timings exclude hardware capture, IPC and physical paint.",
+    "Observed silence endpoints are reported individually and are not assumed to establish semantic completion.",
+    "Continuous-transport mode deliberately shortens nearly silent synthetic gaps; it is not natural human pacing.",
+    "Phrase indicators support engineering review; they do not establish semantic accuracy or naturalness."
+  ],
+  "audio": {
+    "encoding": 1,
+    "channels": 1,
+    "sampleRate": 24000,
+    "bits": 16,
+    "pcmBytes": 869110,
+    "durationMs": 18106.458333333332,
+    "originalDurationMs": 18106.458333333332,
+    "wavSha256": "9246249027e43ec981aa944818cd955816748794bc2547f595d2ae1f40bd2418",
+    "voice": "macOS configured default voice; no playback",
+    "wordsPerMinute": 165,
+    "transformation": {
+      "kind": "quiet_gap_compression",
+      "quietRmsThreshold": 0.0001,
+      "maxQuietGapMs": 100,
+      "definition": "Only runs of synthetic 20 ms frames with RMS <= 0.0001 are shortened. All other frames retain exact samples and source order. VAD-voiced frames use RMS >= 0.004.",
+      "originalPcmBytes": 869110,
+      "transformedPcmBytes": 869110,
+      "removedBytes": 0,
+      "originalDurationMs": 18106.458333333332,
+      "transformedDurationMs": 18106.458333333332,
+      "originalPcmSha256": "934cdc78569dfc6534baa8510d6127a51bdc48c552df328c79ece58d836c3783",
+      "transformedPcmSha256": "934cdc78569dfc6534baa8510d6127a51bdc48c552df328c79ece58d836c3783",
+      "sourceVadVoicedFrames": 774,
+      "originalVadVoicedPcmSha256": "a58c04f0db7191b17a624d4a9783f4c28119a81316c9389111514120f039759f",
+      "transformedVadVoicedPcmSha256": "a58c04f0db7191b17a624d4a9783f4c28119a81316c9389111514120f039759f",
+      "allVadVoicedFramesPreserved": true,
+      "gaps": []
+    }
+  },
+  "transcriptionConnectionMs": 693.006,
+  "dispatchAttemptCount": 3,
+  "complete": false,
+  "passed": false,
+  "failure": {
+    "phase": "audio_replay",
+    "code": "ABORT_ERR"
+  }
+}
