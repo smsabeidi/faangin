@@ -4,6 +4,8 @@ export interface LiveReplyCandidate {
   turn: TranscriptTurn
   generation: number
   epoch: number
+  /** A provider-final transport chunk can still belong to continuing speech. */
+  utteranceComplete?: boolean
 }
 
 export interface LiveReplyInterruption {
@@ -102,7 +104,7 @@ export class LiveReplyCoordinator {
     const meaningful = hasText(candidate)
     const older = this.latestTargetAt !== null && candidate.turn.timestamp < this.latestTargetAt
     // An old provider segment must not release a newer, still-provisional question.
-    const settlesSpeech = this.settling && (!this.settlingTarget || (!older && (identity(this.settlingTarget) === key || (meaningful && candidate.turn.timestamp >= this.settlingTarget.turn.timestamp))))
+    const settlesSpeech = this.settling && (!this.settlingTarget || (!older && (identity(this.settlingTarget) === key || ((meaningful || candidate.utteranceComplete === true) && candidate.turn.timestamp >= this.settlingTarget.turn.timestamp))))
     if (settlesSpeech) { this.settling = false; this.settlingTarget = null }
     let replaced = false
     if (meaningful && !older) {
@@ -110,9 +112,23 @@ export class LiveReplyCoordinator {
       this.latestTargetAt = candidate.turn.timestamp
       if (!duplicateText) { this.pending = freezeCandidate(candidate); replaced = true }
     }
-    if (!replaced && !settlesSpeech) return
+    const continuing = !older && candidate.utteranceComplete === false
+    if (continuing) {
+      this.settling = true
+      if (!this.settlingTarget || candidate.turn.timestamp >= this.settlingTarget.turn.timestamp) this.settlingTarget = freezeCandidate(candidate)
+    }
+    if (!replaced && !settlesSpeech && !continuing) return
     this.readyAt = this.clock.now() + this.limits.coalesceMs
     if (replaced) this.interrupt(candidate, 'new-question')
+    this.schedule()
+  }
+
+  /** An exact-boundary endpoint has no new transcript; release only its held chunk. */
+  completeUtterance(candidate: LiveReplyCandidate): void {
+    if (!this.enabled || this.paused || !this.valid(candidate) || !this.allowed(candidate) || !this.settling ||
+      !this.settlingTarget || !sameScope(this.settlingTarget, candidate) || identity(this.settlingTarget) !== identity(candidate)) return
+    this.settling = false; this.settlingTarget = null
+    this.readyAt = this.clock.now() + this.limits.coalesceMs
     this.schedule()
   }
 
@@ -194,7 +210,8 @@ export class LiveReplyCoordinator {
       Number.isSafeInteger(candidate.turn.timestamp) && candidate.turn.timestamp >= 0 &&
       (candidate.turn.channel === 'system' || candidate.turn.channel === 'microphone') &&
       Number.isSafeInteger(candidate.generation) && candidate.generation > 0 &&
-      Number.isSafeInteger(candidate.epoch) && candidate.epoch >= 0
+      Number.isSafeInteger(candidate.epoch) && candidate.epoch >= 0 &&
+      (candidate.utteranceComplete === undefined || typeof candidate.utteranceComplete === 'boolean')
   }
 
   private allowed(candidate: LiveReplyCandidate): boolean {

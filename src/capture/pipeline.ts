@@ -8,7 +8,7 @@ interface PipelineOptions {
   channel?: AudioChannel
   current(): boolean
   frame(pcm: ArrayBuffer): void
-  commit(): void
+  commit(utteranceComplete: boolean): void
   level(level: number): void
   status(message: string, failed?: boolean): void
   now?: () => number

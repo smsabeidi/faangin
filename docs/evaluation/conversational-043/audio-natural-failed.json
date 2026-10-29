@@ -1,0 +1,741 @@
+{
+  "kind": "synthetic_speech_pipeline_acceptance",
+  "mode": "natural",
+  "syntheticOnly": true,
+  "physicalAudioCapture": false,
+  "audioPlayed": false,
+  "privateSessionLoaded": false,
+  "savedSettingsModified": false,
+  "model": "gpt-6-luna",
+  "measuredAt": "2026-10-28T02:10:24.550Z",
+  "question": "For the same shortest path solution actually do not assume unit weights anymore because every edge has weight zero or one rather than arbitrary positive weights in a graph with ten thousand vertices and fifteen thousand sorry fifty thousand edges so what changes about the queue the distance updates and the time complexity?",
+  "source": "system",
+  "frameMs": 20,
+  "vad": {
+    "silenceMs": 320,
+    "maxSegmentMs": 6000
+  },
+  "maxProviderCalls": 6,
+  "providerCallCount": 5,
+  "transcript": [
+    {
+      "id": "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "For the same shortest path solution, actually do not assume unit weights anymore",
+      "timestamp": 1793153431507
+    },
+    {
+      "id": "synthetic-speech:1:system:item_EdnPYdW9ksFYDqluvW8jL",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "Because every edge has weight zero.",
+      "timestamp": 1793153435905
+    },
+    {
+      "id": "synthetic-speech:1:system:item_EdnPa7I6RTCa0aM3PLPF0",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "Our one rather than  arbitrary positive weights in a graph with ten thousand vertices.",
+      "timestamp": 1793153438185
+    },
+    {
+      "id": "synthetic-speech:1:system:item_EdnPeQwbxwQMwV4AxHR8S",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "And fifteen thousand sorry fifty thousand edges.",
+      "timestamp": 1793153442584
+    },
+    {
+      "id": "synthetic-speech:1:system:item_EdnPh8Oijsp2MB6HAJiJW",
+      "sessionId": "synthetic-speech",
+      "channel": "system",
+      "text": "So what changes about the queue the distance updates and the time complexity?",
+      "timestamp": 1793153445285
+    }
+  ],
+  "commits": [
+    {
+      "number": 1,
+      "utterance": 1,
+      "atMs": 4820.947,
+      "admittedFrames": 219,
+      "utteranceAudioMs": 4380,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    },
+    {
+      "number": 2,
+      "utterance": 2,
+      "atMs": 7120.812,
+      "admittedFrames": 334,
+      "utteranceAudioMs": 2300,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    },
+    {
+      "number": 3,
+      "utterance": 3,
+      "atMs": 11558.718,
+      "admittedFrames": 556,
+      "utteranceAudioMs": 4440,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    },
+    {
+      "number": 4,
+      "utterance": 4,
+      "atMs": 14280.465,
+      "admittedFrames": 692,
+      "utteranceAudioMs": 2720,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    },
+    {
+      "number": 5,
+      "utterance": 5,
+      "atMs": 18798.701,
+      "admittedFrames": 918,
+      "utteranceAudioMs": 4520,
+      "utteranceComplete": true,
+      "providerCommitExpected": true
+    }
+  ],
+  "finals": [
+    {
+      "atMs": 5476.003,
+      "commitToFinalMs": 655.06,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": "For the same shortest path solution, actually do not assume unit weights anymore",
+      "utteranceComplete": true,
+      "commit": 1,
+      "utterance": 1
+    },
+    {
+      "atMs": 7632.28,
+      "commitToFinalMs": 511.472,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": "Because every edge has weight zero.",
+      "utteranceComplete": true,
+      "commit": 2,
+      "utterance": 2
+    },
+    {
+      "atMs": 12171.56,
+      "commitToFinalMs": 612.851,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": "Our one rather than  arbitrary positive weights in a graph with ten thousand vertices.",
+      "utteranceComplete": true,
+      "commit": 3,
+      "utterance": 3
+    },
+    {
+      "atMs": 14903.19,
+      "commitToFinalMs": 622.739,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": "And fifteen thousand sorry fifty thousand edges.",
+      "utteranceComplete": true,
+      "commit": 4,
+      "utterance": 4
+    },
+    {
+      "atMs": 19278.983,
+      "commitToFinalMs": 480.284,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": "So what changes about the queue the distance updates and the time complexity?",
+      "utteranceComplete": true,
+      "commit": 5,
+      "utterance": 5
+    }
+  ],
+  "partials": [
+    {
+      "atMs": 1264.811,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For"
+    },
+    {
+      "atMs": 1272.448,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the"
+    },
+    {
+      "atMs": 1662.289,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same"
+    },
+    {
+      "atMs": 2062.474,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest"
+    },
+    {
+      "atMs": 2448.741,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path"
+    },
+    {
+      "atMs": 2869.195,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution"
+    },
+    {
+      "atMs": 3280.317,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution,"
+    },
+    {
+      "atMs": 3291.221,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually"
+    },
+    {
+      "atMs": 3484.194,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually do"
+    },
+    {
+      "atMs": 3699.783,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually do not"
+    },
+    {
+      "atMs": 4060.012,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually do not assume"
+    },
+    {
+      "atMs": 4459.394,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually do not assume unit"
+    },
+    {
+      "atMs": 4650.302,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually do not assume unit weights"
+    },
+    {
+      "atMs": 5050.506,
+      "itemId": "item_EdnPTHqTiOewEbJedDZuC",
+      "text": " For the same shortest path solution, actually do not assume unit weights anymore"
+    },
+    {
+      "atMs": 5615.73,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because"
+    },
+    {
+      "atMs": 5981.948,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because every"
+    },
+    {
+      "atMs": 6362.44,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because every edge"
+    },
+    {
+      "atMs": 6584.157,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because every edge has"
+    },
+    {
+      "atMs": 6975.514,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because every edge has weight"
+    },
+    {
+      "atMs": 7281.087,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because every edge has weight zero"
+    },
+    {
+      "atMs": 7342.457,
+      "itemId": "item_EdnPYdW9ksFYDqluvW8jL",
+      "text": " Because every edge has weight zero."
+    },
+    {
+      "atMs": 7962.117,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our"
+    },
+    {
+      "atMs": 8140.941,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one"
+    },
+    {
+      "atMs": 8342.868,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather"
+    },
+    {
+      "atMs": 8529.451,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than"
+    },
+    {
+      "atMs": 8741.499,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than "
+    },
+    {
+      "atMs": 9141.478,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary"
+    },
+    {
+      "atMs": 9560.348,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive"
+    },
+    {
+      "atMs": 9932.888,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights"
+    },
+    {
+      "atMs": 10130.135,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in"
+    },
+    {
+      "atMs": 10141.748,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a"
+    },
+    {
+      "atMs": 10329.223,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a graph"
+    },
+    {
+      "atMs": 10735.078,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a graph with"
+    },
+    {
+      "atMs": 10970.107,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a graph with ten"
+    },
+    {
+      "atMs": 11658.877,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a graph with ten thousand"
+    },
+    {
+      "atMs": 11780.39,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a graph with ten thousand vertices"
+    },
+    {
+      "atMs": 11790.437,
+      "itemId": "item_EdnPa7I6RTCa0aM3PLPF0",
+      "text": " Our one rather than  arbitrary positive weights in a graph with ten thousand vertices."
+    },
+    {
+      "atMs": 12305.645,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And"
+    },
+    {
+      "atMs": 12516.303,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen"
+    },
+    {
+      "atMs": 12902.524,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen thousand"
+    },
+    {
+      "atMs": 13309.317,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen thousand sorry"
+    },
+    {
+      "atMs": 13720.802,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen thousand sorry fifty"
+    },
+    {
+      "atMs": 14115.84,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen thousand sorry fifty thousand"
+    },
+    {
+      "atMs": 14541.532,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen thousand sorry fifty thousand edges"
+    },
+    {
+      "atMs": 14559.825,
+      "itemId": "item_EdnPeQwbxwQMwV4AxHR8S",
+      "text": " And fifteen thousand sorry fifty thousand edges."
+    },
+    {
+      "atMs": 15034.206,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So"
+    },
+    {
+      "atMs": 15423.189,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what"
+    },
+    {
+      "atMs": 15817.163,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes"
+    },
+    {
+      "atMs": 16038.12,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about"
+    },
+    {
+      "atMs": 16230.776,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the"
+    },
+    {
+      "atMs": 16639.982,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue"
+    },
+    {
+      "atMs": 16848.7,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the"
+    },
+    {
+      "atMs": 17029.065,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance"
+    },
+    {
+      "atMs": 17420.383,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance updates"
+    },
+    {
+      "atMs": 18027.626,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance updates and"
+    },
+    {
+      "atMs": 18246.161,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance updates and the"
+    },
+    {
+      "atMs": 18436.509,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance updates and the time"
+    },
+    {
+      "atMs": 18962.917,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance updates and the time complexity"
+    },
+    {
+      "atMs": 18973.956,
+      "itemId": "item_EdnPh8Oijsp2MB6HAJiJW",
+      "text": " So what changes about the queue the distance updates and the time complexity?"
+    }
+  ],
+  "coordinator": [
+    {
+      "atMs": 0.147,
+      "phase": "listening"
+    },
+    {
+      "atMs": 1265.844,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 5476.183,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 5597.844,
+      "phase": "generating"
+    },
+    {
+      "atMs": 5616.42,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 7632.444,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 7753.684,
+      "phase": "generating"
+    },
+    {
+      "atMs": 7963.513,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 12171.744,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 12292.534,
+      "phase": "generating"
+    },
+    {
+      "atMs": 12305.951,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 14903.431,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 15023.327,
+      "phase": "generating"
+    },
+    {
+      "atMs": 15034.39,
+      "phase": "waiting",
+      "reason": "Waiting for speech to finish."
+    },
+    {
+      "atMs": 19279.024,
+      "phase": "waiting"
+    },
+    {
+      "atMs": 19399.381,
+      "phase": "generating"
+    },
+    {
+      "atMs": 21804.325,
+      "phase": "listening"
+    }
+  ],
+  "generations": [
+    {
+      "number": 1,
+      "targetId": "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC",
+      "targetUtterance": 1,
+      "dispatchMs": 5598.035,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC"
+      ],
+      "providerCallStarted": true,
+      "interrupted": true
+    },
+    {
+      "number": 2,
+      "targetId": "synthetic-speech:1:system:item_EdnPYdW9ksFYDqluvW8jL",
+      "targetUtterance": 2,
+      "dispatchMs": 7753.862,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC",
+        "synthetic-speech:1:system:item_EdnPYdW9ksFYDqluvW8jL"
+      ],
+      "providerCallStarted": true,
+      "interrupted": true
+    },
+    {
+      "number": 3,
+      "targetId": "synthetic-speech:1:system:item_EdnPa7I6RTCa0aM3PLPF0",
+      "targetUtterance": 3,
+      "dispatchMs": 12292.568,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC",
+        "synthetic-speech:1:system:item_EdnPYdW9ksFYDqluvW8jL",
+        "synthetic-speech:1:system:item_EdnPa7I6RTCa0aM3PLPF0"
+      ],
+      "providerCallStarted": true,
+      "interrupted": true
+    },
+    {
+      "number": 4,
+      "targetId": "synthetic-speech:1:system:item_EdnPeQwbxwQMwV4AxHR8S",
+      "targetUtterance": 4,
+      "dispatchMs": 15023.396,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": true,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": null,
+      "disposition": null,
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC",
+        "synthetic-speech:1:system:item_EdnPYdW9ksFYDqluvW8jL",
+        "synthetic-speech:1:system:item_EdnPa7I6RTCa0aM3PLPF0",
+        "synthetic-speech:1:system:item_EdnPeQwbxwQMwV4AxHR8S"
+      ],
+      "providerCallStarted": true,
+      "interrupted": true
+    },
+    {
+      "number": 5,
+      "targetId": "synthetic-speech:1:system:item_EdnPh8Oijsp2MB6HAJiJW",
+      "targetUtterance": 5,
+      "dispatchMs": 19399.402,
+      "candidateEndpointObserved": true,
+      "utteranceStillOpen": false,
+      "vadSpeechInProgress": false,
+      "providerContinuationUnsettled": false,
+      "rawResponse": "ASSIST\nFor zero-weight edges, keep BFS but the distance to every vertex reachable from the source is zero. Relax an edge only if it improves the neighbor’s recorded distance; update its parent when it does, and enqueue it if needed. With all weights zero, a FIFO queue still works, and each vertex needs processing at most once after its distance becomes zero, so the time is O(V + E)—about O(60,000) for 10,000 vertices and 50,000 edges. The earlier mark-on-enqueue rule remains safe here if you initialize distances to infinity and set them to zero on first discovery.",
+      "answer": "For zero-weight edges, keep BFS but the distance to every vertex reachable from the source is zero. Relax an edge only if it improves the neighbor’s recorded distance; update its parent when it does, and enqueue it if needed. With all weights zero, a FIFO queue still works, and each vertex needs processing at most once after its distance becomes zero, so the time is O(V + E)—about O(60,000) for 10,000 vertices and 50,000 edges. The earlier mark-on-enqueue rule remains safe here if you initialize distances to infinity and set them to zero on first discovery.",
+      "firstTextMs": 904.18,
+      "totalMs": 2403.719,
+      "disposition": "assist",
+      "transcriptIds": [
+        "synthetic-speech:1:system:item_EdnPTHqTiOewEbJedDZuC",
+        "synthetic-speech:1:system:item_EdnPYdW9ksFYDqluvW8jL",
+        "synthetic-speech:1:system:item_EdnPa7I6RTCa0aM3PLPF0",
+        "synthetic-speech:1:system:item_EdnPeQwbxwQMwV4AxHR8S",
+        "synthetic-speech:1:system:item_EdnPh8Oijsp2MB6HAJiJW"
+      ],
+      "providerCallStarted": true,
+      "inputTokens": 4273,
+      "outputTokens": 132,
+      "indicators": {
+        "zeroOneBfs": false,
+        "deque": false,
+        "relaxation": true,
+        "linearTime": true
+      }
+    }
+  ],
+  "guards": {
+    "provisionalDidNotDispatch": true,
+    "otherSourceDidNotDispatch": true,
+    "foreignSessionDidNotDispatch": true
+  },
+  "limitations": [
+    "A single system-generated voice is not evidence for accents, noise, overlapping people, microphone or conferencing capture.",
+    "Input is public synthesized speech replayed as PCM; timings exclude hardware capture, IPC and physical paint.",
+    "Observed silence endpoints are reported individually and are not assumed to establish semantic completion.",
+    "Continuous-transport mode deliberately shortens nearly silent synthetic gaps; it is not natural human pacing.",
+    "Phrase indicators support engineering review; they do not establish semantic accuracy or naturalness."
+  ],
+  "audio": {
+    "encoding": 1,
+    "channels": 1,
+    "sampleRate": 24000,
+    "bits": 16,
+    "pcmBytes": 869110,
+    "durationMs": 18106.458333333332,
+    "originalDurationMs": 18106.458333333332,
+    "wavSha256": "9246249027e43ec981aa944818cd955816748794bc2547f595d2ae1f40bd2418",
+    "voice": "macOS configured default voice; no playback",
+    "wordsPerMinute": 165,
+    "transformation": {
+      "kind": "none",
+      "originalPcmBytes": 869110,
+      "transformedPcmBytes": 869110
+    }
+  },
+  "transcriptionConnectionMs": 637.458,
+  "dispatchAttemptCount": 5,
+  "timing": {
+    "audioReplayStartedMs": 457.763,
+    "firstPartialMs": 1264.805,
+    "firstFinalMs": 5475.97,
+    "firstPartialFromAudioReplayMs": 807.042,
+    "firstFinalFromAudioReplayMs": 5018.207,
+    "inputEndedMs": 18558.312,
+    "finishedMs": 21805.347
+  },
+  "pcmIntegrity": {
+    "source": "system only",
+    "replayFrames": 956,
+    "admittedFrames": 918,
+    "skippedQuietFramesBetweenAdmissions": 0,
+    "monotonicNoDuplicates": true,
+    "exactAdmittedBytes": true,
+    "admittedPcmSha256": "749ee3ca6761f8ded35b0dad75ed94e96fadb78a14e18202e28e699be9e34d54"
+  },
+  "transcriptIndicators": {
+    "zeroOrOne": false,
+    "negationOrExclusion": true,
+    "tenThousandVertices": true,
+    "finalFiftyThousandEdges": true
+  },
+  "transportCoverage": {
+    "providerFinalContinuationObserved": false,
+    "longestObservedUtteranceMs": 4520,
+    "continuationRequired": false
+  },
+  "invariants": {
+    "endpointFinalObserved": true,
+    "withinUtteranceNoEarlyDispatch": true,
+    "finalQuestionIncluded": true,
+    "requiredAnswerIndicatorsObserved": false,
+    "noCommitMetadataMismatch": true,
+    "allGuardsHeld": true,
+    "noTranscriptFailure": true
+  },
+  "observedEndpointCount": 5,
+  "dispatchesDuringObservedSpeech": [
+    {
+      "trial": 1,
+      "targetUtterance": 1,
+      "dispatchMs": 5598.035,
+      "candidateEndpointObserved": true
+    },
+    {
+      "trial": 2,
+      "targetUtterance": 2,
+      "dispatchMs": 7753.862,
+      "candidateEndpointObserved": true
+    },
+    {
+      "trial": 3,
+      "targetUtterance": 3,
+      "dispatchMs": 12292.568,
+      "candidateEndpointObserved": true
+    },
+    {
+      "trial": 4,
+      "targetUtterance": 4,
+      "dispatchMs": 15023.396,
+      "candidateEndpointObserved": true
+    }
+  ],
+  "intermediateFinalsBeforeObservedEndpoint": 0,
+  "passed": false,
+  "complete": true
+}

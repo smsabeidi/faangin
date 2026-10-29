@@ -6,7 +6,9 @@ Faangin's first build targets Apple Silicon Macs. Windows packaging is configure
 
 ![Earlier Faangin desktop workspace capture](docs/assets/workspace.png)
 
-The latest candidate is **0.3.3**, fixing overlay controls: it opens interactive, only the logo/status area drags, and click-through is an explicit opt-in. **Control–Option–S** captures and solves in one step. The header keeps the primary controls and puts secondary tools under More. The app and installers are in `dist/interaction-repair-candidate`; the normal launch copy is `dist/mac-arm64/Faangin.app`. See [interaction repair and verification](docs/engineering/overlay-interaction-v033.md).
+The current version is **0.4.3**, improving conversational interview delivery, grounded follow-ups and completed-utterance handling. New installations use GPT-6 Luna for Fast mode and GPT-6.1 Sol for Smart mode; existing saved model choices remain intact. Sol in Smart mode is the selected configuration for the final engineering evaluation. See the [0.4.3 verification record](docs/engineering/conversational-043.md) for tested behavior, model selection and remaining acceptance limits.
+
+Version **0.3.3** fixed overlay controls: it opens interactive, only the logo/status area drags, and click-through is an explicit opt-in. **Control–Option–S** captures and solves in one step. The header keeps the primary controls and puts secondary tools under More. Those historical artifacts are in `dist/interaction-repair-candidate`; the normal launch copy is `dist/mac-arm64/Faangin.app`. See [interaction repair and verification](docs/engineering/overlay-interaction-v033.md).
 
 The existing hands-free interview, neutral themes, current-solution follow-ups, and screenshot-selection controls are preserved. See [hands-free behavior](docs/engineering/hands-free-interview.md) and [audio permissions](docs/engineering/audio-permissions.md).
 
@@ -120,6 +122,7 @@ The test suite covers storage recovery, request validation, capture lifecycle, r
 | [Feature status](docs/engineering/feature-status.md) | Requirement-by-requirement delivery and acceptance gaps |
 | [Release readiness](docs/engineering/release-readiness.md) | Interview acceptance checks and remaining production gates |
 | [Latency](docs/engineering/latency.md) | What the response timings measure and how to compare Fast/Smart |
+| [Conversational responses](docs/engineering/response-delivery.md) | Delivery policy, completed-utterance handling, paired evaluation and remaining quality limits |
 | [Spoken questions](docs/engineering/spoken-questions.md) | Select audio sources, verify conversation text and explicitly request Reply |
 | [Delivery plan](docs/engineering/delivery-plan.md) | Work packages and ownership |
 | [Validation plan](docs/engineering/validation-plan.md) | Functional and native release gates |

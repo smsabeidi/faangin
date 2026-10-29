@@ -1,6 +1,6 @@
 {
   "name": "faangin",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A desktop workspace for meeting context and technical interview practice",
   "author": "Muhammed Salim",
   "license": "MIT",
@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm test && npm run build && npm run smoke",
     "test": "node --import tsx --test tests/*.test.ts",
+    "eval:delivery": "node --import tsx scripts/response-delivery-eval.ts",
+    "eval:delivery:live": "electron scripts/response-delivery-live-eval.cjs",
     "package:mac": "npm run build && electron-builder --mac --arm64 --dir",
     "dist:mac": "npm run build && electron-builder --mac --arm64",
     "release:mac": "node scripts/release-mac.mjs",

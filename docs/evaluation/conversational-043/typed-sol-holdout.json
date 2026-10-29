@@ -1,0 +1,1493 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "complete": true,
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "holdout",
+  "fixtureCatalogSha256": "d6a0f661faece90dfe9adac76454ccf57a159fcb4a92239106273f1b846f834e",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6.1-sol",
+  "reasoningOverride": null,
+  "measuredAt": "2026-10-28T13:16:43.912Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "holdout-mutex-semaphore",
+      "category": "technical comparison and spoken sentence budget",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "A mutex has ownership—the thread that locks it must unlock it—and admits only one holder at a time, making it suitable for protecting shared mutable state. A counting semaphore has no ownership requirement and admits up to its configured number of concurrent operations, making it suitable for limiting access to a pool of database connections.",
+      "rawAnswer": "A mutex has ownership—the thread that locks it must unlock it—and admits only one holder at a time, making it suitable for protecting shared mutable state. A counting semaphore has no ownership requirement and admits up to its configured number of concurrent operations, making it suitable for limiting access to a pool of database connections.",
+      "decoderFailure": null,
+      "firstTextMs": 1485.422,
+      "totalMs": 2792.676,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1250,
+      "outputTokens": 65,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2308,
+        "serializedUtf8Bytes": 7114,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "00406111e7a24160aaf6ba76484ef39d1d2bff2d2b2cc2b69ff26ec25ac5a8b7",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "mutex exclusion",
+            "observed": true
+          },
+          {
+            "label": "semaphore count",
+            "observed": true
+          },
+          {
+            "label": "ownership distinction",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 55,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Compare both primitives on every requested dimension; distinguish mutex ownership from counting permits without implying every semaphore is a mutex. Respect three sentences.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-mutex-semaphore",
+      "category": "technical comparison and spoken sentence budget",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "A mutex has an owner—the thread that locks it must unlock it—and admits only one operation at a time, making it suitable for protecting shared mutable state. A counting semaphore has no ownership requirement, so one thread can acquire a permit and another can release it; with N permits, it admits up to N concurrent operations, making it suitable for limiting access to a connection pool.",
+      "rawAnswer": "A mutex has an owner—the thread that locks it must unlock it—and admits only one operation at a time, making it suitable for protecting shared mutable state. A counting semaphore has no ownership requirement, so one thread can acquire a permit and another can release it; with N permits, it admits up to N concurrent operations, making it suitable for limiting access to a connection pool.",
+      "decoderFailure": null,
+      "firstTextMs": 1820.843,
+      "totalMs": 3102.9,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 994,
+      "outputTokens": 79,
+      "footprint": {
+        "instructionsCharacters": 4483,
+        "inputCharacters": 1239,
+        "serializedUtf8Bytes": 5762,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2bb32617c6362a7695066d52a30fa7de30ecfb2ec06a6da38b7e009fb35665d5",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "mutex exclusion",
+            "observed": true
+          },
+          {
+            "label": "semaphore count",
+            "observed": true
+          },
+          {
+            "label": "ownership distinction",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 66,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Compare both primitives on every requested dimension; distinguish mutex ownership from counting permits without implying every semaphore is a mutex. Respect three sentences.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-concurrency-followup",
+      "category": "follow-up continuity and changed constraints",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "json",
+      "disposition": "assist",
+      "answer": "Keep the global eight-permit semaphore and add a per-tenant concurrency limit below eight—for example, two. Acquire the tenant permit before the global permit, so a request never holds global capacity while waiting for tenant eligibility. Release both in a finally block, and if cancellation happens while waiting for the global permit, release the tenant permit too. That’s the smallest isolation change: no tenant can occupy all eight database slots, and total database concurrency still cannot exceed eight.",
+      "rawAnswer": "{\"disposition\":\"assist\",\"answer\":\"Keep the global eight-permit semaphore and add a per-tenant concurrency limit below eight—for example, two. Acquire the tenant permit before the global permit, so a request never holds global capacity while waiting for tenant eligibility. Release both in a finally block, and if cancellation happens while waiting for the global permit, release the tenant permit too. That’s the smallest isolation change: no tenant can occupy all eight database slots, and total database concurrency still cannot exceed eight.\"}",
+      "decoderFailure": null,
+      "firstTextMs": 1812.966,
+      "totalMs": 4260.833,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 3384,
+      "outputTokens": 111,
+      "footprint": {
+        "instructionsCharacters": 11807,
+        "inputCharacters": 6834,
+        "serializedUtf8Bytes": 18723,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "714f9c82530e2ae432c19582775ed26ffaeaa8aa4363cecbbadf1a4f6cb4c3ab",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "preserved global bound",
+            "observed": true
+          },
+          {
+            "label": "tenant isolation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "unbounded global concurrency",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 77,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Add per-tenant concurrency or fair admission while preserving the shared eight-permit bound. Explain smallest justified change, release safety and starvation/order tradeoff where material; do not restart architecture.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-concurrency-followup",
+      "category": "follow-up continuity and changed constraints",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "line",
+      "disposition": "assist",
+      "answer": "Keep the global eight-permit semaphore and add a per-tenant semaphore with a configurable limit below eight. Acquire the tenant permit first, then the global permit, and release both reliably on completion or failure. This prevents one tenant from consuming all eight database slots while preserving the global cap; per-tenant limits alone would let total concurrency grow with tenant count.",
+      "rawAnswer": "ASSIST\nKeep the global eight-permit semaphore and add a per-tenant semaphore with a configurable limit below eight. Acquire the tenant permit first, then the global permit, and release both reliably on completion or failure. This prevents one tenant from consuming all eight database slots while preserving the global cap; per-tenant limits alone would let total concurrency grow with tenant count.",
+      "decoderFailure": null,
+      "firstTextMs": 1676.497,
+      "totalMs": 3135.13,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 2839,
+      "outputTokens": 78,
+      "footprint": {
+        "instructionsCharacters": 8760,
+        "inputCharacters": 6834,
+        "serializedUtf8Bytes": 15650,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "10acd7a337d1b8e9fea76038718576ecba301cc7a751839bf10ae06de200a436",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "preserved global bound",
+            "observed": true
+          },
+          {
+            "label": "tenant isolation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "unbounded global concurrency",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 59,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Add per-tenant concurrency or fair admission while preserving the shared eight-permit bound. Explain smallest justified change, release safety and starvation/order tradeoff where material; do not restart architecture.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-grounded-incident",
+      "category": "behavioral source fidelity and speech time budget",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "“At Juniper Tools, I was a support engineer on an on-call rotation when a processing queue backed up. I needed to understand what was blocking processing and help get the queue moving again.\n\nI compared the worker logs with the database dashboard and found batch timeouts. I then paired with the database engineer, and we reduced the batch size to address those timeouts.\n\nAfter that change, the queue caught up. I also wrote a handoff note so the next person on call had context about what we found and what we changed. My approach was to connect evidence across the worker and database layers, collaborate on the fix, and leave a clear handoff.”",
+      "rawAnswer": "“At Juniper Tools, I was a support engineer on an on-call rotation when a processing queue backed up. I needed to understand what was blocking processing and help get the queue moving again.\n\nI compared the worker logs with the database dashboard and found batch timeouts. I then paired with the database engineer, and we reduced the batch size to address those timeouts.\n\nAfter that change, the queue caught up. I also wrote a handoff note so the next person on call had context about what we found and what we changed. My approach was to connect evidence across the worker and database layers, collaborate on the fix, and leave a clear handoff.”",
+      "decoderFailure": null,
+      "firstTextMs": 1258.369,
+      "totalMs": 3102.474,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1341,
+      "outputTokens": 135,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2556,
+        "serializedUtf8Bytes": 7562,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "f90b0df00c041414d59bf853b6f837a055f8c9593514cf5ee7e825a0fc94b2be",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported investigation",
+            "observed": true
+          },
+          {
+            "label": "supported action",
+            "observed": true
+          },
+          {
+            "label": "supported outcome",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented impact or duration",
+            "flagged": false
+          },
+          {
+            "label": "invented authority or success",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 113,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use only supplied role, actions and queue-caught-up result; do not invent recovery speed, customer effects, managerial authority or follow-up success. Target about 45 seconds without fake hesitation.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-grounded-incident",
+      "category": "behavioral source fidelity and speech time budget",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "At Juniper Tools, I handled a backed-up processing queue while working as a support engineer on the on-call rotation.\n\nI started by comparing the worker logs with the database dashboard to understand where processing was getting stuck. That helped me identify batch timeouts. I then paired with the database engineer, and we reduced the batch size to address those timeouts.\n\nAfter that change, the queue caught up. I also wrote a handoff note documenting the incident and the change, so the next person on call had that context.",
+      "rawAnswer": "At Juniper Tools, I handled a backed-up processing queue while working as a support engineer on the on-call rotation.\n\nI started by comparing the worker logs with the database dashboard to understand where processing was getting stuck. That helped me identify batch timeouts. I then paired with the database engineer, and we reduced the batch size to address those timeouts.\n\nAfter that change, the queue caught up. I also wrote a handoff note documenting the incident and the change, so the next person on call had that context.",
+      "decoderFailure": null,
+      "firstTextMs": 1675.637,
+      "totalMs": 3428.584,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1252,
+      "outputTokens": 108,
+      "footprint": {
+        "instructionsCharacters": 5503,
+        "inputCharacters": 1558,
+        "serializedUtf8Bytes": 7107,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "6fcf4c59a986825a4b1931ff30be713a99948ea0efae3b5958cb00fbfb9b16c3",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported investigation",
+            "observed": true
+          },
+          {
+            "label": "supported action",
+            "observed": true
+          },
+          {
+            "label": "supported outcome",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented impact or duration",
+            "flagged": false
+          },
+          {
+            "label": "invented authority or success",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 88,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use only supplied role, actions and queue-caught-up result; do not invent recovery speed, customer effects, managerial authority or follow-up success. Target about 45 seconds without fake hesitation.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-absent-management-story",
+      "category": "absent personal evidence",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "What real example can you share of managing an employee’s exit, or, if that doesn’t apply, handling a difficult performance issue as an individual contributor?",
+      "rawAnswer": "What real example can you share of managing an employee’s exit, or, if that doesn’t apply, handling a difficult performance issue as an individual contributor?",
+      "decoderFailure": null,
+      "firstTextMs": 1070.516,
+      "totalMs": 2069.104,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1188,
+      "outputTokens": 35,
+      "footprint": {
+        "instructionsCharacters": 5503,
+        "inputCharacters": 1277,
+        "serializedUtf8Bytes": 6826,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "66fe896b39027adf341b6ef7908443647ac4dbf4e9bec2d158e8ce253131bd89",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "clarify real experience",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented management experience",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 25,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "One focused request for actual experience, or a clearly conditional alternative; do not invent employee-management experience or an elaborate fabricated example.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-absent-management-story",
+      "category": "absent personal evidence",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "“I’m an individual contributor, so I haven’t managed an employee out of an organization, and I wouldn’t want to imply that I have. Would an example of addressing a difficult collaboration or accountability issue as a peer be relevant?”\n\nDo you have a real example of that kind? If so, we can structure it using this **STAR outline**:\n\n- **Situation:** [The collaboration or accountability issue you observed.]\n- **Task:** [Your responsibility and the limits of your authority.]\n- **Action:** [How you gave feedback, offered support, or escalated concerns appropriately.]\n- **Result:** [What actually changed and what you learned.]\n\nKeep any employment decision separate from your own actions unless you were directly involved.",
+      "rawAnswer": "“I’m an individual contributor, so I haven’t managed an employee out of an organization, and I wouldn’t want to imply that I have. Would an example of addressing a difficult collaboration or accountability issue as a peer be relevant?”\n\nDo you have a real example of that kind? If so, we can structure it using this **STAR outline**:\n\n- **Situation:** [The collaboration or accountability issue you observed.]\n- **Task:** [Your responsibility and the limits of your authority.]\n- **Action:** [How you gave feedback, offered support, or escalated concerns appropriately.]\n- **Result:** [What actually changed and what you learned.]\n\nKeep any employment decision separate from your own actions unless you were directly involved.",
+      "decoderFailure": null,
+      "firstTextMs": 1103.819,
+      "totalMs": 3677.976,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1274,
+      "outputTokens": 148,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2261,
+        "serializedUtf8Bytes": 7267,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "3e2d420612ee978bf096c5fe5a63a3fd1c7490c5174224d9bab73a6d382b5ebb",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "clarify real experience",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented management experience",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 112,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "One focused request for actual experience, or a clearly conditional alternative; do not invent employee-management experience or an elaborate fabricated example.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-thumbnail-design",
+      "category": "system design with independent capacity and 90-second cue",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "“I’d use direct object-storage uploads and a durable queue feeding sandboxed thumbnail workers. Before final sizing, I’d clarify output dimensions, retention, burst traffic, and the completion-time target.\n\n**Requirements and sizing:** We accept 75 uploads per second and produce three thumbnails per image asynchronously. Assuming decimal megabytes and sustained traffic, that’s 450 MB per second of input, 6.48 million originals per day, and 38.9 TB per day before replication. We generate 225 thumbnails per second; output bandwidth and storage depend on their unspecified sizes and retention.\n\n**Components and flow:** The API issues a signed upload URL and job ID. After upload verification, a durable event queues one job per original. A worker downloads and decodes it once, produces all three sizes, writes outputs, then marks the job complete.\n\n**Data and APIs:** Job metadata holds the owner, input reference, requested sizes, processing version, status, and output references. Clients create jobs and poll a status endpoint.\n\n**Backpressure and bottlenecks:** Scale workers using queue age and measured processing time. If one image takes *t* worker-seconds, baseline demand is 75*t* concurrent worker slots, plus headroom. Bound concurrency by memory, CPU, and storage bandwidth. Apply per-tenant quotas and admission limits when queue age threatens the completion target.\n\n**Reliability and security:** Assume at-least-once delivery. Use deterministic output keys, acknowledge only after durable completion, and retry transient failures with exponential backoff and jitter. Cap attempts and quarantine poison jobs. Sandbox decoding without network access; validate content and cap bytes, pixels, memory, and runtime to contain decompression bombs.\n\n**Trade-off:** One job per original avoids repeated decoding, but partially failed jobs need idempotent per-output retries.”",
+      "rawAnswer": "“I’d use direct object-storage uploads and a durable queue feeding sandboxed thumbnail workers. Before final sizing, I’d clarify output dimensions, retention, burst traffic, and the completion-time target.\n\n**Requirements and sizing:** We accept 75 uploads per second and produce three thumbnails per image asynchronously. Assuming decimal megabytes and sustained traffic, that’s 450 MB per second of input, 6.48 million originals per day, and 38.9 TB per day before replication. We generate 225 thumbnails per second; output bandwidth and storage depend on their unspecified sizes and retention.\n\n**Components and flow:** The API issues a signed upload URL and job ID. After upload verification, a durable event queues one job per original. A worker downloads and decodes it once, produces all three sizes, writes outputs, then marks the job complete.\n\n**Data and APIs:** Job metadata holds the owner, input reference, requested sizes, processing version, status, and output references. Clients create jobs and poll a status endpoint.\n\n**Backpressure and bottlenecks:** Scale workers using queue age and measured processing time. If one image takes *t* worker-seconds, baseline demand is 75*t* concurrent worker slots, plus headroom. Bound concurrency by memory, CPU, and storage bandwidth. Apply per-tenant quotas and admission limits when queue age threatens the completion target.\n\n**Reliability and security:** Assume at-least-once delivery. Use deterministic output keys, acknowledge only after durable completion, and retry transient failures with exponential backoff and jitter. Cap attempts and quarantine poison jobs. Sandbox decoding without network access; validate content and cap bytes, pixels, memory, and runtime to contain decompression bombs.\n\n**Trade-off:** One job per original avoids repeated decoding, but partially failed jobs need idempotent per-output retries.”",
+      "decoderFailure": null,
+      "firstTextMs": 1432.461,
+      "totalMs": 10490.822,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1334,
+      "outputTokens": 369,
+      "footprint": {
+        "instructionsCharacters": 4918,
+        "inputCharacters": 2590,
+        "serializedUtf8Bytes": 7552,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "fddff44252c83ca2e41d88da0b9aadb0c80340533dbd0a9d299982e28afbb5ca",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "durable handoff",
+            "observed": true
+          },
+          {
+            "label": "backpressure",
+            "observed": true
+          },
+          {
+            "label": "retry deduplication",
+            "observed": true
+          },
+          {
+            "label": "safe decoding",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 265,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Raw ingress is 450 MB/s and nominal work is225renditions/s. Output byte volume is unknown; do not multiply raw bytes by three without an assumption. Cover bounded queues/workers, durable handoff, idempotent retries and hostile image resource limits. Keep about90seconds; no unsupported exactly-once guarantee.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-thumbnail-design",
+      "category": "system design with independent capacity and 90-second cue",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "I’d queue one job per uploaded image and generate all three thumbnails within that job.\n\nAssuming decimal megabytes, ingress is 75 images per second × 6 MB per image = **450 MB/s**. That’s **75 queued jobs per second**, producing **225 thumbnails per second**, not 225 jobs. Output bandwidth and storage capacity need thumbnail byte sizes and retention; neither is specified.\n\nClients upload directly to object storage using scoped signed URLs. A completion event queues the immutable object version and requested sizes. Workers fetch the image once and produce all three outputs.\n\nWorker sizing requires benchmarking: if one job takes T seconds, baseline concurrency is 75 × T, with headroom for bursts. I’d autoscale on oldest-job age, cap concurrency to protect storage, and throttle new uploads when backlog exceeds our delay budget.\n\nDelivery is at least once. Workers acknowledge only after publishing results, retry transient failures with exponential backoff and jitter, and dead-letter exhausted jobs. Deterministic output keys plus conditional writes make retries idempotent.\n\nFor safety, validate file signatures and decoded dimensions, cap memory and execution time, and decode in isolated, unprivileged workers. A durable manifest exposes completion only after all three outputs exist.",
+      "rawAnswer": "I’d queue one job per uploaded image and generate all three thumbnails within that job.\n\nAssuming decimal megabytes, ingress is 75 images per second × 6 MB per image = **450 MB/s**. That’s **75 queued jobs per second**, producing **225 thumbnails per second**, not 225 jobs. Output bandwidth and storage capacity need thumbnail byte sizes and retention; neither is specified.\n\nClients upload directly to object storage using scoped signed URLs. A completion event queues the immutable object version and requested sizes. Workers fetch the image once and produce all three outputs.\n\nWorker sizing requires benchmarking: if one job takes T seconds, baseline concurrency is 75 × T, with headroom for bursts. I’d autoscale on oldest-job age, cap concurrency to protect storage, and throttle new uploads when backlog exceeds our delay budget.\n\nDelivery is at least once. Workers acknowledge only after publishing results, retry transient failures with exponential backoff and jitter, and dead-letter exhausted jobs. Deterministic output keys plus conditional writes make retries idempotent.\n\nFor safety, validate file signatures and decoded dimensions, cap memory and execution time, and decode in isolated, unprivileged workers. A durable manifest exposes completion only after all three outputs exist.",
+      "decoderFailure": null,
+      "firstTextMs": 3293.013,
+      "totalMs": 9916.875,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1234,
+      "outputTokens": 290,
+      "footprint": {
+        "instructionsCharacters": 5702,
+        "inputCharacters": 1385,
+        "serializedUtf8Bytes": 7129,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "aed338bbe17b4684ab86ae1654220f73fea3a0c1f5604d0c6c7d8387593c1d19",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "durable handoff",
+            "observed": true
+          },
+          {
+            "label": "backpressure",
+            "observed": false
+          },
+          {
+            "label": "retry deduplication",
+            "observed": true
+          },
+          {
+            "label": "safe decoding",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 193,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Raw ingress is 450 MB/s and nominal work is225renditions/s. Output byte volume is unknown; do not multiply raw bytes by three without an assumption. Cover bounded queues/workers, durable handoff, idempotent retries and hostile image resource limits. Keep about90seconds; no unsupported exactly-once guarantee.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-ambiguous-safety",
+      "category": "ambiguity without an established referent",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "What change are you referring to, and what kind of safety are you concerned about?",
+      "rawAnswer": "What change are you referring to, and what kind of safety are you concerned about?",
+      "decoderFailure": null,
+      "firstTextMs": 1682.987,
+      "totalMs": 1827.435,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 971,
+      "outputTokens": 21,
+      "footprint": {
+        "instructionsCharacters": 4483,
+        "inputCharacters": 1109,
+        "serializedUtf8Bytes": 5632,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "25c898d56a8fa916f7190e77aea17e0c9bcbbd5cc20a8a689e622c592b4faad3",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "focused clarification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 15,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Ask one concise clarification about the missing change/threat/context; do not invent an architecture or certify safety.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-ambiguous-safety",
+      "category": "ambiguity without an established referent",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "What change are you referring to, and what risk should it make safe against? I don’t have the preceding context or code to assess it.",
+      "rawAnswer": "What change are you referring to, and what risk should it make safe against? I don’t have the preceding context or code to assess it.",
+      "decoderFailure": null,
+      "firstTextMs": 1507.579,
+      "totalMs": 2299.822,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1203,
+      "outputTokens": 33,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2047,
+        "serializedUtf8Bytes": 6853,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2ea0e7e863ec11a366070cd6cecb6d4e551a8f64c670975c84bb22d511b9f585",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "focused clarification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 25,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Ask one concise clarification about the missing change/threat/context; do not invent an architecture or certify safety.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-corrected-payment-transcript",
+      "category": "technical transcript correction and negation",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "line",
+      "disposition": "assist",
+      "answer": "I’ll preserve the exact field name `retry_after_ms` and set the delay to 80 milliseconds, not 18. The policy must not retry a failed payment; the delay setting must not override that prohibition.",
+      "rawAnswer": "ASSIST\nI’ll preserve the exact field name `retry_after_ms` and set the delay to 80 milliseconds, not 18. The policy must not retry a failed payment; the delay setting must not override that prohibition.",
+      "decoderFailure": null,
+      "firstTextMs": 1809.239,
+      "totalMs": 2404.597,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 2265,
+      "outputTokens": 50,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 4498,
+        "serializedUtf8Bytes": 12547,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "b7effbb663bdf58c1a28f4167923596ffa9370cb6262278e9d01b96875786ca9",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "exact identifier",
+            "observed": true
+          },
+          {
+            "label": "corrected delay",
+            "observed": true
+          },
+          {
+            "label": "nonretryable payment",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "wrong corrected delay",
+            "flagged": false
+          },
+          {
+            "label": "retries payment despite explicit negation",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 32,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Preserve the final numeric correction, snake_case identifier and explicit no-retry payment rule. Do not treat the discarded eighteen as the accepted delay or invent payment-provider behavior.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-corrected-payment-transcript",
+      "category": "technical transcript correction and negation",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "json",
+      "disposition": "assist",
+      "answer": "The implementation should use the exact field name `retry_after_ms`, with a value of 80 milliseconds—not 18—and must never retry a failed payment under this policy. The delay setting must not override that no-retry rule.",
+      "rawAnswer": "{\"disposition\":\"assist\",\"answer\":\"The implementation should use the exact field name `retry_after_ms`, with a value of 80 milliseconds—not 18—and must never retry a failed payment under this policy. The delay setting must not override that no-retry rule.\"}",
+      "decoderFailure": null,
+      "firstTextMs": 1800.787,
+      "totalMs": 2673.837,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 2691,
+      "outputTokens": 64,
+      "footprint": {
+        "instructionsCharacters": 10363,
+        "inputCharacters": 4498,
+        "serializedUtf8Bytes": 14947,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2b230e7d731841171c03ee5201fec75a06451c32fcc4cf3c751f87a46ce73d94",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "exact identifier",
+            "observed": true
+          },
+          {
+            "label": "corrected delay",
+            "observed": true
+          },
+          {
+            "label": "nonretryable payment",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "wrong corrected delay",
+            "flagged": false
+          },
+          {
+            "label": "retries payment despite explicit negation",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 34,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Preserve the final numeric correction, snake_case identifier and explicit no-retry payment rule. Do not treat the discarded eighteen as the accepted delay or invent payment-provider behavior.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-unfinished-rate-limit",
+      "category": "unfinished question with excluded partial continuation",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "json",
+      "disposition": "wait",
+      "answer": "",
+      "rawAnswer": "{\"disposition\":\"wait\",\"answer\":\"\"}",
+      "decoderFailure": null,
+      "firstTextMs": null,
+      "totalMs": 1514.708,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 2576,
+      "outputTokens": 19,
+      "footprint": {
+        "instructionsCharacters": 10363,
+        "inputCharacters": 3999,
+        "serializedUtf8Bytes": 14438,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "a601fe7e1374de631d328d6a1d9725a7401bee3a2660944814950f092683fef0",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 0,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "WAIT with no visible answer; final recognition ends mid-condition and the partial continuation is not admitted. Do not complete it or assume permission to remove a rate limit.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-unfinished-rate-limit",
+      "category": "unfinished question with excluded partial continuation",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "line",
+      "disposition": "wait",
+      "answer": "",
+      "rawAnswer": "WAIT\n",
+      "decoderFailure": null,
+      "firstTextMs": null,
+      "totalMs": 1407.337,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 2150,
+      "outputTokens": 6,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 3999,
+        "serializedUtf8Bytes": 12038,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "cead1d36f4845c6957be314291ffaec873f6eaa6c49b83d87ddb576268a34012",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 0,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "WAIT with no visible answer; final recognition ends mid-condition and the partial continuation is not admitted. Do not complete it or assume permission to remove a rate limit.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-memory-uncertainty",
+      "category": "proportional uncertainty and three-sentence limit",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "No—a five-minute drop after changing a GC flag is not evidence that the memory leak is fixed; it may reflect different collection timing rather than reduced retention. Repeat a representative workload over a sufficiently long period, track post-GC live-heap trends, and compare heap profiles to check whether retained objects continue to accumulate. Until then, describe it as an observed short-term memory reduction, not a confirmed fix.",
+      "rawAnswer": "No—a five-minute drop after changing a GC flag is not evidence that the memory leak is fixed; it may reflect different collection timing rather than reduced retention. Repeat a representative workload over a sufficiently long period, track post-GC live-heap trends, and compare heap profiles to check whether retained objects continue to accumulate. Until then, describe it as an observed short-term memory reduction, not a confirmed fix.",
+      "decoderFailure": null,
+      "firstTextMs": 1901.471,
+      "totalMs": 3919.068,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1278,
+      "outputTokens": 85,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2442,
+        "serializedUtf8Bytes": 7248,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "cd995935b4d7aae1532703ee2bee4e58e43fdaa1ce80ea337eed7bb6e5644e30",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "evidence insufficient",
+            "observed": true
+          },
+          {
+            "label": "discriminating investigation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "unsupported fix claim",
+            "flagged": true
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 66,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "A short-lived drop after a GC change does not prove a leak fixed; answer directly and request repeatable steady-state/heap evidence. No confidence inflation, no essay.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-memory-uncertainty",
+      "category": "proportional uncertainty and three-sentence limit",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "No—the five-minute drop shows a short-term reduction in memory, not that the leak is fixed. Changing a garbage collector flag can change collection timing without eliminating retained objects. Repeat a comparable workload long enough to assess sustained memory growth, and collect heap profiles to check what remains retained.",
+      "rawAnswer": "No—the five-minute drop shows a short-term reduction in memory, not that the leak is fixed. Changing a garbage collector flag can change collection timing without eliminating retained objects. Repeat a comparable workload long enough to assess sustained memory growth, and collect heap profiles to check what remains retained.",
+      "decoderFailure": null,
+      "firstTextMs": 1160.92,
+      "totalMs": 2647.476,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1008,
+      "outputTokens": 60,
+      "footprint": {
+        "instructionsCharacters": 4483,
+        "inputCharacters": 1306,
+        "serializedUtf8Bytes": 5829,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "6ef1414d5a9543bdc529ed9c4f2e13513dd662fbe8ce994bdb0c292eb70d0aed",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "evidence insufficient",
+            "observed": true
+          },
+          {
+            "label": "discriminating investigation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "unsupported fix claim",
+            "flagged": true
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 48,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "A short-lived drop after a GC change does not prove a leak fixed; answer directly and request repeatable steady-state/heap evidence. No confidence inflation, no essay.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-inplace-deduplication",
+      "category": "new mutable coding function and invariant",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "Use a write pointer to build the unique prefix while scanning the list once.\n\n```python\ndef dedupe_sorted(nums: list[int]) -> int:\n    write = 0\n\n    for read in range(len(nums)):\n        if write == 0 or nums[read] != nums[write - 1]:\n            nums[write] = nums[read]\n            write += 1\n\n    return write\n```\n\n**Assumption:** `nums` is sorted in nondecreasing order, so equal values are adjacent. The function does not validate sortedness.\n\n**Approach and invariant:** At the start of iteration `read`, `nums[:write]` contains exactly the distinct values from the original positions `[0, read)`, in order, and `0 <= write <= read`. Positions `[read, n)` have not been modified.\n\n- If the prefix is empty, or the current value differs from its last value, write it at `nums[write]` and increment `write`.\n- Otherwise, skip the duplicate.\n- Writing at or before `read` never overwrites an unread value.\n\nThe loop visits indices `0` through `n - 1`. At termination, `write` is the required prefix length, between `0` and `n` inclusive. The slice notation above describes the invariant; the implementation creates no slices.\n\nThis fits the required bounds without a set or second list. Repeatedly deleting duplicates could instead take **O(n²)** time because each deletion may shift remaining elements.\n\n**Complexity:** O(n) time and O(1) auxiliary space.\n\n**Example tests** — code for review, not executed:\n\n```python\nnums = []\nassert dedupe_sorted(nums) == 0\n\nnums = [7, 7, 7]\nk = dedupe_sorted(nums)\nassert k == 1 and nums[0] == 7\n\nnums = [-3, -3, 0, 0, 2, 5, 5]\nk = dedupe_sorted(nums)\nassert k == 4\nassert tuple(nums[i] for i in range(k)) == (-3, 0, 2, 5)\n\nnums = [1, 2, 3]\nassert dedupe_sorted(nums) == 3\nassert nums == [1, 2, 3]\n\nnums = [4]\nassert dedupe_sorted(nums) == 1\nassert nums[0] == 4\n```\n\nThe test assertions may allocate helper objects; `dedupe_sorted` itself uses only constant auxiliary space.",
+      "rawAnswer": "Use a write pointer to build the unique prefix while scanning the list once.\n\n```python\ndef dedupe_sorted(nums: list[int]) -> int:\n    write = 0\n\n    for read in range(len(nums)):\n        if write == 0 or nums[read] != nums[write - 1]:\n            nums[write] = nums[read]\n            write += 1\n\n    return write\n```\n\n**Assumption:** `nums` is sorted in nondecreasing order, so equal values are adjacent. The function does not validate sortedness.\n\n**Approach and invariant:** At the start of iteration `read`, `nums[:write]` contains exactly the distinct values from the original positions `[0, read)`, in order, and `0 <= write <= read`. Positions `[read, n)` have not been modified.\n\n- If the prefix is empty, or the current value differs from its last value, write it at `nums[write]` and increment `write`.\n- Otherwise, skip the duplicate.\n- Writing at or before `read` never overwrites an unread value.\n\nThe loop visits indices `0` through `n - 1`. At termination, `write` is the required prefix length, between `0` and `n` inclusive. The slice notation above describes the invariant; the implementation creates no slices.\n\nThis fits the required bounds without a set or second list. Repeatedly deleting duplicates could instead take **O(n²)** time because each deletion may shift remaining elements.\n\n**Complexity:** O(n) time and O(1) auxiliary space.\n\n**Example tests** — code for review, not executed:\n\n```python\nnums = []\nassert dedupe_sorted(nums) == 0\n\nnums = [7, 7, 7]\nk = dedupe_sorted(nums)\nassert k == 1 and nums[0] == 7\n\nnums = [-3, -3, 0, 0, 2, 5, 5]\nk = dedupe_sorted(nums)\nassert k == 4\nassert tuple(nums[i] for i in range(k)) == (-3, 0, 2, 5)\n\nnums = [1, 2, 3]\nassert dedupe_sorted(nums) == 3\nassert nums == [1, 2, 3]\n\nnums = [4]\nassert dedupe_sorted(nums) == 1\nassert nums[0] == 4\n```\n\nThe test assertions may allocate helper objects; `dedupe_sorted` itself uses only constant auxiliary space.",
+      "decoderFailure": null,
+      "firstTextMs": 1260.372,
+      "totalMs": 9176.905,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1172,
+      "outputTokens": 527,
+      "footprint": {
+        "instructionsCharacters": 5233,
+        "inputCharacters": 1427,
+        "serializedUtf8Bytes": 6700,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "e0cf8fbe9b2fbbdf636c02f73c0cadb56a1710d6f47870b0de1b9236c4c70869",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "required function",
+            "observed": true
+          },
+          {
+            "label": "linear time",
+            "observed": true
+          },
+          {
+            "label": "constant auxiliary space",
+            "observed": true
+          },
+          {
+            "label": "empty input",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "extra set allocation",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 305,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Check actual in-place mutation, returned length and unique sorted prefix. The written prefix equals the distinct elements seen so far; do not read nums[0] on empty input. Verify generated code independently on bounded sorted inputs.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-inplace-deduplication",
+      "category": "new mutable coding function and invariant",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "Use two pointers: scan each value and write it only when it differs from the last distinct value.\n\n### Understood problem\nModify `nums` in place so its first `k` entries contain the distinct values in sorted order, then return `k`. Entries after index `k - 1` do not matter.\n\n### Assumptions\n- `nums` is a mutable list of integers sorted in nondecreasing order.\n- The list need not be resized.\n\n### Approach\nMaintain a write index `k` and scan with a read index.\n\n**Invariant:** Before each iteration, `nums[:k]` contains exactly the distinct values from the already-scanned portion, in order. This slice describes the invariant; the implementation does not allocate it.\n\nBecause the input is sorted, duplicates are adjacent. A value is new precisely when `k == 0` or it differs from `nums[k - 1]`. Write new values at index `k`, then increment `k`.\n\nWrites never go ahead of the read index, so unread values remain intact. Unlike a set-based solution, this approach uses constant auxiliary space.\n\n### Code\n```python\ndef dedupe_sorted(nums: list[int]) -> int:\n    k = 0\n\n    for read in range(len(nums)):\n        if k == 0 or nums[read] != nums[k - 1]:\n            nums[k] = nums[read]\n            k += 1\n\n    return k\n```\n\n### Time and space complexity\n- **Time:** O(n)—one scan.\n- **Auxiliary space:** O(1)—only two indices; no set or second list.\n\n### Edge cases and example tests\nThese are expected results, not executed tests.\n\n| Input | Returned length | Required prefix |\n|---|---:|---|\n| `[]` | `0` | `[]` |\n| `[7, 7, 7]` | `1` | `[7]` |\n| `[5]` | `1` | `[5]` |\n| `[1, 2, 3]` | `3` | `[1, 2, 3]` |\n| `[-2, -2, 0, 0, 3]` | `3` | `[-2, 0, 3]` |\n\nFor empty input, the loop never runs. For all-equal input, only the first value is written.",
+      "rawAnswer": "Use two pointers: scan each value and write it only when it differs from the last distinct value.\n\n### Understood problem\nModify `nums` in place so its first `k` entries contain the distinct values in sorted order, then return `k`. Entries after index `k - 1` do not matter.\n\n### Assumptions\n- `nums` is a mutable list of integers sorted in nondecreasing order.\n- The list need not be resized.\n\n### Approach\nMaintain a write index `k` and scan with a read index.\n\n**Invariant:** Before each iteration, `nums[:k]` contains exactly the distinct values from the already-scanned portion, in order. This slice describes the invariant; the implementation does not allocate it.\n\nBecause the input is sorted, duplicates are adjacent. A value is new precisely when `k == 0` or it differs from `nums[k - 1]`. Write new values at index `k`, then increment `k`.\n\nWrites never go ahead of the read index, so unread values remain intact. Unlike a set-based solution, this approach uses constant auxiliary space.\n\n### Code\n```python\ndef dedupe_sorted(nums: list[int]) -> int:\n    k = 0\n\n    for read in range(len(nums)):\n        if k == 0 or nums[read] != nums[k - 1]:\n            nums[k] = nums[read]\n            k += 1\n\n    return k\n```\n\n### Time and space complexity\n- **Time:** O(n)—one scan.\n- **Auxiliary space:** O(1)—only two indices; no set or second list.\n\n### Edge cases and example tests\nThese are expected results, not executed tests.\n\n| Input | Returned length | Required prefix |\n|---|---:|---|\n| `[]` | `0` | `[]` |\n| `[7, 7, 7]` | `1` | `[7]` |\n| `[5]` | `1` | `[5]` |\n| `[1, 2, 3]` | `3` | `[1, 2, 3]` |\n| `[-2, -2, 0, 0, 3]` | `3` | `[-2, 0, 3]` |\n\nFor empty input, the loop never runs. For all-equal input, only the first value is written.",
+      "decoderFailure": null,
+      "firstTextMs": 1830.223,
+      "totalMs": 8534.144,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1414,
+      "outputTokens": 504,
+      "footprint": {
+        "instructionsCharacters": 5126,
+        "inputCharacters": 2682,
+        "serializedUtf8Bytes": 7852,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "f3eceb086919f4d9abd73037ca3c896ab50e2fd8d15ed886ab66a929442aff8b",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "required function",
+            "observed": true
+          },
+          {
+            "label": "linear time",
+            "observed": true
+          },
+          {
+            "label": "constant auxiliary space",
+            "observed": true
+          },
+          {
+            "label": "empty input",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "extra set allocation",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 306,
+        "stockPhrases": [],
+        "headingCount": 6,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Check actual in-place mutation, returned length and unique sorted prefix. The written prefix equals the distinct elements seen so far; do not read nums[0] on empty input. Verify generated code independently on bounded sorted inputs.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-already-strong-tls",
+      "category": "already-strong two-sentence control",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "TLS protects the confidentiality and integrity of data in transit and authenticates the server when its certificate and hostname are properly validated. It does not protect plaintext after an endpoint decrypts it or protect against a compromised endpoint.",
+      "rawAnswer": "TLS protects the confidentiality and integrity of data in transit and authenticates the server when its certificate and hostname are properly validated. It does not protect plaintext after an endpoint decrypts it or protect against a compromised endpoint.",
+      "decoderFailure": null,
+      "firstTextMs": 1294.662,
+      "totalMs": 1876.538,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1278,
+      "outputTokens": 46,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2456,
+        "serializedUtf8Bytes": 7262,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "eab5d37c062c83f55717864655681de7755bc9b609e5f3135464a7cdbcc04bbe",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "transport confidentiality",
+            "observed": true
+          },
+          {
+            "label": "authentication qualification",
+            "observed": true
+          },
+          {
+            "label": "endpoint boundary",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "false end-to-end data protection",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 38,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "The source answer is already strong. Keep the certificate-validation qualification and post-decryption boundary in no more than two sentences, without coaching preamble or summary.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-already-strong-tls",
+      "category": "already-strong two-sentence control",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "TLS encrypts data in transit and authenticates the server when its certificate is properly validated. It doesn’t protect plaintext after an endpoint decrypts it.",
+      "rawAnswer": "TLS encrypts data in transit and authenticates the server when its certificate is properly validated. It doesn’t protect plaintext after an endpoint decrypts it.",
+      "decoderFailure": null,
+      "firstTextMs": 1479.957,
+      "totalMs": 1933.849,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1008,
+      "outputTokens": 49,
+      "footprint": {
+        "instructionsCharacters": 4483,
+        "inputCharacters": 1313,
+        "serializedUtf8Bytes": 5836,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "919f4f0ca341da8420a4afbc8489b19862e36d7837e6108b1a2eff6256031862",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "transport confidentiality",
+            "observed": true
+          },
+          {
+            "label": "authentication qualification",
+            "observed": true
+          },
+          {
+            "label": "endpoint boundary",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "false end-to-end data protection",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 24,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "The source answer is already strong. Keep the certificate-validation qualification and post-decryption boundary in no more than two sentences, without coaching preamble or summary.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-hash-comparison-bounds",
+      "category": "technical comparison completeness and qualifications",
+      "variant": "current",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "For a generic hash table, lookup is expected O(1) under suitable hashing and a bounded load factor, but worst-case O(n) when collisions force a scan of up to n entries, assuming constant-cost hashing and key comparisons. Specialized collision-handling implementations can provide different guarantees, so O(1) is not a universal worst-case bound.",
+      "rawAnswer": "For a generic hash table, lookup is expected O(1) under suitable hashing and a bounded load factor, but worst-case O(n) when collisions force a scan of up to n entries, assuming constant-cost hashing and key comparisons. Specialized collision-handling implementations can provide different guarantees, so O(1) is not a universal worst-case bound.",
+      "decoderFailure": null,
+      "firstTextMs": 1289.185,
+      "totalMs": 2002.541,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1017,
+      "outputTokens": 74,
+      "footprint": {
+        "instructionsCharacters": 4483,
+        "inputCharacters": 1398,
+        "serializedUtf8Bytes": 5921,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "3dbd88498bdb68fded25f16b380f821bc88cee2558655e3a9b2822f50604f93a",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "expected constant bound",
+            "observed": true
+          },
+          {
+            "label": "generic worst-case linear bound",
+            "observed": true
+          },
+          {
+            "label": "implementation qualification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 51,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "State expected O(1) and generic worst-case O(n) without overclaiming all implementations. Preserve key-cost assumptions and collision-handling qualification. Fit two sentences.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-hash-comparison-bounds",
+      "category": "technical comparison completeness and qualifications",
+      "variant": "baseline",
+      "resolvedReasoning": "low",
+      "responseProtocol": "plain",
+      "disposition": null,
+      "answer": "With constant-cost hashing and key comparisons, a generic hash table has expected O(1) lookup under suitable hashing and a bounded load factor, but worst-case O(n) lookup when collisions force scanning up to n entries. Specialized collision-handling implementations can provide different guarantees, so O(1) is not universally guaranteed.",
+      "rawAnswer": "With constant-cost hashing and key comparisons, a generic hash table has expected O(1) lookup under suitable hashing and a bounded load factor, but worst-case O(n) lookup when collisions force scanning up to n entries. Specialized collision-handling implementations can provide different guarantees, so O(1) is not universally guaranteed.",
+      "decoderFailure": null,
+      "firstTextMs": 1624.361,
+      "totalMs": 2906.643,
+      "model": "gpt-6.1-sol",
+      "inputTokens": 1296,
+      "outputTokens": 68,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2626,
+        "serializedUtf8Bytes": 7432,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2b043d878e5b1e70c8d0b4ea0b199f294994488cb4367247cef3584e555a1dc5",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "expected constant bound",
+            "observed": true
+          },
+          {
+            "label": "generic worst-case linear bound",
+            "observed": true
+          },
+          {
+            "label": "implementation qualification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 47,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "State expected O(1) and generic worst-case O(n) without overclaiming all implementations. Preserve key-cost assumptions and collision-handling qualification. Fit two sentences.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

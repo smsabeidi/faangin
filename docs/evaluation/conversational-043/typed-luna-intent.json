@@ -1,0 +1,139 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "complete": true,
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "development",
+  "fixtureCatalogSha256": "dcfe76f86c8dc57b12331a67375fb50f782223cd5ac4d2a0eb68b743a1b2cee5",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "reasoningOverride": null,
+  "measuredAt": "2026-10-28T13:16:43.247Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "imperfect-transcript",
+      "category": "transcript fidelity",
+      "variant": "baseline",
+      "resolvedReasoning": "none",
+      "responseProtocol": "line",
+      "disposition": "assist",
+      "answer": "I’ll use 50 as the corrected retry limit, skip retries for HTTP 401, and use `request_id` for the field name. I’m treating these as explicit requirements; could you clarify what “Why?” refers to—one of these changes, or the design overall?",
+      "rawAnswer": "ASSIST\nI’ll use 50 as the corrected retry limit, skip retries for HTTP 401, and use `request_id` for the field name. I’m treating these as explicit requirements; could you clarify what “Why?” refers to—one of these changes, or the design overall?",
+      "decoderFailure": null,
+      "firstTextMs": 1006.14,
+      "totalMs": 1759.591,
+      "model": "gpt-6-luna",
+      "inputTokens": 2215,
+      "outputTokens": 64,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 4108,
+        "serializedUtf8Bytes": 12157,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "c38c47c2473b3133f8bcd21cb3ef130bd3b122953fdccfeddf118434ce252da8",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "nonretryable authentication",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "incorrect retry claim",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 40,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Honor final correction to fifty, negation and exact identifier; explain only supported rationale.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "imperfect-transcript",
+      "category": "transcript fidelity",
+      "variant": "current",
+      "resolvedReasoning": "none",
+      "responseProtocol": "json",
+      "disposition": "assist",
+      "answer": "I’ll set `maxRetries` to 50, exclude HTTP 401 responses from retries, and use `request_id` consistently. The retry limit controls the maximum number of attempts; excluding 401 avoids repeating a request when the response indicates an authorization problem, which a retry alone won’t resolve.",
+      "rawAnswer": "{\"disposition\":\"assist\",\"answer\":\"I’ll set `maxRetries` to 50, exclude HTTP 401 responses from retries, and use `request_id` consistently. The retry limit controls the maximum number of attempts; excluding 401 avoids repeating a request when the response indicates an authorization problem, which a retry alone won’t resolve.\"}",
+      "decoderFailure": null,
+      "firstTextMs": 1074.577,
+      "totalMs": 1914.289,
+      "model": "gpt-6-luna",
+      "inputTokens": 2641,
+      "outputTokens": 78,
+      "footprint": {
+        "instructionsCharacters": 10363,
+        "inputCharacters": 4108,
+        "serializedUtf8Bytes": 14557,
+        "serializedScope": "instructions and input only; excludes response format and transport metadata",
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "81b472f1f90d0ad35ea24213d5e5687d7e8e2bf7077e573d273a50c0b9f2a6fd",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "nonretryable authentication",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "incorrect retry claim",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 43,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Honor final correction to fifty, negation and exact identifier; explain only supported rationale.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

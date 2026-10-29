@@ -20,7 +20,7 @@ function values(value: unknown, limit: number): unknown[] {
   for (let i = 0; i < Math.min(value.length, limit); i++) result.push(Object.getOwnPropertyDescriptor(value, String(i))?.value)
   return result
 }
-function model(value: unknown): string { return choice(value, ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-live-transcribe', 'unknown'], 'unknown') }
+function model(value: unknown): string { return choice(value, ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-live-transcribe', 'unknown'], 'unknown') }
 export function diagnosticCaptureStatus(value: unknown): 'off' | 'connecting' | 'capturing' | 'silent' | 'paused' | 'failed' | 'unknown' {
   if (value === 'Off' || value === 'off') return 'off'
   if (value === 'Connecting…' || value === 'connecting' || value === 'Requesting permission…') return 'connecting'

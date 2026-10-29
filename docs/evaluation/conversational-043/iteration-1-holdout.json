@@ -1,0 +1,763 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "fixtureSuite": "holdout",
+  "fixtureCatalogSha256": "d6a0f661faece90dfe9adac76454ccf57a159fcb4a92239106273f1b846f834e",
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-6-luna",
+  "measuredAt": "2026-10-27T20:00:41.072Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "holdout-mutex-semaphore",
+      "category": "technical comparison and spoken sentence budget",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "A mutex has an owner—the thread that locks it—and admits one thread into a critical section at a time.  \nA counting semaphore has no owner and admits up to its configured count of threads or operations concurrently.  \nUse a mutex to protect shared data; use a counting semaphore to manage access to a pool of limited resources, such as database connections.",
+      "firstTextMs": 888.099,
+      "totalMs": 1795.445,
+      "model": "gpt-6-luna",
+      "inputTokens": 1250,
+      "outputTokens": 74,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2308,
+        "serializedUtf8Bytes": 7114,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "00406111e7a24160aaf6ba76484ef39d1d2bff2d2b2cc2b69ff26ec25ac5a8b7",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "mutex exclusion",
+            "observed": true
+          },
+          {
+            "label": "semaphore count",
+            "observed": true
+          },
+          {
+            "label": "ownership distinction",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 61,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Compare both primitives on every requested dimension; distinguish mutex ownership from counting permits without implying every semaphore is a mutex. Respect three sentences.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-mutex-semaphore",
+      "category": "technical comparison and spoken sentence budget",
+      "variant": "current",
+      "disposition": null,
+      "answer": "A mutex has ownership: the thread that locks it must unlock it, and it admits one thread into a protected section at a time. A counting semaphore has no owner; its count admits up to N operations concurrently, where N is the number of permits. Use a mutex to protect shared state, and a counting semaphore to limit access to a pool of N resources.",
+      "firstTextMs": 609.588,
+      "totalMs": 1332.53,
+      "model": "gpt-6-luna",
+      "inputTokens": 877,
+      "outputTokens": 77,
+      "footprint": {
+        "instructionsCharacters": 3787,
+        "inputCharacters": 1239,
+        "serializedUtf8Bytes": 5066,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "3277d3f9697c810a5066a5e338e18f271db766a88eeabb025f3768c6c9fcc5f1",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "mutex exclusion",
+            "observed": true
+          },
+          {
+            "label": "semaphore count",
+            "observed": true
+          },
+          {
+            "label": "ownership distinction",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 65,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Compare both primitives on every requested dimension; distinguish mutex ownership from counting permits without implying every semaphore is a mutex. Respect three sentences.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-concurrency-followup",
+      "category": "follow-up continuity and changed constraints",
+      "variant": "current",
+      "disposition": "assist",
+      "answer": "Keep the global semaphore at eight, and add a per-tenant semaphore with a smaller cap. Each database call must acquire both permits and release both in a `finally` block; the global cap remains enforced, while no single tenant can consume all eight. The per-tenant cap is a policy choice and should be set based on workload needs.",
+      "firstTextMs": 829.866,
+      "totalMs": 1562.603,
+      "model": "gpt-6-luna",
+      "inputTokens": 2893,
+      "outputTokens": 76,
+      "footprint": {
+        "instructionsCharacters": 9207,
+        "inputCharacters": 6834,
+        "serializedUtf8Bytes": 16097,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "c9e346f9d5878e9392357f5c1d95de57e25b2a14253ae8488518775305658857",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "preserved global bound",
+            "observed": true
+          },
+          {
+            "label": "tenant isolation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "unbounded global concurrency",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 57,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Add per-tenant concurrency or fair admission while preserving the shared eight-permit bound. Explain smallest justified change, release safety and starvation/order tradeoff where material; do not restart architecture.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-concurrency-followup",
+      "category": "follow-up continuity and changed constraints",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "Add per-tenant semaphores alongside the global semaphore: require both a global permit and a tenant permit before each database call, releasing both afterward. Keep the global limit at eight and set a per-tenant cap below eight so one tenant cannot consume all capacity; the exact tenant cap is a policy choice.",
+      "firstTextMs": 1080.452,
+      "totalMs": 1886.248,
+      "model": "gpt-6-luna",
+      "inputTokens": 2839,
+      "outputTokens": 69,
+      "footprint": {
+        "instructionsCharacters": 8760,
+        "inputCharacters": 6834,
+        "serializedUtf8Bytes": 15650,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "10acd7a337d1b8e9fea76038718576ecba301cc7a751839bf10ae06de200a436",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "preserved global bound",
+            "observed": true
+          },
+          {
+            "label": "tenant isolation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "unbounded global concurrency",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 51,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Add per-tenant concurrency or fair admission while preserving the shared eight-permit bound. Explain smallest justified change, release safety and starvation/order tradeoff where material; do not restart architecture.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-grounded-incident",
+      "category": "behavioral source fidelity and speech time budget",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "At Juniper Tools, I was on the support engineering on-call rotation when a processing queue backed up. I compared the worker logs with the database dashboard and found that batch timeouts were contributing to the backlog. I paired with the database engineer, and we reduced the batch size. The queue caught up, and I wrote a handoff note so the next person had the context. That experience reinforced the value of checking application and database signals together and coordinating on a focused change.",
+      "firstTextMs": 536.346,
+      "totalMs": 1500.042,
+      "model": "gpt-6-luna",
+      "inputTokens": 1341,
+      "outputTokens": 99,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2556,
+        "serializedUtf8Bytes": 7562,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "f90b0df00c041414d59bf853b6f837a055f8c9593514cf5ee7e825a0fc94b2be",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported investigation",
+            "observed": true
+          },
+          {
+            "label": "supported action",
+            "observed": true
+          },
+          {
+            "label": "supported outcome",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented impact or duration",
+            "flagged": false
+          },
+          {
+            "label": "invented authority or success",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 83,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use only supplied role, actions and queue-caught-up result; do not invent recovery speed, customer effects, managerial authority or follow-up success. Target about 45 seconds without fake hesitation.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-grounded-incident",
+      "category": "behavioral source fidelity and speech time budget",
+      "variant": "current",
+      "disposition": null,
+      "answer": "A processing queue backed up while I was on the support engineering on-call rotation at Juniper Tools. I compared the worker logs with the database dashboard and found batch timeouts. I paired with the database engineer to reduce the batch size, and the queue caught up. Afterward, I wrote a handoff note so the next person on rotation had the context.",
+      "firstTextMs": 664.322,
+      "totalMs": 1261.176,
+      "model": "gpt-6-luna",
+      "inputTokens": 1092,
+      "outputTokens": 76,
+      "footprint": {
+        "instructionsCharacters": 4571,
+        "inputCharacters": 1558,
+        "serializedUtf8Bytes": 6175,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "a0c8c469b44e3762a7e689cc4c1bd5b4ff27f1c74139cbce82f7c68aa894bad4",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported investigation",
+            "observed": true
+          },
+          {
+            "label": "supported action",
+            "observed": true
+          },
+          {
+            "label": "supported outcome",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented impact or duration",
+            "flagged": false
+          },
+          {
+            "label": "invented authority or success",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 61,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use only supplied role, actions and queue-caught-up result; do not invent recovery speed, customer effects, managerial authority or follow-up success. Target about 45 seconds without fake hesitation.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-absent-management-story",
+      "category": "absent personal evidence",
+      "variant": "current",
+      "disposition": null,
+      "answer": "I haven’t been given an example of managing an employee out of the organization, and the available background says you have no people-management experience. Have you handled a related situation—such as helping a colleague address a performance concern or supporting a team transition—that you’d like to describe?",
+      "firstTextMs": 1034.344,
+      "totalMs": 1960.309,
+      "model": "gpt-6-luna",
+      "inputTokens": 1028,
+      "outputTokens": 60,
+      "footprint": {
+        "instructionsCharacters": 4571,
+        "inputCharacters": 1277,
+        "serializedUtf8Bytes": 5894,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "ffef29ce451db76e8d1035350cf11660c58d6d6f8ceb79f9f0e036c100fb9177",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "clarify real experience",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented management experience",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 47,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "One focused request for actual experience, or a clearly conditional alternative; do not invent employee-management experience or an elaborate fabricated example.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-absent-management-story",
+      "category": "absent personal evidence",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "I don’t have a real example from your experience to draw on, and the supplied profile says you’re an individual contributor with no employee-management experience. I wouldn’t claim that you managed someone out of an organization.\n\nYou could answer candidly and offer a relevant example instead:\n\n> “I haven’t managed an employee out of an organization. I’m an individual contributor, so I haven’t owned that kind of personnel decision. I can share an example of how I handled a difficult performance or collaboration issue as a peer, if that would be relevant.”\n\nIf you have a real peer-level example, share what happened, what you did, and the outcome; I can help shape it into a concise answer.",
+      "firstTextMs": 587.828,
+      "totalMs": 2025.432,
+      "model": "gpt-6-luna",
+      "inputTokens": 1274,
+      "outputTokens": 145,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2261,
+        "serializedUtf8Bytes": 7267,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "3e2d420612ee978bf096c5fe5a63a3fd1c7490c5174224d9bab73a6d382b5ebb",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "clarify real experience",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented management experience",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 117,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "One focused request for actual experience, or a clearly conditional alternative; do not invent employee-management experience or an elaborate fabricated example.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-thumbnail-design",
+      "category": "system design with independent capacity and 90-second cue",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "I’d use object storage for the originals, a durable queue for work, and stateless image workers that generate all three sizes asynchronously.\n\nAt 75 uploads per second and 6 MB each, ingress is about **450 MB/s**, or **36.7 TB/day** if sustained. I’d first validate whether that is average or peak; it materially changes provisioning. Size the upload path, network, and object storage for peak traffic, with headroom and multipart uploads for large files. Since output sizes and retention aren’t specified, I’d avoid assuming storage totals: measure average output bytes and agree on retention before final capacity planning.\n\nThe API streams each upload to object storage, then publishes a job containing the object key, requested size profiles, and a unique job ID. Return an accepted response once the original is durably stored and the job is safely queued. Partition the queue by job ID or object key, and monitor queue age and depth. If workers fall behind, keep accepting only within a defined queue/storage budget; then apply admission control—rate-limit or reject uploads with a retryable response rather than allowing unbounded backlog.\n\nWorkers fetch the original, validate its actual format and dimensions, enforce compressed-size, pixel-count, and processing-time limits, and generate the three outputs. Make processing idempotent: write each result to a deterministic key, and record completion so retries don’t create conflicting outputs. Retry transient failures with exponential backoff and jitter; send repeatedly failing jobs to a dead-letter queue for inspection. Don’t retry invalid or dangerous inputs indefinitely.\n\nFor safe processing, isolate decoders in restricted workers, keep libraries patched, impose memory and CPU limits, and never trust filenames or declared content types. Track upload rate, queue lag, worker throughput, failures, and storage growth; add workers based on backlog while respecting downstream storage and network limits.",
+      "firstTextMs": 680.851,
+      "totalMs": 4251.694,
+      "model": "gpt-6-luna",
+      "inputTokens": 1334,
+      "outputTokens": 376,
+      "footprint": {
+        "instructionsCharacters": 4918,
+        "inputCharacters": 2590,
+        "serializedUtf8Bytes": 7552,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "fddff44252c83ca2e41d88da0b9aadb0c80340533dbd0a9d299982e28afbb5ca",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "durable handoff",
+            "observed": true
+          },
+          {
+            "label": "backpressure",
+            "observed": true
+          },
+          {
+            "label": "retry deduplication",
+            "observed": true
+          },
+          {
+            "label": "safe decoding",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 292,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Raw ingress is 450 MB/s and nominal work is225renditions/s. Output byte volume is unknown; do not multiply raw bytes by three without an assumption. Cover bounded queues/workers, durable handoff, idempotent retries and hostile image resource limits. Keep about90seconds; no unsupported exactly-once guarantee.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-thumbnail-design",
+      "category": "system design with independent capacity and 90-second cue",
+      "variant": "current",
+      "disposition": null,
+      "answer": "I’d separate upload acceptance from thumbnail generation, and I’d confirm the output formats, retention, and latency target before fixing storage and worker capacity. For sizing, I’ll assume all three thumbnail sizes are generated for every upload.\n\nAt 75 uploads per second and 6 megabytes each, ingress is **450 megabytes per second**, about **36 terabits per day**. I’d stream uploads directly to object storage rather than proxying them through application servers, then publish a small job message containing the object key, upload ID, and requested sizes. Workers read the original, produce three variants, and write them back under deterministic keys. The API can report accepted immediately; a status endpoint or callback reports completion.\n\nThat’s **225 thumbnail variants per second** on average. If average processing takes *t* seconds per image, baseline concurrency is roughly **75 × t** image jobs; I’d benchmark representative images, then provision headroom for peaks and failures. Queue depth is the backpressure mechanism: cap worker concurrency and autoscale against queue age, while limiting upload bandwidth and returning a retryable overload response if durable acceptance capacity is exhausted. Don’t acknowledge an upload until both the original and job record are durably stored.\n\nRetries can repeat work, so use the upload ID and size as an idempotency key, and write outputs to deterministic keys with conditional writes or safe replacement. Use bounded retries with backoff and a dead-letter queue. Validate file type from content, enforce byte and pixel limits, decode in sandboxed workers, and apply timeouts to resist malformed or decompression-bomb images. Set lifecycle policies for originals and thumbnails once retention is specified; without that, total storage can’t be sized reliably.",
+      "firstTextMs": 759.749,
+      "totalMs": 4623.512,
+      "model": "gpt-6-luna",
+      "inputTokens": 1004,
+      "outputTokens": 350,
+      "footprint": {
+        "instructionsCharacters": 4365,
+        "inputCharacters": 1385,
+        "serializedUtf8Bytes": 5790,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "a9a0551f32a0c4bc2952797e9831d113a7a12583d68c009c89ae53cdc3bda225",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "durable handoff",
+            "observed": true
+          },
+          {
+            "label": "backpressure",
+            "observed": true
+          },
+          {
+            "label": "retry deduplication",
+            "observed": true
+          },
+          {
+            "label": "safe decoding",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 270,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Raw ingress is 450 MB/s and nominal work is225renditions/s. Output byte volume is unknown; do not multiply raw bytes by three without an assumption. Cover bounded queues/workers, durable handoff, idempotent retries and hostile image resource limits. Keep about90seconds; no unsupported exactly-once guarantee.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-ambiguous-safety",
+      "category": "ambiguity without an established referent",
+      "variant": "current",
+      "disposition": null,
+      "answer": "What does “that” refer to? I don’t have the preceding context needed to assess whether it’s safe.",
+      "firstTextMs": 566.765,
+      "totalMs": 807.729,
+      "model": "gpt-6-luna",
+      "inputTokens": 854,
+      "outputTokens": 27,
+      "footprint": {
+        "instructionsCharacters": 3787,
+        "inputCharacters": 1109,
+        "serializedUtf8Bytes": 4936,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "19d7ff0fbcf9d8c6963a4aec10128fb5f470d8324e46fa5dc35efdb295002d4a",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "focused clarification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 17,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Ask one concise clarification about the missing change/threat/context; do not invent an architecture or certify safety.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-ambiguous-safety",
+      "category": "ambiguity without an established referent",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "I can’t tell what “that” refers to—the interview context contains no code, design, or proposed change to assess. Please share the specific change and what kind of safety you mean.",
+      "firstTextMs": 1093.979,
+      "totalMs": 1729.28,
+      "model": "gpt-6-luna",
+      "inputTokens": 1203,
+      "outputTokens": 42,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2047,
+        "serializedUtf8Bytes": 6853,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2ea0e7e863ec11a366070cd6cecb6d4e551a8f64c670975c84bb22d511b9f585",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "focused clarification",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 30,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Ask one concise clarification about the missing change/threat/context; do not invent an architecture or certify safety.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-corrected-payment-transcript",
+      "category": "technical transcript correction and negation",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "Preserve the exact `retry_after_ms` field and set the delay to 80 milliseconds. Ensure the policy explicitly excludes failed payments from retries, so they are never retried.",
+      "firstTextMs": 813.136,
+      "totalMs": 1172.613,
+      "model": "gpt-6-luna",
+      "inputTokens": 2265,
+      "outputTokens": 43,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 4498,
+        "serializedUtf8Bytes": 12547,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "b7effbb663bdf58c1a28f4167923596ffa9370cb6262278e9d01b96875786ca9",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "exact identifier",
+            "observed": true
+          },
+          {
+            "label": "corrected delay",
+            "observed": true
+          },
+          {
+            "label": "nonretryable payment",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "wrong corrected delay",
+            "flagged": false
+          },
+          {
+            "label": "retries payment despite explicit negation",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 26,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Preserve the final numeric correction, snake_case identifier and explicit no-retry payment rule. Do not treat the discarded eighteen as the accepted delay or invent payment-provider behavior.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "holdout-corrected-payment-transcript",
+      "variant": "current",
+      "error": {
+        "code": "malformed_response"
+      },
+      "firstTextMs": null,
+      "totalMs": 740.101,
+      "partialAnswer": ""
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}

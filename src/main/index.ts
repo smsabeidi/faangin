@@ -28,7 +28,7 @@ import { CapturePolicy } from './capture-policy'
 import { CaptureLifecycle, type CaptureLease } from './capture-lifecycle'
 import { LiveReplyCoordinator, type LiveReplyCandidate } from './live-replies'
 import { admitsLiveReply, liveReplyTranscript } from './live-reply-context'
-import { InterviewResponseDecoder } from './interview-response'
+import { createInterviewResponseDecoder, supportsStructuredInterviewReply } from './structured-interview-response'
 import { transcriptionContext } from './transcription-context'
 import { answerReasoning } from './model-capabilities'
 import { interruptionReason, shouldInterruptInterviewAnswer, shortcutGenerationInput, waitForInterruptedRequests, type InterviewInterruption } from './interview-interruptions'
@@ -614,7 +614,9 @@ function generate(input: ReturnType<typeof validate.generateInput>, automatic?: 
   const partials = !automatic && captureState.active && captureState.sessionId === session.id ? [...partialTranscripts.values()].filter(turn => turn.sessionId === session.id) : []
   const memory = input.action === 'draft' ? [] : resolveMemorySnippets(session.id, selectedMemory.get(session.id) ?? [], id => repo.get(id))
   const snapshotSettings = presetCatalog.settingsFor(session.id, session.mode, settings), snapshotSession = { ...session, transcript: automatic ? liveReplyTranscript(session, automatic.candidate) : [...session.transcript, ...partials], answers: session.answers, attachments: [] }
-  const compiled = compilePrompt({ action: input.action, prompt: input.prompt ?? '', settings: snapshotSettings, session: snapshotSession, attachments: selected, smart: input.smart ?? snapshotSettings.smartMode, memory, ...(automatic ? { replyTarget: automatic.candidate.turn.id, automatic: { source: settings.liveSuggestionSource, channels: [...captureResources?.listening ?? []] } } : {}) })
+  const selectedOpenAIModel = (input.smart ?? snapshotSettings.smartMode) ? snapshotSettings.smartModel : snapshotSettings.fastModel
+  const structuredReply = automatic && session.mode === 'interview' && snapshotSettings.chatProvider === 'openai' && supportsStructuredInterviewReply(selectedOpenAIModel)
+  const compiled = compilePrompt({ action: input.action, prompt: input.prompt ?? '', settings: snapshotSettings, session: snapshotSession, attachments: selected, smart: input.smart ?? snapshotSettings.smartMode, memory, ...(automatic ? { replyTarget: automatic.candidate.turn.id, automatic: { source: settings.liveSuggestionSource, channels: [...captureResources?.listening ?? []] } } : {}), ...(structuredReply ? { responseProtocol: 'json' } : {}) })
   const compatible = snapshotSettings.chatProvider === 'compatible' ? validateCompatibleChatConfiguration({ endpoint: snapshotSettings.compatibleChatEndpoint, model: (input.smart ?? snapshotSettings.smartMode) ? snapshotSettings.compatibleChatSmartModel : snapshotSettings.compatibleChatModel, vision: snapshotSettings.compatibleChatVision }) : null
   const apiKey = compatible ? undefined : requireKey(), credential = compatible ? compatibleCredential(compatible.endpoint) : undefined
   repo.shadowIfHistoryOff(input.sessionId)
@@ -629,7 +631,7 @@ function generate(input: ReturnType<typeof validate.generateInput>, automatic?: 
   let settle!: () => void
   const done = new Promise<void>(resolve => { settle = resolve })
   const request: GenerationRequest = { abort, sessionId: input.sessionId, epoch, answer, done, settle, terminalPublished: false, published: false }
-  const decoder = automatic && session.mode === 'interview' ? new InterviewResponseDecoder() : null
+  const decoder = automatic && session.mode === 'interview' ? createInterviewResponseDecoder(compiled.responseProtocol) : null
   let protocolError: Error | undefined
   const publishAnswer = (): void => {
     if (request.published) return
@@ -803,7 +805,14 @@ async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<C
             const turn = partialTranscripts.get(id)!
             if (automaticReplyAllowed({ turn: { ...turn, provisional: false }, generation: token, epoch: session.contextEpoch })) liveReplies.defer({ turn, generation: token, epoch: session.contextEpoch })
           },
-          onFinal: (itemId, text, capturedAt) => ingestFinalTranscript(resources, channel, itemId, text, capturedAt),
+          onFinal: (itemId, text, capturedAt, utteranceComplete) => ingestFinalTranscript(resources, channel, itemId, text, capturedAt, utteranceComplete),
+          onUtteranceComplete: (itemId, capturedAt) => {
+            if (!current() || revokedChannels.has(channel)) return
+            const id = `${sessionId}:${token}:${channel}:${itemId}`
+            // Empty provider finals retire speech but are intentionally not stored.
+            const turn = repo.get(sessionId).transcript.find(turn => turn.id === id) ?? { id, sessionId, channel, text: '', timestamp: capturedAt }
+            liveReplies.completeUtterance({ turn, generation: token, epoch: session.contextEpoch, utteranceComplete: true })
+          },
           onIncomplete: message => {
             // A timeout notice can arrive at the five-second boundary after final-result admission closes.
             if (captureGeneration !== token || resources.closed || !canPublish(sessionId, session.contextEpoch)) return
@@ -828,13 +837,13 @@ async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<C
     return lease
   } catch (error) { await lease.dispose(); throw error }
 }
-function ingestFinalTranscript(resources: CaptureResources, channel: AudioChannel, itemId: string, text: string, capturedAt: number): void {
+function ingestFinalTranscript(resources: CaptureResources, channel: AudioChannel, itemId: string, text: string, capturedAt: number, utteranceComplete = true): void {
   const { sessionId, token, epoch } = resources
   partialTranscripts.delete(`${sessionId}:${token}:${channel}:${itemId}`)
   if (!fence.acceptsResult(token, sessionId, epoch) || !canPublish(sessionId, epoch)) return
   if (!text.trim()) {
     emit({ type: 'transcript-partial', sessionId, channel, itemId, text: '' })
-    liveReplies.offer({ turn: { id: `${sessionId}:${token}:${channel}:${itemId}`, sessionId, channel, text: '', timestamp: capturedAt }, generation: token, epoch })
+    liveReplies.offer({ turn: { id: `${sessionId}:${token}:${channel}:${itemId}`, sessionId, channel, text: '', timestamp: capturedAt }, generation: token, epoch, utteranceComplete })
   } else {
     try {
       const turn = repo.transcript(sessionId, channel, text.slice(0, 100_000), `${sessionId}:${token}:${channel}:${itemId}`, capturedAt)
@@ -848,7 +857,7 @@ function ingestFinalTranscript(resources: CaptureResources, channel: AudioChanne
       if (session.mode === 'interview' && currentSessionId === sessionId && !resources.stopped && capturePolicy.state().phase === 'running' && channel === settings.liveSuggestionSource && resources.listening.has(channel) && !revokedChannels.has(channel)) {
         for (const request of requests.values()) if (request.answer.origin !== 'automatic' && shouldInterruptInterviewAnswer(request.answer, turn, channel, session.transcript)) interruptRequest(request, { type: 'interview-interruption', reason: 'new-question', transcriptId: turn.id })
       }
-      liveReplies.offer({ turn, generation: token, epoch })
+      liveReplies.offer({ turn, generation: token, epoch, utteranceComplete })
     } catch (error) { emit({ type: 'error', message: `Transcript could not be saved: ${safeError(error)}`, code: 'storage_failed' }) }
   }
   if (channel === settings.liveSuggestionSource) for (const turn of partialTranscripts.values()) if (turn.sessionId === sessionId && turn.channel === channel && turn.text.trim()) liveReplies.defer({ turn, generation: token, epoch })
@@ -1474,7 +1483,7 @@ function setupIPC(): void {
     if (bytes.byteLength) captureLifecycle.activity(captureGeneration, 1)
     live.get(channel)?.write(bytes)
   })
-  captureMessage('commit-audio', value => { const channel = value as AudioChannel; commits.set(channel, (commits.get(channel) ?? 0) + 1); live.get(channel)?.commit() })
+  captureMessage('commit-audio', (value, completeValue) => { const channel = value as AudioChannel, utteranceComplete = validate.bool(completeValue); commits.set(channel, (commits.get(channel) ?? 0) + 1); live.get(channel)?.commit(utteranceComplete) })
   captureMessage('capture-report', (value, status, failedValue) => {
     const channel = value as AudioChannel, failed = failedValue === undefined ? false : validate.bool(failedValue)
     captureState[channel] = validate.text(status, 1000)

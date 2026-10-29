@@ -60,6 +60,12 @@ export function buildInterviewSituation(input: { session: Session; action: Actio
     ([...currentImages].every(id => answer.context?.attachmentIds.includes(id)) || (!answer.context?.attachmentIds.length && answer.context?.priorAnswerIds.some(id => answerIds.has(id)))))
     .sort((a, b) => a.createdAt - b.createdAt).at(-1)
   const interruptedDrafts = interrupted ? [{ answerId: interrupted.id, action: interrupted.action, status: 'interrupted_draft', source: 'unfinished_generated_output', trust: 'untrusted_reference_data', createdAt: interrupted.createdAt, interruption: { ...interrupted.interruption }, request: excerpts(interrupted.prompt, 400), ...excerpts(interrupted.text, INTERVIEW_SITUATION_LIMITS.interruptedCharacters) }] : []
+  // A standalone typed question has no scenario history to reconcile. Its request,
+  // role, round and factual background already remain in the ordinary source data.
+  // Avoid injecting an empty scenario ledger and unrelated revision instructions.
+  const brief = session.interview
+  if (!turns.length && !included.length && !interruptedDrafts.length &&
+    !brief?.problem.trim() && !brief?.constraints.trim() && !brief?.candidateAttempt.trim()) return undefined
   truncated ||= interruptedDrafts.some(draft => draft.truncated || draft.request.truncated)
   const previousBrief = baseline?.context?.interviewSnapshot
   const currentBrief = interviewSnapshot(session)

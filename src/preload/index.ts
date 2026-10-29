@@ -15,7 +15,7 @@ if (surface === 'capture') {
   contextBridge.exposeInMainWorld('faangin', Object.freeze({
     onCaptureCommand: (listener: (command: CaptureCommand) => void) => listen('faangin:capture-command', listener),
     sendAudio: (generation: number, channel: string, pcm: ArrayBuffer) => ipcRenderer.send('faangin:audio', generation, channel, pcm),
-    commitAudio: (generation: number, channel: string) => ipcRenderer.send('faangin:commit-audio', generation, channel),
+    commitAudio: (generation: number, channel: string, utteranceComplete: boolean) => ipcRenderer.send('faangin:commit-audio', generation, channel, utteranceComplete),
     reportCapture: (generation: number, channel: string, status: string, failed?: boolean) => ipcRenderer.send('faangin:capture-report', generation, channel, status, failed),
     reportAudioLevel: (generation: number, channel: string, level: number) => ipcRenderer.send('faangin:audio-level', generation, channel, level),
     reportDevicesChanged: (generation: number) => ipcRenderer.send('faangin:devices-change', generation),

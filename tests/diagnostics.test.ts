@@ -19,7 +19,7 @@ test('diagnostics include only useful versions, bounded health metadata, counter
   assert.equal(report.platform, 'darwin'); assert.equal(report.arch, 'arm64'); assert.equal(report.versions.electron, '44.7.0')
   assert.equal(report.chatProvider, 'openai')
   assert.deepEqual(report.permissions, { microphone: 'granted', screen: 'denied' })
-  assert.equal(report.preferences.historyEnabled, false); assert.equal(report.preferences.models.fast, 'gpt-4.1-mini')
+  assert.equal(report.preferences.historyEnabled, false); assert.equal(report.preferences.models.fast, metadata().settings.fastModel)
   assert.deepEqual(report.credential, { configured: false, encryptionAvailable: true })
   assert.deepEqual(report.capabilities, { microphone: true, systemAudio: false, screenCapture: true, osCredentialEncryption: true })
   assert.deepEqual(report.runtime, { pendingRequests: 1, selectedImages: 2 })

@@ -181,3 +181,22 @@ test('meeting and finalized record actions do not acquire interview situation or
   const compiled = compilePrompt({ action: 'reply', settings: DEFAULT_SETTINGS, session: { ...current, mode: 'meeting' }, attachments: [] })
   assert.equal(data(compiled).interviewSituation, undefined)
 })
+
+test('a standalone typed request keeps its factual context without an empty scenario ledger', () => {
+  const current = session({ problem: '', constraints: '', role: 'Staff engineer', round: 'behavioral' })
+  const settings = { ...DEFAULT_SETTINGS, profile: 'I wrote a rollback checklist. The rollout completed.' }
+  const prompt = 'Describe the disagreement using my supplied experience.'
+  const compiled = compilePrompt({ action: 'behavioral', prompt, settings, session: current, attachments: [] })
+  const source = data(compiled)
+  assert.equal(source.interviewSituation, undefined)
+  assert.equal(source.userRequest, prompt)
+  assert.equal(source.interview.role, 'Staff engineer')
+  assert.equal(source.interview.round, 'behavioral')
+  assert.equal(source.background.profile.text, settings.profile)
+  assert(!compiled.instructions.includes('Use interviewSituation'))
+  current.interview!.candidateAttempt = 'I proposed a phased rollout.'
+  assert.ok(data(compilePrompt({ action: 'behavioral', prompt, settings, session: current, attachments: [] })).interviewSituation)
+  current.interview!.candidateAttempt = ''
+  turn(current, 'real-followup', 'What happened after you disagreed?', 20)
+  assert.ok(data(compilePrompt({ action: 'reply', settings, session: current, attachments: [] })).interviewSituation)
+})

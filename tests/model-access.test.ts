@@ -15,7 +15,7 @@ test('connection checks verify all configured models using GET without generatio
 })
 
 test('model verification reports individual failures without hiding usable models', async () => {
-  const result = await verifyConfiguredModels('fixture-not-a-real-key', DEFAULT_SETTINGS, { fetch: (async url => String(url).endsWith('gpt-4.1') ? Response.json({ error: { code: 'permission_denied', message: 'fixture-not-a-real-key must never be exposed' } }, { status: 403 }) : Response.json({ id: 'available' })) as typeof fetch })
+  const result = await verifyConfiguredModels('fixture-not-a-real-key', { ...DEFAULT_SETTINGS, smartModel: 'gpt-4.1' }, { fetch: (async url => String(url).endsWith('gpt-4.1') ? Response.json({ error: { code: 'permission_denied', message: 'fixture-not-a-real-key must never be exposed' } }, { status: 403 }) : Response.json({ id: 'available' })) as typeof fetch })
   assert(!result.ok)
   assert.deepEqual(result.checks?.map(check => check.ok), [true, false, true])
   assert(result.checks?.[1].message.includes('permission'))

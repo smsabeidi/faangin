@@ -2,6 +2,7 @@ import WebSocket, { type ClientOptions, type RawData } from 'ws'
 import type { AudioChannel, ConnectionReport, Settings } from '../shared/types'
 import { compilePrompt, ContextError, type AnswerInput, type CompiledPrompt } from './prompts'
 import { answerReasoning, supportsImageInput } from './model-capabilities'
+import { STRUCTURED_INTERVIEW_FORMAT, supportsStructuredInterviewReply } from './structured-interview-response'
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 const TRANSCRIPTION_URL = 'wss://api.openai.com/v1/realtime?intent=transcription'
@@ -146,6 +147,7 @@ export async function generateAnswer(input: AnswerInput, options: GenerationOpti
 export async function generateCompiledAnswer(prompt: CompiledPrompt, selectedModel: string, options: GenerationOptions): Promise<AnswerResult> {
   if (options.signal.aborted) throw cancelled()
   const key = validKey(options.apiKey), model = validModel(selectedModel)
+  if (prompt.responseProtocol !== undefined && (prompt.responseProtocol !== 'json' || !supportsStructuredInterviewReply(model))) throw new InferenceError('unsupported_capability', 'The selected model does not support this structured interview reply format. Choose a supported OpenAI interview model.')
   if (prompt.sources.attachmentIds.length && !supportsImageInput(model)) throw new InferenceError('unsupported_capability', 'Select a supported image model in Settings, such as gpt-6-luna, gpt-6.1-sol or gpt-4.1.')
   const maxOutputTokens = options.maxOutputTokens ?? prompt.maxOutputTokens
   if (options.maxOutputTokens !== undefined) {
@@ -180,7 +182,7 @@ export async function generateCompiledAnswer(prompt: CompiledPrompt, selectedMod
     const fetcher = options.transport?.fetch ?? globalThis.fetch
     const response = await abortable(fetcher(RESPONSES_URL, {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ model, instructions: prompt.instructions, input: prompt.input, stream: true, store: false, max_output_tokens: maxOutputTokens, ...answerReasoning(model) }),
+      body: JSON.stringify({ model, instructions: prompt.instructions, input: prompt.input, stream: true, store: false, max_output_tokens: maxOutputTokens, ...answerReasoning(model, prompt.reasoningEffort), ...(prompt.responseProtocol === 'json' ? { text: { format: STRUCTURED_INTERVIEW_FORMAT } } : {}) }),
       signal: controller.signal
     }), controller.signal)
     clear(connectionTimer)
@@ -278,7 +280,9 @@ export interface TranscriberOptions {
   channel: AudioChannel
   context?: string
   onPartial: (itemId: string, text: string, capturedAt: number) => void
-  onFinal: (itemId: string, text: string, capturedAt: number) => void
+  onFinal: (itemId: string, text: string, capturedAt: number, utteranceComplete: boolean) => void
+  /** An empty/silent endpoint can complete an already-finalized transport chunk. */
+  onUtteranceComplete?: (itemId: string, capturedAt: number) => void
   onIncomplete?: (message: string) => void
   onError: (message: string) => void
   /** Cancels admission until session.updated; stop() owns finalization after readiness. */
@@ -286,7 +290,7 @@ export interface TranscriberOptions {
   transport?: InferenceTransport
   deadlines?: { connectMs?: number; finalizeMs?: number; closeMs?: number; flushMs?: number }
 }
-export interface LiveTranscriber { write(pcm: Uint8Array): void; commit(): void; flush(): Promise<void>; stop(): Promise<void> }
+export interface LiveTranscriber { write(pcm: Uint8Array): void; commit(utteranceComplete?: boolean): void; flush(): Promise<void>; stop(): Promise<void> }
 
 export async function createLiveTranscriber(options: TranscriberOptions): Promise<LiveTranscriber> {
   if (options.signal?.aborted) throw cancelled()
@@ -297,13 +301,14 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
   let socket: WebSocket
   try { socket = createSocket(TRANSCRIPTION_URL, { headers: { Authorization: `Bearer ${key}` }, maxPayload: MAX_EVENT_CHARACTERS, handshakeTimeout: options.deadlines?.connectMs ?? 15_000 }) }
   catch { throw new InferenceError('offline', 'Could not connect live transcription. Check your internet connection and start capture again.') }
-  type Item = { itemId?: string; final?: string; capturedAt: number }
+  type Item = { itemId?: string; final?: string; capturedAt: number; utteranceComplete: boolean }
   const commits: Item[] = []
   const finalizationWaiters = new Set<{ pending: Set<Item>; finish(error?: Error): void }>()
   const items = new Map<string, { text: string; final?: string; capturedAt: number }>()
   const published = new Set<string>()
   let ready = false; let stopping = false; let failed = false; let closed = false; let acceptingEvents = true
   let audioBytes = 0; let audibleSamples = 0; let tail: number | undefined; let sequence = 0; let capturedAt = 0
+  let lastCommit: Item | undefined
   let stopPromise: Promise<void> | undefined
   let settleDrain: (() => void) | undefined
   let closeResolve: (() => void) | undefined
@@ -339,7 +344,7 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
         published.add(id); if (published.size > 2_048) published.delete(published.values().next().value!)
         items.delete(id)
         // An empty final still retires provisional speech shown or used by the app.
-        options.onFinal(id, item.final!, item.capturedAt)
+        options.onFinal(id, item.final!, item.capturedAt, item.utteranceComplete)
       }
       for (const waiter of [...finalizationWaiters]) {
         waiter.pending.delete(item)
@@ -348,11 +353,19 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
     }
     if (!commits.length) settleDrain?.()
   }
-  const commitBuffered = (): void => {
+  const commitBuffered = (utteranceComplete = true): void => {
     if (audioBytes < MIN_COMMIT_BYTES) return
     if (commits.length >= MAX_PENDING_COMMITS) { fail(new InferenceError('offline', 'Too many audio turns are awaiting transcription. Capture for this channel stopped; start it again after checking your connection.')); return }
-    commits.push({ capturedAt })
+    const item: Item = { capturedAt, utteranceComplete }
+    commits.push(item); lastCommit = item
     if (send({ type: 'input_audio_buffer.commit', event_id: `faangin_${options.channel}_${++sequence}` })) { audioBytes = 0; audibleSamples = 0; tail = undefined }
+  }
+  const completeSilentEndpoint = (): void => {
+    // Never release a held question if even a short audible correction remains
+    // unfinalized. No synthetic audio/text or empty provider commit is needed.
+    if (audibleSamples || !lastCommit || lastCommit.utteranceComplete) return
+    lastCommit.utteranceComplete = true
+    if (lastCommit.itemId && published.has(lastCommit.itemId)) options.onUtteranceComplete?.(lastCommit.itemId, lastCommit.capturedAt)
   }
   socket.on('open', () => {
     if (stopping || failed) { socket.terminate(); return }
@@ -423,9 +436,10 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
         for (let offset = 0; offset < complete; offset += 2) if (Math.abs(bytes.readInt16LE(offset)) >= 131) audibleSamples++
       }
     },
-    commit(): void {
-      if (!ready || stopping || failed || closed || audioBytes < MIN_COMMIT_BYTES) return
-      commitBuffered()
+    commit(utteranceComplete = true): void {
+      if (!ready || stopping || failed || closed) return
+      if (audioBytes < MIN_COMMIT_BYTES) { if (utteranceComplete) completeSilentEndpoint(); return }
+      commitBuffered(utteranceComplete)
     },
     flush(): Promise<void> {
       if (!ready || stopping || failed || closed) return Promise.reject(new InferenceError('offline', 'The question audio is disconnected. Check the transcript or restart listening before answering.'))

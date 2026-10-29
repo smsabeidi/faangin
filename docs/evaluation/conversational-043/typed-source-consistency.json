@@ -1,0 +1,287 @@
+{
+  "kind": "typed_evaluation_source_consistency",
+  "results": [
+    {
+      "suite": "development",
+      "reportSha256": "57a7e929c0ec6508103199d595da7351873769a9e22059b74f05997c86a200df",
+      "fixtureCatalogMatches": true,
+      "allCurrentSourceHashesMatch": true,
+      "allBaselineHashesMatchPrior": true,
+      "comparisons": [
+        {
+          "id": "technical-correctness",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "technical-correctness",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "focused-followup",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "focused-followup",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "weighted-correction",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "weighted-correction",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "behavioral-grounding",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "behavioral-grounding",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "missing-personal-story",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "missing-personal-story",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "system-design-units",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "system-design-units",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "ambiguous-question",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "ambiguous-question",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "imperfect-transcript",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "imperfect-transcript",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "unfinished-question",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "unfinished-question",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "proportional-uncertainty",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "proportional-uncertainty",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "code-and-invariant",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "code-and-invariant",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "already-strong",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "already-strong",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        }
+      ]
+    },
+    {
+      "suite": "holdout",
+      "reportSha256": "cd2eabc4f44da7aafa55d04bae252c5635644c5a84c6786677b65757f4ef08fb",
+      "fixtureCatalogMatches": true,
+      "allCurrentSourceHashesMatch": true,
+      "allBaselineHashesMatchPrior": true,
+      "comparisons": [
+        {
+          "id": "holdout-mutex-semaphore",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-mutex-semaphore",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-concurrency-followup",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-concurrency-followup",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-grounded-incident",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-grounded-incident",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-absent-management-story",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-absent-management-story",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-thumbnail-design",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-thumbnail-design",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-ambiguous-safety",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-ambiguous-safety",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-corrected-payment-transcript",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-corrected-payment-transcript",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-unfinished-rate-limit",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-unfinished-rate-limit",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-memory-uncertainty",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-memory-uncertainty",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-inplace-deduplication",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-inplace-deduplication",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-already-strong-tls",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        },
+        {
+          "id": "holdout-already-strong-tls",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-hash-comparison-bounds",
+          "variant": "current",
+          "currentSourceMatchesLiveHash": true
+        },
+        {
+          "id": "holdout-hash-comparison-bounds",
+          "variant": "baseline",
+          "currentSourceMatchesLiveHash": true,
+          "baselineMatchesPriorExperiment": true
+        }
+      ]
+    }
+  ]
+}

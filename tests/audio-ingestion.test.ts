@@ -28,22 +28,60 @@ function worklet(rate: number) {
 }
 
 test('long speech crosses six-second transport chunks without dropped, duplicated or re-gated PCM frames', () => {
-  const written: ArrayBuffer[] = [], commits: number[] = []
-  const vad = new VoiceActivity(frame => written.push(frame), () => commits.push(written.length), SOURCE_VAD_OPTIONS.system)
+  const written: ArrayBuffer[] = [], commits: number[] = [], endpoints: boolean[] = []
+  const vad = new VoiceActivity(frame => written.push(frame), complete => { commits.push(written.length); endpoints.push(complete) }, SOURCE_VAD_OPTIONS.system)
   const input = Array.from({ length: 615 }, (_, index) => { const frame = new ArrayBuffer(960); new Int16Array(frame).fill(index); return frame })
   input.forEach((frame, index) => vad.push(frame, index > 300 && index < 330 ? .004 : .02))
   assert.deepEqual(commits, [300, 600])
+  assert.deepEqual(endpoints, [false, false], 'transport chunks must not claim that the person finished speaking')
   assert.equal(written.length, input.length)
   input.forEach((frame, index) => assert.equal(written[index], frame, `frame ${index} must retain its source and order`))
   vad.stop(true); assert.deepEqual(commits, [300, 600, 615])
+  assert.deepEqual(endpoints, [false, false, true])
 })
 
-test('stopping exactly at a chunk boundary does not commit another empty audio buffer', () => {
-  let commits = 0
-  const vad = new VoiceActivity(() => {}, () => { commits++ }, SOURCE_VAD_OPTIONS.microphone)
+test('stopping exactly at a chunk boundary reports its endpoint without sending another PCM frame', () => {
+  let frames = 0
+  const commits: boolean[] = []
+  const vad = new VoiceActivity(() => { frames++ }, complete => { commits.push(complete) }, SOURCE_VAD_OPTIONS.microphone)
   for (let i = 0; i < 300; i++) vad.push(new ArrayBuffer(960), .02)
-  assert.equal(commits, 1)
-  vad.stop(true); assert.equal(commits, 1)
+  assert.deepEqual(commits, [false])
+  vad.stop(true); assert.deepEqual(commits, [false, true]); assert.equal(frames, 300)
+})
+
+test('a transport boundary during trailing silence finishes the endpoint without creating a subminimum tail', () => {
+  const commits: Array<{ frames: number; complete: boolean }> = []
+  let frames = 0
+  const vad = new VoiceActivity(() => { frames++ }, complete => commits.push({ frames, complete }), SOURCE_VAD_OPTIONS.system)
+  const silenceFrames = SOURCE_VAD_OPTIONS.system.silenceMs / 20
+  for (let i = 0; i < 301 - silenceFrames; i++) vad.push(new ArrayBuffer(960), .02)
+  for (let i = 0; i < silenceFrames - 1; i++) vad.push(new ArrayBuffer(960), 0)
+  assert.deepEqual(commits, [])
+  vad.push(new ArrayBuffer(960), 0)
+  assert.deepEqual(commits, [{ frames: 301, complete: true }])
+})
+
+test('both question sources retain 400 ms and 380 ms within-question pauses without losing or rewriting PCM', () => {
+  for (const source of ['system', 'microphone'] as const) {
+    const written: ArrayBuffer[] = [], commits: Array<{ complete: boolean; frames: number }> = []
+    const vad = new VoiceActivity(frame => written.push(frame), complete => commits.push({ complete, frames: written.length }), SOURCE_VAD_OPTIONS[source])
+    const input: ArrayBuffer[] = []
+    for (const [count, level] of [[220, .02], [20, 0], [200, .02], [19, 0], [100, .02], [30, 0]]) {
+      for (let index = 0; index < count; index++) { const frame = new ArrayBuffer(960); new Int16Array(frame).fill(input.length); input.push(frame); vad.push(frame, level) }
+    }
+    assert.deepEqual(commits, [{ complete: false, frames: 300 }, { complete: true, frames: 589 }])
+    assert.equal(written.length, input.length)
+    input.forEach((frame, index) => assert.equal(written[index], frame, `${source} frame ${index} must keep exact bytes and order`))
+  }
+})
+
+test('finishing a silence tail cannot exceed the provider fifteen-second audio bound', () => {
+  let frames = 0
+  const lengths: number[] = []
+  const vad = new VoiceActivity(() => { frames++ }, () => { lengths.push(frames); frames = 0 }, { maxSegmentMs: 15_000, silenceMs: 2_000 })
+  for (let i = 0; i < 649; i++) vad.push(new ArrayBuffer(960), .02)
+  for (let i = 0; i < 100; i++) vad.push(new ArrayBuffer(960), 0)
+  assert.deepEqual(lengths, [749]); assert.ok(lengths.every(length => length * 20 <= 15_000))
 })
 
 test('resampling preserves real-time frame cadence for low-rate, standard and high-rate input devices', () => {

@@ -56,7 +56,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  fastModel: 'gpt-4.1-mini', smartModel: 'gpt-4.1', transcriptionModel: 'gpt-live-transcribe',
+  fastModel: 'gpt-6-luna', smartModel: 'gpt-6.1-sol', transcriptionModel: 'gpt-live-transcribe',
   inputLanguage: 'en', outputLanguage: 'English', programmingLanguage: 'Python',
   profile: '', jobDescription: '', instructions: '',
   noteTemplate: 'Summary, key points, decisions, action items with owners and due dates only if explicitly stated, and open questions.',
@@ -292,7 +292,7 @@ export interface FaanginAPI {
   // Only the trusted capture surface may invoke these operations.
   onCaptureCommand(listener: (command: CaptureCommand) => void): () => void
   sendAudio(generation: number, channel: AudioChannel, pcm: ArrayBuffer): void
-  commitAudio(generation: number, channel: AudioChannel): void
+  commitAudio(generation: number, channel: AudioChannel, utteranceComplete: boolean): void
   reportCapture(generation: number, channel: AudioChannel, status: string, failed?: boolean): void
   reportAudioLevel(generation: number, channel: AudioChannel, level: number): void
   reportDevicesChanged(generation: number): void

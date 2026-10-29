@@ -8,10 +8,10 @@ const FRAME_MS = 20
 
 export interface VoiceActivityOptions { silenceMs?: number; maxSegmentMs?: number }
 
-/** Endpoint quickly after a question while allowing slightly longer local thinking pauses. */
+/** Keep ordinary within-question pauses together; six-second transport chunks remain separate. */
 export const SOURCE_VAD_OPTIONS: Readonly<Record<AudioChannel, Readonly<Required<VoiceActivityOptions>>>> = {
-  system: { silenceMs: 320, maxSegmentMs: 6_000 },
-  microphone: { silenceMs: 400, maxSegmentMs: 6_000 },
+  system: { silenceMs: 600, maxSegmentMs: 6_000 },
+  microphone: { silenceMs: 600, maxSegmentMs: 6_000 },
 }
 
 /** Bounded client VAD. Sources retain separate transports and source labels. */
@@ -23,11 +23,13 @@ export class VoiceActivity {
   private frames = 0
   private silenceFrames: number
   private maxFrames: number
-  constructor(private write: (frame: ArrayBuffer) => void, private commit: () => void, options: VoiceActivityOptions = {}) {
+  constructor(private write: (frame: ArrayBuffer) => void, private commit: (utteranceComplete: boolean) => void, options: VoiceActivityOptions = {}) {
     const silenceMs = options.silenceMs ?? 600, maxSegmentMs = options.maxSegmentMs ?? 15_000
     if (!Number.isSafeInteger(silenceMs) || silenceMs < 100 || silenceMs > 2_000 || silenceMs % FRAME_MS ||
       !Number.isSafeInteger(maxSegmentMs) || maxSegmentMs < 1_000 || maxSegmentMs > 15_000 || maxSegmentMs % FRAME_MS) throw new Error('Invalid voice activity timing limits.')
-    this.silenceFrames = silenceMs / FRAME_MS; this.maxFrames = maxSegmentMs / FRAME_MS
+    this.silenceFrames = silenceMs / FRAME_MS
+    // Leave room to finish an existing silence tail within the provider's 15 s bound.
+    this.maxFrames = Math.min(maxSegmentMs, 15_000 - silenceMs) / FRAME_MS
   }
   push(frame: ArrayBuffer, level: number): void {
     if (!(frame instanceof ArrayBuffer) || !frame.byteLength || !Number.isFinite(level) || level < 0 || level > 1) return
@@ -44,15 +46,18 @@ export class VoiceActivity {
     }
     this.write(frame); this.frames++; this.silence = speech ? 0 : this.silence + 1
     if (this.silence >= this.silenceFrames) {
-      this.commit(); this.speaking = false; this.frames = 0; this.voiced = 0; this.silence = 0
-    } else if (this.frames >= this.maxFrames) {
+      this.commit(true); this.speaking = false; this.frames = 0; this.voiced = 0; this.silence = 0
+    } else if (this.frames >= this.maxFrames && !this.silence) {
       // This is a transport chunk, not a new utterance. Keep admission open so the
       // following phonemes are sent immediately, once, without a new onset gate.
-      this.commit(); this.frames = 0
+      // An existing silence tail finishes before this branch; cutting it could
+      // leave an endpoint shorter than the provider's 100 ms minimum buffer.
+      this.commit(false); this.frames = 0
     }
   }
   stop(commit = false): void {
-    if (commit && this.speaking && this.frames) this.commit()
+    // An endpoint exactly on a chunk boundary carries metadata without new PCM.
+    if (commit && this.speaking) this.commit(true)
     this.preRoll = []; this.speaking = false; this.frames = 0; this.voiced = 0; this.silence = 0
   }
 }

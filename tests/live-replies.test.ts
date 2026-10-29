@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { LiveReplyCoordinator, LIVE_REPLY_LIMITS, type LiveReplyCandidate, type LiveReplyClock, type LiveReplyLimits, type LiveReplyState } from '../src/main/live-replies'
 import type { TranscriptTurn } from '../src/shared/types'
+import { SOURCE_VAD_OPTIONS, VoiceActivity } from '../src/capture/vad'
 
 class Clock implements LiveReplyClock {
   time = 0
@@ -164,6 +165,93 @@ test('a selected-source partial holds a pending final until the continuing speec
   coordinator.offer(candidate('continuation', 'With duplicate keys.')); clock.advance(349)
   assert.equal(runs.length, 0); clock.advance(1)
   assert.equal(runs[0].candidate.turn.id, 'continuation')
+})
+
+test('a six-second provider final cannot dispatch during continuing speech even before a new partial exists', () => {
+  const { clock, coordinator, runs } = fixture({ coalesceMs: 120, minIntervalMs: 0 })
+  coordinator.resume()
+  let segment = 0
+  const vad = new VoiceActivity(() => {}, complete => {
+    segment++
+    coordinator.offer({ ...candidate(`segment-${segment}`, complete ? 'Include the consistency trade-off.' : 'Explain how you would design this cache', { timestamp: segment }), utteranceComplete: complete })
+  }, SOURCE_VAD_OPTIONS.system)
+  const push = (level: number) => { clock.advance(20); vad.push(new ArrayBuffer(960), level) }
+  for (let index = 0; index < 350; index++) push(.02)
+  assert.equal(segment, 1)
+  assert.equal(runs.length, 0, 'the first 6 s chunk remains held through the next second of speech')
+  assert.match(coordinator.snapshot().reason!, /speech to finish/)
+  for (let index = 0; index < 30; index++) push(0)
+  assert.equal(segment, 2)
+  clock.advance(119); assert.equal(runs.length, 0)
+  clock.advance(1)
+  assert.equal(runs.length, 1)
+  assert.equal(runs[0].candidate.turn.id, 'segment-2')
+  assert.equal(runs[0].at, 7_720, '7 s speech + 600 ms silence endpoint + existing 120 ms coalescing')
+})
+
+test('a finalized blank endpoint releases a transport hold without discarding its meaningful target', () => {
+  for (const text of ['', '…']) {
+    const { clock, coordinator, runs } = fixture()
+    coordinator.resume()
+    coordinator.offer({ ...candidate('chunk', 'Explain why this invariant holds.', { timestamp: 100 }), utteranceComplete: false })
+    clock.advance(20_000); assert.equal(runs.length, 0)
+    coordinator.offer({ ...candidate('silence-tail', text, { timestamp: 200 }), utteranceComplete: true })
+    clock.advance(350)
+    assert.equal(runs.length, 1); assert.equal(runs[0].candidate.turn.id, 'chunk')
+  }
+})
+
+test('an earlier chunk boundary cannot release a newer provisional utterance', () => {
+  const { clock, coordinator, runs } = fixture()
+  coordinator.resume()
+  coordinator.defer(candidate('newer-partial', 'Actually, do not', { timestamp: 300, provisional: true }))
+  coordinator.offer({ ...candidate('older-chunk', 'Use a hash table.', { timestamp: 100 }), utteranceComplete: false })
+  coordinator.offer({ ...candidate('older-tail', '', { timestamp: 200 }), utteranceComplete: true })
+  clock.advance(10_000); assert.equal(runs.length, 0)
+  coordinator.offer({ ...candidate('newer-partial', 'Actually, do not use a hash table.', { timestamp: 300 }), utteranceComplete: true })
+  clock.advance(350)
+  assert.equal(runs.length, 1); assert.equal(runs[0].candidate.turn.text, 'Actually, do not use a hash table.')
+})
+
+test('a metadata-only endpoint releases exactly its held finalized chunk and never newer or foreign speech', () => {
+  const { clock, coordinator, runs } = fixture()
+  coordinator.resume()
+  const chunk = { ...candidate('chunk', 'Why does the queue work?', { timestamp: 100 }), utteranceComplete: false }
+  coordinator.offer(chunk)
+  coordinator.completeUtterance({ ...chunk, generation: 2 })
+  coordinator.completeUtterance(candidate('other', '', { timestamp: 200 }))
+  clock.advance(1_000); assert.equal(runs.length, 0)
+  coordinator.completeUtterance({ ...chunk, utteranceComplete: true }); clock.advance(350)
+  assert.equal(runs.length, 1)
+  coordinator.completeUtterance({ ...chunk, utteranceComplete: true }); clock.advance(10_000)
+  assert.equal(runs.length, 1)
+
+  const next = fixture(); next.coordinator.resume(); next.coordinator.offer(chunk)
+  next.coordinator.defer(candidate('newer', 'No, I meant', { provisional: true, timestamp: 200 }))
+  next.coordinator.completeUtterance({ ...chunk, utteranceComplete: true })
+  next.clock.advance(10_000); assert.equal(next.runs.length, 0)
+})
+
+test('an empty continuing chunk can end through metadata while preserving earlier meaningful speech', () => {
+  const { clock, coordinator, runs } = fixture()
+  coordinator.resume()
+  coordinator.offer({ ...candidate('words', 'Explain the queue invariant.', { timestamp: 100 }), utteranceComplete: false })
+  const empty = { ...candidate('empty-chunk', '', { timestamp: 200 }), utteranceComplete: false }
+  coordinator.offer(empty); clock.advance(1_000); assert.equal(runs.length, 0)
+  coordinator.completeUtterance({ ...empty, utteranceComplete: true }); clock.advance(350)
+  assert.equal(runs.length, 1); assert.equal(runs[0].candidate.turn.id, 'words')
+})
+
+test('a missing endpoint stays held and reset discards it before the next conversation', () => {
+  const { clock, coordinator, runs } = fixture()
+  coordinator.resume()
+  coordinator.offer({ ...candidate('unfinished', 'The value is not', { timestamp: 100 }), utteranceComplete: false })
+  clock.advance(60_000)
+  assert.equal(runs.length, 0); assert.equal(clock.timers.size, 0)
+  coordinator.reset(); coordinator.resume(); clock.advance(60_000)
+  assert.equal(runs.length, 0)
+  coordinator.offer(candidate('new', 'The value is not zero.', { timestamp: 200 })); clock.advance(350)
+  assert.equal(runs.length, 1); assert.equal(runs[0].candidate.turn.id, 'new')
 })
 
 test('an empty or punctuation-only final releases a hold without replacing its target', () => {

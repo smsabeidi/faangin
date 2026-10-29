@@ -15,3 +15,8 @@ out/
 coverage/
 output/qa/
 *.log
+
+# Local generated launch media and review artifacts
+brag-output/
+cinematic-launch/
+output/

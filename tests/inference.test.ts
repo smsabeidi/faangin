@@ -181,15 +181,16 @@ test('unexpected peer close marks admitted speech incomplete before channel tear
 
 test('Responses parses every UTF-8 byte and CRLF split, multiline SSE, metadata and terminal usage', async () => {
   let body: Record<string, unknown> = {}; let requested = ''
+  const legacyInput = { ...input, settings: { ...input.settings, fastModel: 'gpt-4.1-mini' } }
   const stream = ': comment\r\n\r\nevent: response.output_text.delta\r\ndata: {"type":"response.output_text.delta",\r\ndata: "delta":"Hello 🌎"}\r\n\r\n' + event({ type: 'response.output_text.delta', delta: '!' }) + event(completed('Hello 🌎!'))
   const bytes = Buffer.from(stream)
   const deltas: string[] = []
-  const result = await generateAnswer(input, { apiKey: FAKE_KEY, signal: new AbortController().signal, onDelta: delta => deltas.push(delta), transport: { fetch: (async (url, init) => {
+  const result = await generateAnswer(legacyInput, { apiKey: FAKE_KEY, signal: new AbortController().signal, onDelta: delta => deltas.push(delta), transport: { fetch: (async (url, init) => {
     requested = String(url); body = JSON.parse(String(init?.body)); assert.equal(new Headers(init?.headers).get('Authorization'), `Bearer ${FAKE_KEY}`)
     return mockStream(Array.from(bytes, value => Uint8Array.of(value)))
   }) as typeof fetch } })
   assert.equal(requested, 'https://api.openai.com/v1/responses')
-  assert.equal(body.store, false); assert.equal(body.stream, true); assert.equal(body.model, 'gpt-4.1-mini')
+  assert.equal(body.store, false); assert.equal(body.stream, true); assert.equal(body.model, legacyInput.settings.fastModel)
   assert.deepEqual(deltas, ['Hello 🌎', '!'])
   assert.deepEqual(result, { text: 'Hello 🌎!', model: 'gpt-4.1-mini', inputTokens: 123, outputTokens: 8 })
 })
@@ -315,6 +316,73 @@ test('an empty speech final retires provisional text once and does not block the
     await nextTick()
     assert.deepEqual([...partials], [])
     assert.deepEqual(finals, [['item-1', ''], ['item-2', 'Actual requirement']])
+    await transcriber.stop()
+  } finally { await fixture.close() }
+})
+
+test('provider finals retain utterance boundaries through reordered completion and a blank endpoint tail', async () => {
+  let committed = 0
+  const fixture = await socketFixture((value, socket) => {
+    if (value.type === 'input_audio_buffer.commit') socket.send(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: `item-${++committed}` }))
+  })
+  const finals: Array<[string, string, boolean]> = []
+  try {
+    const transcriber = await createLiveTranscriber(liveOptions(fixture.transport, { onFinal: (id, text, _at, complete) => finals.push([id, text, complete]) }))
+    const socket = await fixture.connected
+    transcriber.write(new Uint8Array(4_800)); transcriber.commit(false)
+    transcriber.write(new Uint8Array(4_800)); transcriber.commit(true)
+    await nextTick()
+    socket.send(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'item-2', transcript: '' }))
+    await nextTick(); assert.deepEqual(finals, [])
+    socket.send(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'item-1', transcript: 'Do not remove the foo_v2 identifier or the 10 ms bound.' }))
+    await nextTick()
+    assert.deepEqual(finals, [['item-1', 'Do not remove the foo_v2 identifier or the 10 ms bound.', false], ['item-2', '', true]])
+    await transcriber.stop()
+  } finally { await fixture.close() }
+})
+
+test('an exact-boundary or silent endpoint completes its chunk without an empty provider commit or repeated transcript', async () => {
+  for (const [timing, tailBytes] of [['pending', 0], ['published', 0], ['published', 960]] as const) {
+    let committed = 0
+    const fixture = await socketFixture((value, socket) => {
+      if (value.type === 'input_audio_buffer.commit') socket.send(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: `item-${++committed}` }))
+    })
+    const finals: boolean[] = [], endpoints: string[] = []
+    try {
+      const transcriber = await createLiveTranscriber(liveOptions(fixture.transport, {
+        onFinal: (_id, _text, _at, complete) => finals.push(complete), onUtteranceComplete: id => endpoints.push(id)
+      }))
+      const socket = await fixture.connected
+      transcriber.write(new Uint8Array(4_800)); transcriber.commit(false); await nextTick()
+      const finalize = () => socket.send(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'item-1', transcript: 'The answer is O(V + E).' }))
+      if (timing === 'published') { finalize(); await nextTick() }
+      if (tailBytes) transcriber.write(new Uint8Array(tailBytes))
+      transcriber.commit(true); transcriber.commit(true)
+      if (timing === 'pending') { finalize(); await nextTick() }
+      await nextTick()
+      assert.deepEqual(finals, [timing === 'pending'])
+      assert.deepEqual(endpoints, timing === 'published' ? ['item-1'] : [])
+      assert.equal(committed, 1, 'endpoint metadata must never send an empty or subminimum provider commit')
+      await transcriber.stop()
+    } finally { await fixture.close() }
+  }
+})
+
+test('a subminimum audible correction cannot release a held finalized chunk', async () => {
+  let committed = 0
+  const fixture = await socketFixture((value, socket) => {
+    if (value.type === 'input_audio_buffer.commit') socket.send(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: `item-${++committed}` }))
+  })
+  const endpoints: string[] = []
+  try {
+    const transcriber = await createLiveTranscriber(liveOptions(fixture.transport, { onUtteranceComplete: id => endpoints.push(id) }))
+    const socket = await fixture.connected
+    transcriber.write(new Uint8Array(4_800)); transcriber.commit(false); await nextTick()
+    socket.send(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'item-1', transcript: 'The value is zero.' }))
+    await nextTick()
+    const correction = new Int16Array(480).fill(4_000)
+    transcriber.write(new Uint8Array(correction.buffer)); transcriber.commit(true)
+    await nextTick(); assert.deepEqual(endpoints, []); assert.equal(committed, 1)
     await transcriber.stop()
   } finally { await fixture.close() }
 })

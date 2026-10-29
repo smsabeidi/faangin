@@ -6,8 +6,9 @@ export function supportsImageInput(model: string): boolean {
     /^(?:gpt-6-(?:luna|sol|astra)|gpt-6\.1-sol)$/.test(model)
 }
 
-export function answerReasoning(model: string): { reasoning: { effort: 'none' | 'low' } } | Record<string, never> {
-  if (model === 'gpt-6-luna' || model === 'gpt-6-sol') return { reasoning: { effort: 'none' } }
+export function answerReasoning(model: string, effort?: 'none' | 'low'): { reasoning: { effort: 'none' | 'low' } } | Record<string, never> {
+  if (model === 'gpt-6-luna') return { reasoning: { effort: effort ?? 'none' } }
+  if (model === 'gpt-6-sol') return { reasoning: { effort: 'none' } }
   if (model === 'gpt-6-astra' || model === 'gpt-6.1-sol') return { reasoning: { effort: 'low' } }
   return {}
 }

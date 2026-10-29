@@ -28,7 +28,7 @@ async function acquire(command: CaptureCommand, channel: AudioChannel): Promise<
     pipeline = new AudioPipeline({ stream, context, channel,
       current: () => accepts(token, channel) && pipelines.get(channel) === pipeline,
       frame: frame => window.faangin.sendAudio(token, channel, frame),
-      commit: () => window.faangin.commitAudio(token, channel),
+      commit: utteranceComplete => window.faangin.commitAudio(token, channel, utteranceComplete),
       level: level => window.faangin.reportAudioLevel(token, channel, level),
       status: (message, failed) => { if (failed && pipelines.get(channel) === pipeline) pipelines.delete(channel); window.faangin.reportCapture(token, channel, message, failed) }
     })

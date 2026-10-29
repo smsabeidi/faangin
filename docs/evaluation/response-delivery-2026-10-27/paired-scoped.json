@@ -1,0 +1,1265 @@
+{
+  "kind": "paired_synthetic_provider_evaluation",
+  "syntheticOnly": true,
+  "primaryWorkspaceModified": false,
+  "baselineRevision": "6fd27174f03690b6c24d73b2db5da5d8ab3738e9",
+  "model": "gpt-4.1-mini",
+  "measuredAt": "2026-10-27T19:39:21.921Z",
+  "trialsPerCasePerVariant": 1,
+  "automaticDispositionGate": {
+    "baseline": true,
+    "current": true
+  },
+  "trials": [
+    {
+      "id": "technical-correctness",
+      "category": "technical",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "BFS (Breadth-First Search) finds the shortest path in an unweighted graph because it explores vertices in increasing order of their distance from the start node. It first visits all nodes at distance 1, then all nodes at distance 2, and so on. This level-by-level exploration guarantees the first time BFS reaches the target node, it has found the shortest path in terms of the number of edges.\n\nIn contrast, DFS (Depth-First Search) explores as deep as possible along each branch before backtracking, which may lead it down longer paths before it finds the shortest one. DFS does not guarantee the first found path is shortest because it does not explore nodes based on their distance from the start.\n\n**Time complexity:**  \n- Both BFS and DFS run in O(V + E) time for a graph with V vertices and E edges, since each vertex and edge is explored once.\n\n**Worst-case auxiliary space (including visited set):**  \n- BFS requires O(V) space for:  \n  1. The queue holding the current frontier of nodes to explore (which can be up to O(V) in a worst-case wide graph).  \n  2. A visited set or array marking which nodes have been seen, also O(V).\n\n- DFS requires O(V) space for:  \n  1. The recursion stack or explicit stack, which can be up to O(V) in the worst case (e.g., a path).  \n  2. The visited set, O(V).\n\nThus, BFS’s key property of searching in layers ensures it finds shortest paths in unweighted graphs, while DFS’s unstructured depth exploration does not. Both have similar worst-case time and space complexity, but BFS’s queue frontiers correspond to shortest-path layers in the graph.",
+      "firstTextMs": 920.845,
+      "totalMs": 3104.653,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1251,
+      "outputTokens": 362,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2287,
+        "serializedUtf8Bytes": 7093,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "07c9dadf4e64c43066733679764a6646354a31bda49392fd6e8234114a8d0120",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "distance order",
+            "observed": true
+          },
+          {
+            "label": "time bound",
+            "observed": true
+          },
+          {
+            "label": "space bound",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 269,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Both algorithms remain O(V) worst-case auxiliary space; DFS can find a longer path first.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "technical-correctness",
+      "category": "technical",
+      "variant": "current",
+      "disposition": null,
+      "answer": "BFS (Breadth-First Search) finds the shortest path in an unweighted graph because it explores nodes level by level, starting from the source. It first visits all nodes one edge away, then two edges away, and so on. Thus, the first time BFS reaches the destination node, it has found the minimum number of edges from the source.\n\nDFS (Depth-First Search) explores deeply along one path before backtracking, so it can reach the destination later on a longer path and does not guarantee the shortest route.\n\n**Time complexity:** Both BFS and DFS run in O(V + E), where V is vertices and E is edges.\n\n**Auxiliary space:** Using a visited set prevents revisiting nodes, so the worst-case auxiliary space for BFS is O(V) to store the queue and visited set. For DFS, it is O(V) due to the recursion stack and visited set.\n\nIn summary, BFS’s level-wise exploration ensures shortest-path discovery in unweighted graphs, with O(V + E) time and O(V) space for visited and frontier tracking.",
+      "firstTextMs": 770.681,
+      "totalMs": 2305.116,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 788,
+      "outputTokens": 218,
+      "footprint": {
+        "instructionsCharacters": 3260,
+        "inputCharacters": 1228,
+        "serializedUtf8Bytes": 4528,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "cbfdd0fe6474bba5fcb2495d2e278934ecb3b9cb413d52bf6353cedf956a5aef",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "distance order",
+            "observed": true
+          },
+          {
+            "label": "time bound",
+            "observed": true
+          },
+          {
+            "label": "space bound",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 166,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Both algorithms remain O(V) worst-case auxiliary space; DFS can find a longer path first.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "focused-followup",
+      "category": "follow-up",
+      "variant": "current",
+      "disposition": "assist",
+      "answer": "Marking a vertex visited when enqueuing prevents adding the same vertex multiple times to the queue. This ensures each vertex is processed only once, avoiding redundant work and guaranteeing BFS explores vertices in order of increasing shortest distance. Marking visited only at dequeue risks duplicates in the queue, which wastes time and can lead to incorrect or less efficient traversal.",
+      "firstTextMs": 707.56,
+      "totalMs": 1259.01,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 3089,
+      "outputTokens": 73,
+      "footprint": {
+        "instructionsCharacters": 10416,
+        "inputCharacters": 6295,
+        "serializedUtf8Bytes": 16769,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "d0878bd85aad4887044471f9b85230f1e813c39c4c9b532263a2eede46b0d706",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate enqueue prevention",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 60,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Answer only the invariant and duplicate work tradeoff; continue the existing solution.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "focused-followup",
+      "category": "follow-up",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "You mark a vertex visited when enqueuing it to avoid adding the same vertex multiple times to the queue. This ensures each vertex is processed only once, maintaining BFS’s correctness and efficiency. Marking visited on dequeuing could cause duplicates in the queue, leading to unnecessary and incorrect processing.",
+      "firstTextMs": 666.703,
+      "totalMs": 1107.36,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 2799,
+      "outputTokens": 62,
+      "footprint": {
+        "instructionsCharacters": 8760,
+        "inputCharacters": 6295,
+        "serializedUtf8Bytes": 15111,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "d9bb2116715902537e37998bd3355aa763aa2cce47dd42d7bb22b1b61c728d64",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate enqueue prevention",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 48,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Answer only the invariant and duplicate work tradeoff; continue the existing solution.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "weighted-correction",
+      "category": "requirement correction",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "For edges with weights 0 or 1, BFS alone won't do because edge costs vary. Use a 0-1 BFS approach with a double-ended queue (deque): push vertices reached via 0-cost edges to the front and those via 1-cost edges to the back. This maintains correct shortest-path order efficiently in O(V + E) time, unlike Dijkstra, which is more complex.",
+      "firstTextMs": 880.688,
+      "totalMs": 1594.276,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 2829,
+      "outputTokens": 85,
+      "footprint": {
+        "instructionsCharacters": 8760,
+        "inputCharacters": 6489,
+        "serializedUtf8Bytes": 15305,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "307786ab6fbc8754c7aa33be2ab41f999a430b2255eb808fd7c43a72605edc4e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "0-1 BFS",
+            "observed": true
+          },
+          {
+            "label": "deque",
+            "observed": true
+          },
+          {
+            "label": "distance relaxation",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 59,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use 0-1 BFS relaxation; avoid treating enqueue-time visited as sufficient for weighted shortest paths.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "weighted-correction",
+      "category": "requirement correction",
+      "variant": "current",
+      "disposition": "assist",
+      "answer": "When edges can have weights of zero or one, a standard BFS treating all edges equally no longer finds shortest paths correctly. Instead, use a 0-1 BFS algorithm: maintain a double-ended queue (deque) and process edges by pushing nodes reached via zero-weight edges to the front and nodes reached via one-weight edges to the back. This way, you efficiently find shortest paths in O(V + E) time without Dijkstra’s overhead. Parent pointers can still track paths. This approach exploits the limited edge weights of 0 or 1 to avoid a full priority queue.",
+      "firstTextMs": 774.87,
+      "totalMs": 1524.107,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 3119,
+      "outputTokens": 120,
+      "footprint": {
+        "instructionsCharacters": 10416,
+        "inputCharacters": 6489,
+        "serializedUtf8Bytes": 16963,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "9d88dd11133d3219e5ee16601a1a40254c251cb6968857ab4f539b3a5bd37d0c",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "0-1 BFS",
+            "observed": true
+          },
+          {
+            "label": "deque",
+            "observed": true
+          },
+          {
+            "label": "distance relaxation",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 93,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Use 0-1 BFS relaxation; avoid treating enqueue-time visited as sufficient for weighted shortest paths.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "behavioral-grounding",
+      "category": "behavioral",
+      "variant": "current",
+      "disposition": null,
+      "answer": "At Cedar, on the billing team, a teammate wanted to do a large release all at once. I proposed instead a phased rollout to reduce risk and be able to monitor each step. To support this, I wrote a rollback checklist to ensure we could quickly revert if problems arose. After discussing the pros and cons, we agreed to proceed with the phased approach. The rollout completed successfully without measurable negative impact.",
+      "firstTextMs": 674.315,
+      "totalMs": 1216.655,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 970,
+      "outputTokens": 82,
+      "footprint": {
+        "instructionsCharacters": 4044,
+        "inputCharacters": 1408,
+        "serializedUtf8Bytes": 5498,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "928709f738d435939e18a058411842d2931480d62307cb2769f7007894ec6e45",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported action",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented quantified impact",
+            "flagged": false
+          },
+          {
+            "label": "unsupported positive outcome",
+            "flagged": true
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 72,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "A compact spoken narrative from supplied facts; no invented title, metrics or outcome.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "behavioral-grounding",
+      "category": "behavioral",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "At Cedar, on the billing team, a teammate wanted to do a large release all at once. I proposed a phased rollout instead, and I wrote the rollback checklist to ensure safety. We discussed and agreed on the phased approach. The rollout completed smoothly with no negative impact.",
+      "firstTextMs": 598.159,
+      "totalMs": 1102.576,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1306,
+      "outputTokens": 56,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2389,
+        "serializedUtf8Bytes": 7395,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "7566b4faa048debead0354c7db3cb6bea287f63990034cfea4362a27988e341f",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "supported action",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented quantified impact",
+            "flagged": false
+          },
+          {
+            "label": "unsupported positive outcome",
+            "flagged": true
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 48,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "A compact spoken narrative from supplied facts; no invented title, metrics or outcome.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "missing-personal-story",
+      "category": "grounding with absent evidence",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "I don’t have a personal experience of leading a migration that saved millions. To help you respond effectively, I can offer a structured outline you can fill with your real example:\n\n**Situation:**  \nBriefly describe the company, the legacy system or infrastructure you were working with, and the business context or problem requiring migration.  \n(Example: “At Company X, we used an outdated on-premise data warehouse that was costly to maintain and scaled poorly.”)\n\n**Task:**  \nExplain your leadership role and the goal of the migration.  \n(Example: “I was tasked with leading the migration to a cloud-based data platform to reduce costs and improve scalability.”)\n\n**Action:**  \nDetail the steps you took—planning, coordinating teams, choosing technologies, managing risks, communicating progress—and any technical challenges you solved.  \n(Example: “I led cross-functional teams, selected AWS Redshift for the migration, designed phased rollout plans to minimize downtime, and automated data validation.”)\n\n**Result:**  \nQuantify the impact, emphasizing cost savings and business benefits.  \n(Example: “The migration cut infrastructure and maintenance costs by $3 million annually, improved query performance by 40%, and enabled faster data-driven decisions.”)\n\nIf you provide a real situation, I can help you craft a strong narrative from that. Would you like me to create a more detailed example based on a particular type of migration?",
+      "firstTextMs": 810.369,
+      "totalMs": 2606.463,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1255,
+      "outputTokens": 282,
+      "footprint": {
+        "instructionsCharacters": 4962,
+        "inputCharacters": 2129,
+        "serializedUtf8Bytes": 7135,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "ecf45b8c6901ef529354a83c1dd9591e9bf2c8982eb760d887ff5147e4d60506",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "request real example or placeholder",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented first-person achievement",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 208,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Ask for a real experience or provide an explicitly hypothetical outline; never claim an achievement.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "missing-personal-story",
+      "category": "grounding with absent evidence",
+      "variant": "current",
+      "disposition": null,
+      "answer": "I don’t have any example of a migration you led that saved millions from your provided background. Could you please share a real experience where you led a migration project with significant impact? That way I can help you structure a clear and compelling story.",
+      "firstTextMs": 788.028,
+      "totalMs": 1135.006,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 920,
+      "outputTokens": 50,
+      "footprint": {
+        "instructionsCharacters": 4044,
+        "inputCharacters": 1153,
+        "serializedUtf8Bytes": 5243,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "ed69a48537cc82e4518142d58c5b46f2263222c217dd18b8eb900d3a520dd075",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "request real example or placeholder",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "invented first-person achievement",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 45,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Ask for a real experience or provide an explicitly hypothetical outline; never claim an achievement.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "system-design-units",
+      "category": "system design",
+      "variant": "current",
+      "disposition": null,
+      "answer": "Design a webhook delivery service to handle 2,000 events/sec with 1 KB payloads, focused on retries and tenant fairness:\n\n1. **Retries:**\n   - Use *exponential backoff with jitter* to avoid retry storms.\n   - Cap max retries (e.g., 5 attempts) to avoid indefinite looping.\n   - Track delivery status and attempt count per webhook event.\n   - Support *idempotency* in webhook receivers to handle duplicates.\n   - For guaranteed delivery, persist events in a durable queue or database until success/expiry.\n   - Optionally, use *dead-letter queues* for permanently failed deliveries, alerting tenants or letting them inspect reports.\n   - Timeouts and failure detection balanced to reduce false negatives but avoid long blocking.\n\n2. **Tenant Fairness:**\n   - Use *per-tenant rate limiting* to ensure noisy tenants don’t starve others.\n   - Apply *fair queuing* or weighted scheduling at delivery workers.\n   - Segment tenant queues, allowing parallel processing and isolation.\n   - Support tenant-based prioritization if business-critical tenants exist.\n   - Monitor and throttle tenants exceeding rate or error budgets—either slowing or temporarily disabling webhook delivery.\n   - Provide each tenant with their own metrics and SLA visibility.\n\n3. **Throughput and Scaling:**\n   - Payload is 1 KB × 2,000 = 2 MB/s inbound event data (~172 Mbps), manageable with sharded queues and horizontally scaled workers.\n   - Use many workers to handle delivery across tenants, scaling out with Kubernetes or serverless.\n\nThis design balances reliability through careful retries, prevents unfair resource hogging by noisy tenants, and fits the scale requirements efficiently.",
+      "firstTextMs": 753.913,
+      "totalMs": 5355.927,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 891,
+      "outputTokens": 343,
+      "footprint": {
+        "instructionsCharacters": 3838,
+        "inputCharacters": 1241,
+        "serializedUtf8Bytes": 5119,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "9c9730be1344ed727188bef5fa4806f02ec273eac5df79533b67fc666fca5b5a",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "retry strategy",
+            "observed": true
+          },
+          {
+            "label": "fairness mechanism",
+            "observed": true
+          },
+          {
+            "label": "idempotency",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 236,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Capacity uses explicit units and assumptions, retry ordering, at-least-once delivery and tenant isolation; fit two-minute cue.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "system-design-units",
+      "category": "system design",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "**Webhook Delivery Service Design:**\n\n---\n\n### 1. Requirements and Scope\n- **Input load:** 2,000 events per second\n- **Payload size:** ~1 KB per event\n- **Functionality:**\n  - Deliver webhooks (HTTP POST) to tenant-defined endpoints\n  - Retry on failures to maximize delivery success\n  - Ensure fairness across multiple tenants (avoid tenant A dominating resources)\n  - Handle transient and permanent failures gracefully\n\n---\n\n### 2. Assumptions\n- Number of tenants is large and varies over time.\n- Each event is targeted at a specific tenant endpoint.\n- Endpoints may be slow or flaky; retry policies must avoid congestion.\n- Delivery latency should be kept low, but retries are prioritized.\n- We have horizontally scalable infrastructure.\n\n---\n\n### 3. Components & Data Flow\n\n- **Event Ingestor:** Accepts incoming events with tenant metadata.\n- **Event Queue(s):** Events buffered before delivery.\n  - Use **per-tenant queues or sharded queues** to isolate tenant traffic.\n- **Dispatcher/Worker Pool:** Pulls events from queues, performs HTTP POST.\n- **Retry Manager:** Tracks delivery attempts, schedules retries.\n- **Tenant Fairness Controller:** Prevents resource starvation by enforcing per-tenant quotas or weighted scheduling.\n- **Dead Letter Queue (DLQ):** Stores undeliverable events after max retries.\n- **Monitoring & Alerting:** Tracks metrics and SLA compliance.\n\n---\n\n### 4. Retry Strategy\n\n- **Retry policy:**\n  - Exponential backoff with jitter (e.g., initial retry after 1s, then 2s, 4s, 8s up to a max delay)\n  - Max retry attempts configured (e.g., 5-7)\n- **Failure classification:**\n  - Retry only on transient errors like 5xx HTTP status or network timeouts.\n  - No retry on client errors like 4xx (except maybe 429 Too Many Requests).\n- **Retry mechanism:**\n  - Push failed events back into per-tenant queues with delayed visibility (e.g., use a delayed queue or timestamps).\n  - Use a separate retry queue per tenant or global with tenant tags.\n- **Dead lettering:**\n  - After max retries, event is moved to DLQ for manual inspection or alternate handling.\n\n---\n\n### 5. Tenant Fairness\n\n- **Isolation by per-tenant queues:** Ensures one noisy tenant doesn’t flood others.\n- **Weighted round-robin or token bucket scheduling:**\n  - Each tenant gets a share of delivery capacity proportional to their subscription or fair share.\n- **Rate limiting per tenant:**\n  - Prevents overwhelming tenant endpoints or our system.\n- **Backpressure:**\n  - If a tenant endpoint is very slow, their queue naturally fills, slowing their throughput without impacting others.\n- **Monitoring tenant health:**\n  - Detect misbehaving tenants (e.g., with many retries) and throttle or alert accordingly.\n\n---\n\n### 6. Capacity Estimation (Basic)\n\n- Throughput: 2000 events/sec * 1 KB = ~2 MB/sec inbound plus retries.\n- Assume 5 retries avg → peak ~10x events = up to 20,000 events/sec in worst case.\n- Worker pool sized to handle high concurrency HTTP calls with timeouts.\n- Persistent queues (Kafka, Redis streams, or SQS) scaled accordingly.\n\n---\n\n**Summary:** The design uses per-tenant queues with retry policies using exponential backoff and jitter, combined with scheduling that enforces tenant fairness through isolation and weighted delivery capacity. Retries ensure delivery reliability, while fairness mechanisms prevent tenant starvation and resource hogging.",
+      "firstTextMs": 674.788,
+      "totalMs": 6607.492,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1287,
+      "outputTokens": 754,
+      "footprint": {
+        "instructionsCharacters": 4918,
+        "inputCharacters": 2303,
+        "serializedUtf8Bytes": 7265,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2781af49ea2f27e88476d1a3d2d73ec125c1db60def58226968b1c4c1967ff6d",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "retry strategy",
+            "observed": true
+          },
+          {
+            "label": "fairness mechanism",
+            "observed": true
+          },
+          {
+            "label": "idempotency",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 504,
+        "stockPhrases": [],
+        "headingCount": 6,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Capacity uses explicit units and assumptions, retry ordering, at-least-once delivery and tenant isolation; fit two-minute cue.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "ambiguous-question",
+      "category": "ambiguity",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "Could you please clarify what specifically you mean by \"make it consistent\"? Are you referring to code style, data formatting, API behavior, error handling, or something else? This will help provide a precise recommendation.",
+      "firstTextMs": 623.545,
+      "totalMs": 1019.948,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1204,
+      "outputTokens": 43,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2058,
+        "serializedUtf8Bytes": 6864,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "fbfe7d746b18ef4b345f490b8cc3fa617ab4a47ee5f32d64068d2806cdbd6947",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "focused clarification or assumption",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 34,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "One concise clarification or explicit conditional assumption; do not invent the system.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "ambiguous-question",
+      "category": "ambiguity",
+      "variant": "current",
+      "disposition": null,
+      "answer": "Could you clarify what exactly you want to make consistent? For example, is it code style, API behavior, data format, or something else?",
+      "firstTextMs": 502.388,
+      "totalMs": 706.841,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 765,
+      "outputTokens": 30,
+      "footprint": {
+        "instructionsCharacters": 3260,
+        "inputCharacters": 1114,
+        "serializedUtf8Bytes": 4414,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "400fb007fa55172e9fdfd54da0fdc85bcc177596917b3d0640f82b94d4e66cd6",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "focused clarification or assumption",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 23,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "One concise clarification or explicit conditional assumption; do not invent the system.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "imperfect-transcript",
+      "category": "transcript fidelity",
+      "variant": "current",
+      "disposition": "assist",
+      "answer": "Setting maxRetries to fifty allows for more retry attempts to handle transient failures, enhancing resilience during network or server issues. However, we exclude retries for HTTP 401 because it indicates an authentication failure; retrying won't help without correcting credentials, so it prevents unnecessary attempts and delays. Using request_id (with an underscore) rather than requestId (camelCase) may align with a specific API or logging standard to ensure consistency and compatibility in request tracking.",
+      "firstTextMs": 685.327,
+      "totalMs": 1287.258,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 2506,
+      "outputTokens": 93,
+      "footprint": {
+        "instructionsCharacters": 9641,
+        "inputCharacters": 4108,
+        "serializedUtf8Bytes": 13815,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "92b66d0c122d6b28bb92aa9474b68c1a03d466b81665cf55554f81490a3a1748",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "nonretryable authentication",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "incorrect retry claim",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 72,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Honor final correction to fifty, negation and exact identifier; explain only supported rationale.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "imperfect-transcript",
+      "category": "transcript fidelity",
+      "variant": "baseline",
+      "disposition": "assist",
+      "answer": "Setting maxRetries to fifty ensures the system retries enough times for transient failures, improving robustness. Not retrying on HTTP 401 is important because this code indicates authentication failure, so retrying won't help without credentials—retrying would just waste resources. Using request_id instead of requestId likely follows a style or consistency rule, such as snake_case convention, which can improve readability and align with existing code standards.",
+      "firstTextMs": 518.723,
+      "totalMs": 1174.64,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 2216,
+      "outputTokens": 85,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 4108,
+        "serializedUtf8Bytes": 12157,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "c38c47c2473b3133f8bcd21cb3ef130bd3b122953fdccfeddf118434ce252da8",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "nonretryable authentication",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [
+          {
+            "label": "incorrect retry claim",
+            "flagged": false
+          }
+        ],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 64,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Honor final correction to fifty, negation and exact identifier; explain only supported rationale.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "unfinished-question",
+      "category": "partial transcript",
+      "variant": "baseline",
+      "disposition": "wait",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": 1564.03,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 2121,
+      "outputTokens": 2,
+      "footprint": {
+        "instructionsCharacters": 7985,
+        "inputCharacters": 3818,
+        "serializedUtf8Bytes": 11857,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "8ad1f59727ecf976718bb7c1df93c1c0a09bd375e6e08315ad21f1bc7340ef8e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 0,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Finalized utterance is grammatically incomplete and partial continuation is excluded; WAIT with no confident invented completion.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "unfinished-question",
+      "category": "partial transcript",
+      "variant": "current",
+      "disposition": "wait",
+      "answer": "",
+      "firstTextMs": null,
+      "totalMs": 679.043,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 2411,
+      "outputTokens": 2,
+      "footprint": {
+        "instructionsCharacters": 9641,
+        "inputCharacters": 3818,
+        "serializedUtf8Bytes": 13515,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "3fefeda424971956e8521db7bd122790f01a27e05b6d531c0df1610fa919bbce",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": true,
+        "wordCount": 0,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Finalized utterance is grammatically incomplete and partial continuation is excluded; WAIT with no confident invented completion.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "proportional-uncertainty",
+      "category": "uncertainty",
+      "variant": "current",
+      "disposition": null,
+      "answer": "Is there any direct evidence or logging linking Redis to the latency increase, or could other changes in the deploy also have affected performance?",
+      "firstTextMs": 701.545,
+      "totalMs": 906.546,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 781,
+      "outputTokens": 27,
+      "footprint": {
+        "instructionsCharacters": 3260,
+        "inputCharacters": 1187,
+        "serializedUtf8Bytes": 4487,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "936f4cf637d6c9dd25f946f92bb33e5433f33f5ea6bb471b6584cf988e7e220e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "insufficient evidence",
+            "observed": false
+          },
+          {
+            "label": "discriminating investigation",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 24,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Do not become more certain for smoothness; suggest the next evidence to distinguish causes.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "proportional-uncertainty",
+      "category": "uncertainty",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "No, you cannot definitely conclude Redis is the cause without traces or metrics. The latency increase could be due to many factors such as application code changes, infrastructure issues, increased load, network problems, or other services.\n\nTo identify if Redis is responsible, you need to:\n\n1. Instrument your system with metrics and tracing to monitor Redis latency, errors, and usage patterns.\n2. Compare Redis latencies and throughput before and after deployment.\n3. Check application logs for Redis-related errors or timeouts.\n4. Review recent changes in Redis configuration or usage.\n5. Investigate other components and infrastructure (e.g., database, network, CPU/memory) for anomalies.\n\nOnly with this data can you reliably confirm or rule out Redis as the cause of the p99 latency increase.",
+      "firstTextMs": 516.219,
+      "totalMs": 1687.961,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1236,
+      "outputTokens": 157,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2205,
+        "serializedUtf8Bytes": 7011,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "89557555a07227d805998d448694148de2461851b684c9a8c26cccfcacc80e39",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "insufficient evidence",
+            "observed": true
+          },
+          {
+            "label": "discriminating investigation",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 121,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Do not become more certain for smoothness; suggest the next evidence to distinguish causes.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "code-and-invariant",
+      "category": "coding solution",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "Understood problem:\nImplement a function `lower_bound(nums, target)` that returns the first index in a sorted ascending list `nums` where the element is greater than or equal to `target`. If no such element exists, return `len(nums)`. The list can contain duplicates.\n\nAssumptions:\n- `nums` is a list of integers or floats, sorted in ascending order.\n- Duplicates are permitted and must be handled correctly.\n- If `target` is greater than all elements, return the length of `nums`.\n\nApproach:\nWe use a binary search variant to find the first position where `nums[index] >= target`.  \nKey invariant:  \n- We maintain two pointers `left` and `right` defining the current search range, initially `[0, len(nums))`.  \n- At the end, `left` will be the lower bound index.  \n- On each iteration, we check the middle element `mid = (left + right) // 2`.  \n  - If `nums[mid] < target`, we need to move right, so set `left = mid + 1`.  \n  - Otherwise, move left boundary to mid (`right = mid`) since mid could still be the lower bound.  \n- The loop ends when `left == right`.  \n\nThis binary search is efficient with O(log n) time complexity and O(1) auxiliary space.\n\nCode:\n\n```python\ndef lower_bound(nums, target):\n    left, right = 0, len(nums)\n    while left < right:\n        mid = (left + right) // 2\n        if nums[mid] < target:\n            left = mid + 1\n        else:\n            right = mid\n    return left\n```\n\nTime complexity: O(log n), where n = len(nums).  \nAuxiliary space complexity: O(1).\n\nEdge cases to test:\n- Empty list: `[]`, target any value → should return `0`.  \n- Target less than all elements: `[2,3,5]`, target = 1 → return `0`.  \n- Target greater than all elements: `[2,3,5]`, target = 6 → return `3` (len(nums)).  \n- Target equal to some elements, including duplicates: `[1,2,2,2,3,4]`, target = 2 → return `1`.  \n- Target in the middle, not exact match: `[1,2,4,5]`, target = 3 → return `2`.\n\nExample tests:\n\n```python\nassert lower_bound([], 5) == 0\nassert lower_bound([2,3,5], 1) == 0\nassert lower_bound([2,3,5], 6) == 3\nassert lower_bound([1,2,2,2,3,4], 2) == 1\nassert lower_bound([1,2,4,5], 3) == 2\n```\n\nThis solution correctly finds the first position where `nums[index] >= target`.",
+      "firstTextMs": 576.119,
+      "totalMs": 7395.904,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1351,
+      "outputTokens": 627,
+      "footprint": {
+        "instructionsCharacters": 5126,
+        "inputCharacters": 2435,
+        "serializedUtf8Bytes": 7605,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "69ed1eea18a00ca51391616ae669803386df08c73f3c6eb5f8bb6a4e482ecfe2",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "Python implementation",
+            "observed": true
+          },
+          {
+            "label": "logarithmic time",
+            "observed": true
+          },
+          {
+            "label": "constant auxiliary space",
+            "observed": true
+          },
+          {
+            "label": "boundary case",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 355,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Preserve interval invariant, duplicates/empty/all-smaller cases, returned insertion index and unexecuted-code qualification.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "code-and-invariant",
+      "category": "coding solution",
+      "variant": "current",
+      "disposition": null,
+      "answer": "To implement `lower_bound(nums, target)` returning the first index where `nums[index] >= target` or `len(nums)` if none found, use binary search.\n\nThe key invariant during the binary search is:  \n- At each iteration, the search space is `[left, right)` (right is exclusive).\n- All indices less than `left` have `nums[i] < target`.\n- All indices greater or equal to `right` have `nums[i] >= target`.\n\nThe binary search narrows down the left boundary toward the first position meeting the condition.\n\n### Approach:\n- Initialize `left = 0`, `right = len(nums)`.\n- While `left < right`:\n  - `mid = (left + right) // 2`\n  - If `nums[mid] < target`, move `left` to `mid + 1`.\n  - Else move `right` to `mid`.\n- When `left == right`, this is the smallest index with `nums[index] >= target`.  \n- If all elements are less than target, `left` will be `len(nums)`.\n\n### Time and Space Complexity:\n- Time: O(log n) where n = len(nums), because each step halves the search space.\n- Space: O(1) auxiliary space.\n\n### Code in Python:\n\n```python\ndef lower_bound(nums, target):\n    left, right = 0, len(nums)\n    while left < right:\n        mid = (left + right) // 2\n        if nums[mid] < target:\n            left = mid + 1\n        else:\n            right = mid\n    return left\n```\n\n### Edge cases:\n- Empty list: `nums = []`, returns 0.\n- All elements smaller than target: e.g., `nums = [1,2,3]`, `target=5` returns 3.\n- All elements >= target: e.g., `nums=[5,6,7]`, `target=5` returns 0.\n- Target equal to multiple duplicates: `nums = [1,2,2,2,3]`, `target=2` returns 1 (first 2).\n- Target smaller than all elements: e.g., `nums=[2,3,4]`, `target=1` returns 0.\n\n### Example test runs:\n\n```python\nprint(lower_bound([], 5))  # 0\nprint(lower_bound([1,2,2,2,3], 2))  # 1\nprint(lower_bound([1,2,3,4,5], 6))  # 5\nprint(lower_bound([2,3,4], 1))  # 0\nprint(lower_bound([5,6,7], 5))  # 0\n```",
+      "firstTextMs": 738.635,
+      "totalMs": 5492.097,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 907,
+      "outputTokens": 578,
+      "footprint": {
+        "instructionsCharacters": 3851,
+        "inputCharacters": 1303,
+        "serializedUtf8Bytes": 5194,
+        "maxOutputTokens": 4096,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "6e581ede094031bcc0f94b9ca5734b96597cfd807741071c78db7c2bd5e252fe",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "Python implementation",
+            "observed": true
+          },
+          {
+            "label": "logarithmic time",
+            "observed": true
+          },
+          {
+            "label": "constant auxiliary space",
+            "observed": true
+          },
+          {
+            "label": "boundary case",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 294,
+        "stockPhrases": [],
+        "headingCount": 5,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "Preserve interval invariant, duplicates/empty/all-smaller cases, returned insertion index and unexecuted-code qualification.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "already-strong",
+      "category": "regression control",
+      "variant": "current",
+      "disposition": null,
+      "answer": "Is the focus on describing unique constraints for a relational database in general, or a specific database system?",
+      "firstTextMs": 806.71,
+      "totalMs": 1037.08,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 807,
+      "outputTokens": 21,
+      "footprint": {
+        "instructionsCharacters": 3260,
+        "inputCharacters": 1352,
+        "serializedUtf8Bytes": 4652,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "2490ab4d570f8675b965129131736aeb41f7984df8445ddce98292e829d4500e",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate rejection",
+            "observed": true
+          },
+          {
+            "label": "null qualification",
+            "observed": false
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 18,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "The existing concise answer is strong; retain its qualification, do not expand into an essay.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    },
+    {
+      "id": "already-strong",
+      "category": "regression control",
+      "variant": "baseline",
+      "disposition": null,
+      "answer": "Your current answer is mostly correct and concise. To improve clarity:\n\nA database unique constraint guarantees that all non-null values in the constrained column(s) are distinct. One limitation is that NULL values may be treated variably across databases and do not necessarily count as duplicates, so the constraint does not enforce validity or correctness of the values themselves.",
+      "firstTextMs": 739.272,
+      "totalMs": 1294.932,
+      "model": "gpt-4.1-mini-2025-04-14",
+      "inputTokens": 1289,
+      "outputTokens": 68,
+      "footprint": {
+        "instructionsCharacters": 4762,
+        "inputCharacters": 2535,
+        "serializedUtf8Bytes": 7341,
+        "maxOutputTokens": 2048,
+        "tokenUsage": {
+          "measured": false,
+          "reason": "Token counts require provider usage; character and byte counts are not token estimates."
+        }
+      },
+      "compiledPromptSha256": "c894b6e6a9e96e2583484910900789e6a5df11c5125a37c761d7e64b08127893",
+      "review": {
+        "supportingEvidenceOnly": true,
+        "requiredFacts": [
+          {
+            "label": "duplicate rejection",
+            "observed": true
+          },
+          {
+            "label": "null qualification",
+            "observed": true
+          }
+        ],
+        "forbiddenClaims": [],
+        "capacityEstimateChecks": [],
+        "dispositionMatches": null,
+        "wordCount": 58,
+        "stockPhrases": [],
+        "headingCount": 0,
+        "humanReview": {
+          "factualAccuracy": null,
+          "technicalCompleteness": null,
+          "conversationalNaturalness": null,
+          "contextualFit": null,
+          "consistency": null
+        },
+        "reviewFocus": "The existing concise answer is strong; retain its qualification, do not expand into an essay.",
+        "limitation": "Phrase matching can miss correct paraphrases and accept incorrect uses; it cannot establish factual accuracy, completeness or naturalness. Human review remains required."
+      }
+    }
+  ],
+  "limitations": [
+    "One trial per variant is exploratory; it cannot establish a latency distribution or universal quality improvement.",
+    "First visible text is the generation callback after protocol stripping; it excludes rendering and physical paint.",
+    "Only public synthetic text is sent. No microphone, system audio, screenshots, saved profile or private session is loaded.",
+    "Automatic phrase indicators support review and cannot replace human judgments. Human rubric fields remain unscored."
+  ]
+}
