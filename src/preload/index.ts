@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppEvent, CaptureCommand, FaanginAPI } from '../shared/types'
+import { exposeBillingBridge } from './billing'
 
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(`faangin:${channel}`, ...args)
 function listen<T>(channel: string, listener: (value: T) => void): () => void {
@@ -53,4 +54,5 @@ if (surface === 'capture') {
     openPermissionSettings: kind => invoke('permissions', kind), requestPermission: kind => invoke('permission-request', kind), refreshAccessSetup: () => invoke('access-refresh'), completeAccessSetup: () => invoke('access-complete'), acknowledgeSystemAudioConsent: () => invoke('system-audio-consent'), onEvent: (listener: (event: AppEvent) => void) => listen('faangin:event', listener)
   }
   contextBridge.exposeInMainWorld('faangin', Object.freeze(api))
+  exposeBillingBridge(contextBridge, ipcRenderer)
 }

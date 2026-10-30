@@ -6,6 +6,11 @@
 .env
 .env.*
 !.env.example
+.secret.local
+.secret.local.*
+*.p8
+*.p12
+service-account*.json
 .DS_Store
 
 # Build output

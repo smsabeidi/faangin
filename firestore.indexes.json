@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "revokedJtis",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "revokedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deviceCodes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

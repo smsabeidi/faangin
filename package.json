@@ -23,6 +23,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@noble/ed25519": "^2.3.0",
     "lucide-react": "1.55.0",
     "mdast-util-from-markdown": "2.1.0",
     "mdast-util-to-markdown": "2.2.0",

@@ -4,6 +4,7 @@ import type { AppState, CaptureSource, ConnectionReport, PresetMutation, Setting
 import { OVERLAY_OPACITY } from '../../shared/types'
 import { SHORTCUT_ACTIONS, resolveShortcutBindings, shortcutLabel, type ShortcutAction, type ShortcutPreset } from '../../main/shortcut-manager'
 import { Field, Select, Spinner, Toggle } from './components'
+import { BillingPanel } from './billing/BillingPanel'
 import { PresetManager } from './Presets'
 import { overlayInteractionDescription, overlayInteractionRecovery } from './overlay-interaction'
 import { EMPTY_MICROPHONE_SNAPSHOT, microphoneChoices, refreshMicrophoneDevices, type MicrophoneSnapshot } from './microphone-devices'
@@ -200,6 +201,7 @@ export default function Settings({ state, run, notify, initialSection = 'connect
   return <main className="settings-page"><div className="page-heading"><div><span className="eyebrow">MAKE IT YOURS</span><h1>Settings</h1><p>A thoughtful workspace begins with the right setup.</p></div><button className="button primary" disabled={!dirty || saving || !!settingsError} onClick={() => { void save() }}>{saving ? <Spinner label="Saving"/> : <><Save size={15}/>{dirty ? 'Save changes' : 'All changes saved'}</>}</button></div>
     {onReplayOnboarding && <div className="setup-guide-card"><span className="setup-guide-icon"><Sparkles size={20}/></span><div><strong>A little guidance, whenever you need it.</strong><p>Revisit setup, permissions, and your overlay’s essential controls.</p></div><button className="button subtle small" data-onboarding-replay onClick={onReplayOnboarding}>Replay setup guide<ArrowUpRight size={14}/></button></div>}
     <div className="settings-layout"><nav className="settings-nav" aria-label="Settings categories">{sections.map(item => <button key={item.id} className={section === item.id ? 'selected' : ''} onClick={() => setSection(item.id)}><item.icon size={17}/>{item.label}</button>)}<div className="settings-nav-note"><LockKeyhole size={18}/><strong>Designed around your control.</strong><p>Your key is encrypted. Capture starts only when you choose.</p></div></nav><div className="settings-content">
+    <BillingPanel/>
     {section === 'connection' && <>
       {!state.keyConfigured && <div className="getting-started"><span className="onboarding-step">1</span><div><strong>{draft.chatProvider === 'compatible' ? 'Set up live transcription' : 'Connect OpenAI'}</strong><p>Add a replacement OpenAI key for live transcription{draft.chatProvider === 'openai' ? ' and OpenAI chat' : ''}. A compatible chat provider uses its own connection below. Capture starts from the workspace.</p></div></div>}
       <SettingsCard icon={Sparkles} title="Chat provider" description="Choose where generated assistance, notes, and selected images are sent. Live transcription continues to use OpenAI.">
