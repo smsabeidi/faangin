@@ -44,6 +44,7 @@ import { normalizeCompatibleChatEndpoint, validateCompatibleChatConfiguration, g
 import { release, tmpdir } from 'node:os'
 import type { AccessPermissionKind, AccessSetupState, Action, Answer, AppEvent, AppState, Attachment, AudioChannel, CaptureCommand, MicrophoneDevice, Session, Settings, TranscriptTurn, WindowKind } from '../shared/types'
 import { DEFAULT_SETTINGS } from '../shared/types'
+import { registerBillingIpc } from './licensing/ipc'
 
 const mainDirectory = __dirname
 const smoke = process.env.FAANGIN_SMOKE === '1'
@@ -1579,7 +1580,7 @@ else {
     try { presetCatalog = new PresetCatalog(repo.configuration('preset-catalog')) } catch { presetRecoveryRequired = true }
     savedPresetSnapshot = presetCatalog.snapshot()
     windowState = new WindowStateManager(screen, jsonWindowStateStore(userDataFile('window-state.json')), error => emit({ type: 'error', code: 'save-failed', message: `Window position could not be saved: ${safeError(error)}` }))
-    setupAppearance(); setupIPC(); setupMenu(); applyDockPreference(); setupCapturePolicy()
+    setupAppearance(); setupIPC(); registerBillingIpc(); setupMenu(); applyDockPreference(); setupCapturePolicy()
     currentSessionId = repo.list()[0]?.id ?? null; workspace = windowFor('index', 'workspace')
     workspace.webContents.once('did-finish-load', () => {
       // The completed setup records consent for one no-sample capability recheck on a later launch.
