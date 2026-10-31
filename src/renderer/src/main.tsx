@@ -6,5 +6,6 @@ import './workspace-polish.css'
 import './overlay-polish.css'
 import './onboarding.css'
 import './access-setup.css'
+import './billing/billing.css'
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

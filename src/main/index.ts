@@ -22,6 +22,7 @@ import { memoryCandidates, selectMemoryCandidates, editMemorySnippet, resolveMem
 import { prepareMemorySelection } from './memory-selection'
 import { WindowStateManager, jsonWindowStateStore, type WindowBounds, type WindowLayout } from './window-state'
 import { constrainOverlayBounds, defaultOverlayBounds, overlayExpandedHeight, overlaySizeLimits, OVERLAY_LAYOUT } from './overlay-layout'
+import { createLicensing, type LicenseService } from './licensing'
 import { ShortcutManager, applyStartupShortcutBindings, resolveShortcutBindings, SHORTCUT_ACTIONS, type ShortcutBinding } from './shortcut-manager'
 import { MacDockPolicy, OverlayInteractionPolicy } from './native-policy'
 import { CapturePolicy } from './capture-policy'
@@ -1126,6 +1127,26 @@ function microphoneInventory(): Promise<MicrophoneDevice[]> {
   microphoneInventoryPromise = pending
   return pending
 }
+let licensing: LicenseService | null = null
+function setupLicensing(): void {
+  const service = licensing = createLicensing({
+    userDataPath: app.getPath('userData'), packaged: app.isPackaged, env: process.env,
+    secrets: {
+      available: () => safeStorage.isEncryptionAvailable() && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'),
+      encrypt: plain => safeStorage.encryptString(plain), decrypt: data => safeStorage.decryptString(data)
+    },
+    openExternal: url => shell.openExternal(url),
+    onChange: summary => { for (const window of uiWindows()) { try { if (!window.webContents.isDestroyed()) window.webContents.send('faangin:billing-change', summary) } catch {} } }
+  })
+  handle('billing-state', [0, 0], () => service.summary())
+  handle('billing-sign-in', [0, 0], () => service.startSignIn())
+  handle('billing-cancel-sign-in', [0, 0], () => service.cancelSignIn())
+  handle('billing-sign-out', [0, 0], () => service.signOut())
+  handle('billing-refresh', [0, 0], () => service.refresh())
+  handle('billing-checkout', [1, 1], (_event, plan) => service.openCheckout(validate.oneOf(plan, ['byok', 'pro_monthly', 'pro_annual'] as const)))
+  handle('billing-manage', [0, 0], () => service.openPortal())
+  void service.start().catch(recordDiagnosticError)
+}
 function setupIPC(): void {
   if (liveFixture) handle('smoke-live', [1, 1], async (_event, command) => {
     const value = validate.record(command), type = validate.oneOf(value.type, ['start', 'final', 'partial', 'image', 'permission-probe', 'native-audio-probe', 'overlay-state', 'overlay-reset-menu', 'access-fixture', 'access-shortcut', 'access-telemetry'])
@@ -1588,7 +1609,7 @@ else {
     try { presetCatalog = new PresetCatalog(repo.configuration('preset-catalog')) } catch { presetRecoveryRequired = true }
     savedPresetSnapshot = presetCatalog.snapshot()
     windowState = new WindowStateManager(screen, jsonWindowStateStore(userDataFile('window-state.json')), error => emit({ type: 'error', code: 'save-failed', message: `Window position could not be saved: ${safeError(error)}` }))
-    setupAppearance(); setupIPC(); setupMenu(); applyDockPreference(); setupCapturePolicy()
+    setupAppearance(); setupIPC(); setupLicensing(); setupMenu(); applyDockPreference(); setupCapturePolicy()
     currentSessionId = repo.list()[0]?.id ?? null; workspace = windowFor('index', 'workspace')
     workspace.webContents.once('did-finish-load', () => {
       // The completed setup records consent for one no-sample capability recheck on a later launch.
@@ -1648,12 +1669,13 @@ app.on('activate', () => {
   // app too. They must not open a workspace over the app beneath the overlay.
   if (repo && !quitting && (!smoke || smokeVisible) && !(process.platform === 'darwin' && settings.hideDockIcon) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
 })
+app.on('browser-window-focus', () => licensing?.onWindowFocus())
 app.on('window-all-closed', () => { if (process.platform !== 'darwin' || smoke) app.quit() })
 app.on('web-contents-created', (_event, contents) => { contents.session.on('will-download', event => event.preventDefault()) })
 app.on('before-quit', event => {
   if (quitting) return
   for (const window of uiWindows()) window.webContents.session.flushStorageData()
-  event.preventDefault(); quitting = true; dockPolicy.dispose(); disposeAppearance(); disposeCapturePolicy(); windowState?.dispose(); cancelRequests(); shortcutManager.dispose(); tray?.destroy()
+  event.preventDefault(); quitting = true; dockPolicy.dispose(); disposeAppearance(); disposeCapturePolicy(); windowState?.dispose(); cancelRequests(); licensing?.dispose(); shortcutManager.dispose(); tray?.destroy()
   void stopCapture().finally(() => { repo?.close(); app.exit(0) })
 })
 process.on('SIGTERM', () => { for (const window of uiWindows()) window.webContents.session.flushStorageData(); quitting = true; liveReplies.reset(); app.exit(0) })

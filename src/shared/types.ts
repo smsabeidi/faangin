@@ -1,3 +1,5 @@
+import type { BillingPlan, BillingSummary } from './billing-types'
+
 export type WorkspaceMode = 'meeting' | 'interview'
 export type SessionStatus = 'idle' | 'starting' | 'recording' | 'paused' | 'stopping' | 'ended'
 export type AudioChannel = 'microphone' | 'system'
@@ -288,6 +290,14 @@ export interface FaanginAPI {
   refreshAccessSetup(): Promise<AccessSetupState>
   completeAccessSetup(): Promise<void>
   acknowledgeSystemAudioConsent(): Promise<void>
+  getBilling(): Promise<BillingSummary>
+  billingSignIn(): Promise<BillingSummary>
+  billingCancelSignIn(): Promise<BillingSummary>
+  billingSignOut(): Promise<BillingSummary>
+  billingRefresh(): Promise<BillingSummary>
+  billingCheckout(plan: BillingPlan): Promise<BillingSummary>
+  billingManage(): Promise<BillingSummary>
+  onBillingChange(listener: (summary: BillingSummary) => void): () => void
   onEvent(listener: (event: AppEvent) => void): () => void
   // Only the trusted capture surface may invoke these operations.
   onCaptureCommand(listener: (command: CaptureCommand) => void): () => void

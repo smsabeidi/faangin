@@ -121,6 +121,7 @@ The test suite covers storage recovery, request validation, capture lifecycle, r
 | [Desktop appearance](docs/engineering/design-system.md) | Apple HIG, blue accents, glass materials, and accessibility |
 | [Feature status](docs/engineering/feature-status.md) | Requirement-by-requirement delivery and acceptance gaps |
 | [Release readiness](docs/engineering/release-readiness.md) | Interview acceptance checks and remaining production gates |
+| [Accounts and licensing](docs/engineering/account-licensing.md) | Sign-in, the offline-verified license, Checkout and the account panel, and what is not wired yet |
 | [Latency](docs/engineering/latency.md) | What the response timings measure and how to compare Fast/Smart |
 | [Conversational responses](docs/engineering/response-delivery.md) | Delivery policy, completed-utterance handling, paired evaluation and remaining quality limits |
 | [Spoken questions](docs/engineering/spoken-questions.md) | Select audio sources, verify conversation text and explicitly request Reply |

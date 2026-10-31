@@ -1,6 +1,6 @@
 # Dropping `faangin-cloud.ts` into the desktop app
 
-Copy `client/faangin-cloud.ts` to `src/main/faangin-cloud.ts` in the app repo. It needs only Node (`node:crypto`, global `fetch`) and `ws`, which the app already has. Nothing in it runs in the renderer.
+This file is copied to `src/main/faangin-cloud.ts` in the app, where `src/main/licensing/` builds sign-in, the license and the account panel on it (see [docs/engineering/account-licensing.md](../../docs/engineering/account-licensing.md)). It needs only Node (`node:crypto`, global `fetch`) and `ws`, which the app already has. Nothing in it runs in the renderer. Edit it here first, then copy it over, keeping the app's own `LICENSE_PUBLIC_KEYS`; `tests/cloud-client-sync.test.ts` fails when the two copies drift apart anywhere else.
 
 ## Three constants
 
@@ -10,7 +10,9 @@ const WEB_API_KEY = '<Firebase web API key>'      // public; Project settings â†
 const GATEWAY_BASE = 'https://faangin-gateway-xxxx-uc.a.run.app'                 // printed by scripts/deploy-gateway.sh
 ```
 
-Emulator: `FUNCTIONS_BASE = 'http://127.0.0.1:5001/demo-faangin/us-central1'`, `WEB_API_KEY = 'fake-api-key'`, and pass `EMULATOR_IDENTITY_TOOLKIT_BASE` / `EMULATOR_SECURE_TOKEN_BASE` as the `base` argument of `exchangeCustomToken` / `refreshIdToken`.
+In the app, `FUNCTIONS_BASE` and `WEB_API_KEY` are the `functionsBase` and `webApiKey` fields of `BUILD_CLOUD_CONFIG` in `src/main/licensing/config.ts` (the hosting origin is derived from the functions host; set `hostingOrigin` there for a custom domain). Unpackaged runs also read `FAANGIN_FUNCTIONS_BASE`, `FAANGIN_WEB_API_KEY` and `FAANGIN_HOSTING_ORIGIN`; packaged builds ignore them. `GATEWAY_BASE` is not used yet: Pro mode is not wired into the app.
+
+Emulator: `FUNCTIONS_BASE = 'http://127.0.0.1:5001/demo-faangin/us-central1'`, `WEB_API_KEY = 'fake-api-key'`, and pass `EMULATOR_IDENTITY_TOOLKIT_BASE` / `EMULATOR_SECURE_TOKEN_BASE` as the `base` argument of `exchangeCustomToken` / `refreshIdToken`. The app does this itself when the functions base is on localhost in an unpackaged run.
 
 ## Sign in (device code)
 
@@ -50,7 +52,7 @@ if (verified?.inGrace) showRenewBanner()                      // past 30 days, w
 `verified.plan` is `'byok'` or `'pro'`; `verified.status` can be `past_due` (Stripe is retrying a card) which still entitles.
 CloudError codes from `fetchLicense`: `FAILED_PRECONDITION` nothing bought, `RESOURCE_EXHAUSTED` fourth active device.
 
-**Public key**: put the value that `node scripts/gen-license-key.mjs` prints on stderr into `LICENSE_PUBLIC_KEYS` at the top of the file (current key first; add the next key before rotating). Staging and production builds use different keys.
+**Public key**: put the value that `node scripts/gen-license-key.mjs` prints on stderr into `LICENSE_PUBLIC_KEYS` at the top of the file, in the app's copy (current key first; add the next key before rotating). Staging and production builds use different keys. Until a real key is there, the app cannot verify a license and says so.
 
 ## Pro mode (gateway instead of the customer's key)
 
