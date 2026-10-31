@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "faangin-staging",
+    "staging": "faangin-staging",
+    "prod": "faangin-prod"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "faangin-backend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Faangin accounts, billing, licensing and Pro gateway on Firebase",
+  "scripts": {
+    "build": "npm --prefix functions run build && npm --prefix gateway run build",
+    "typecheck": "npm --prefix functions run typecheck && npm --prefix gateway run typecheck",
+    "test": "bash scripts/check-secrets.sh && npm --prefix functions test && npm --prefix gateway test && npm run test:client",
+    "check:secrets": "bash scripts/check-secrets.sh",
+    "stripe:status": "node scripts/stripe-setup.mjs status --sandbox",
+    "stripe:smoke": "npm --prefix functions run build && node scripts/stripe-sandbox-smoke.mjs --sandbox",
+    "test:client": "cd gateway && node --import tsx --test ../client/*.test.ts",
+    "emulators": "firebase emulators:start --project demo-faangin",
+    "deploy:staging": "firebase deploy --project faangin-staging --only functions,firestore,hosting",
+    "deploy:gateway:staging": "bash scripts/deploy-gateway.sh faangin-staging"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": {
+    "firebase-tools": "15.34.1"
+  }
+}
