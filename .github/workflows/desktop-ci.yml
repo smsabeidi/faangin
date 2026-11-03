@@ -54,6 +54,7 @@ jobs:
       - name: Smoke the development build
         run: npm run smoke
       - name: Package the unpacked Windows app
+        id: winpkg
         if: runner.os == 'Windows'
         run: npm run package:win
       - name: Smoke the packaged Windows app
@@ -61,6 +62,35 @@ jobs:
         run: npm run smoke
         env:
           FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+      # The three self-contained native QA suites drive the real packaged app over the debugging protocol in disposable
+      # profiles: first-run flow, permission gating, and BrowserWindow geometry for the overlay. Their screenshots are
+      # real Windows renders and are uploaded below. overlay-interaction-qa is left out because it already fails on macOS
+      # at its resume-credential step, which is unrelated to the platform.
+      - name: Native QA, first-run flow
+        if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
+        run: node scripts/onboarding-qa.mjs
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_ONBOARDING_QA_OUTPUT: ${{ runner.temp }}\qa\onboarding
+      - name: Native QA, required access
+        if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
+        run: node scripts/access-setup-qa.mjs
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_ACCESS_QA_OUTPUT: ${{ runner.temp }}\qa\access-setup
+      - name: Native QA, overlay geometry
+        if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
+        run: node scripts/overlay-layout-qa.mjs
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_LAYOUT_QA_OUTPUT: ${{ runner.temp }}\qa\overlay-layout
+      - name: Upload the Windows QA reports and screenshots
+        if: runner.os == 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faangin-windows-qa
+          path: ${{ runner.temp }}\qa
+          if-no-files-found: ignore
       - name: Build the unsigned Windows installer
         if: runner.os == 'Windows'
         run: npx electron-builder --win --x64 --publish never
