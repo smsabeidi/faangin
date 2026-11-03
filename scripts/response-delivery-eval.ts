@@ -1,5 +1,5 @@
 /** Synthetic-only paired evaluation. Offline mode never opens credentials or a network connection. */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -109,7 +109,10 @@ export function loadBaselineCompiler(root = process.cwd(), revision = DELIVERY_B
   const directory = mkdtempSync(path.join(tmpdir(), 'faangin-delivery-baseline-'))
   try {
     const archive = execFileSync('git', ['archive', resolved, 'src/main', 'src/shared'], { cwd: root, maxBuffer: 20 * 1024 * 1024 })
-    execFileSync('tar', ['-x', '-C', directory], { input: archive })
+    // tar can exit on the archive's end marker before Node finishes writing its trailing padding. That surfaces as EPIPE even though
+    // every file was extracted, so only a failing status or a different error is fatal.
+    const extracted = spawnSync('tar', ['-x', '-C', directory], { input: archive })
+    if (extracted.status !== 0 || (extracted.error && (extracted.error as NodeJS.ErrnoException).code !== 'EPIPE')) throw extracted.error ?? new Error(`tar exited with status ${extracted.status}: ${extracted.stderr}`)
     // A junction needs no symlink privilege on Windows; other platforms ignore the type and create a plain directory link.
     symlinkSync(path.join(root, 'node_modules'), path.join(directory, 'node_modules'), 'junction')
     const compiler = createRequire(path.join(root, 'package.json'))(path.join(directory, 'src/main/prompts.ts')).compilePrompt as Compiler
