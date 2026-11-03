@@ -290,7 +290,8 @@ try {
   report.checks.nativeMaximumPreventsFullscreen = true
 
   await moreClick(overlay, 'Use comfortable overlay size')
-  await settleSize(overlay, 600, 720)
+  // The preset asks for 600×720 and the app clamps it to the display's native maximum (a 720 px work area allows 688).
+  await settleSize(overlay, Math.min(600, max.maximumSize[0]), Math.min(720, max.maximumSize[1]))
   await snapshot(overlay, 'comfortable-menu-preset')
   await moreClick(overlay, 'Use compact overlay size')
   await settleSize(overlay, 480, 560)
