@@ -110,7 +110,8 @@ export function loadBaselineCompiler(root = process.cwd(), revision = DELIVERY_B
   try {
     const archive = execFileSync('git', ['archive', resolved, 'src/main', 'src/shared'], { cwd: root, maxBuffer: 20 * 1024 * 1024 })
     execFileSync('tar', ['-x', '-C', directory], { input: archive })
-    symlinkSync(path.join(root, 'node_modules'), path.join(directory, 'node_modules'), 'dir')
+    // A junction needs no symlink privilege on Windows; other platforms ignore the type and create a plain directory link.
+    symlinkSync(path.join(root, 'node_modules'), path.join(directory, 'node_modules'), 'junction')
     const compiler = createRequire(path.join(root, 'package.json'))(path.join(directory, 'src/main/prompts.ts')).compilePrompt as Compiler
     return { compiler, revision: resolved, cleanup: () => rmSync(directory, { recursive: true, force: true }) }
   } catch (error) { rmSync(directory, { recursive: true, force: true }); throw error }
