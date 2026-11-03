@@ -6,7 +6,7 @@ function fixture(patch: Partial<PermissionSetupPorts> = {}) {
   const actions: string[] = []
   const states: Record<SetupPermission, string> = { microphone: 'not-determined', screen: 'not-determined' }
   const ports: PermissionSetupPorts = {
-    platform: 'darwin', status: kind => states[kind],
+    promptsNatively: true, status: kind => states[kind],
     requestMicrophone: async () => { actions.push('microphone'); states.microphone = 'granted'; return true },
     enumerateScreens: async () => { actions.push('screens'); states.screen = 'granted' },
     openSettings: async kind => { actions.push(`settings:${kind}`) },
@@ -40,11 +40,11 @@ test('previously denied access opens system settings without repeating native pr
   }
 })
 
-test('granted access is a no-op and non-Mac systems use their privacy controls', async () => {
+test('granted access is a no-op and systems without native prompts use their privacy controls', async () => {
   const allowed = fixture(); allowed.states.microphone = 'granted'
   await requestSetupPermission('microphone', allowed.ports)
   assert.deepEqual(allowed.actions, [])
-  const windows = fixture({ platform: 'win32' })
+  const windows = fixture({ promptsNatively: false })
   await requestSetupPermission('microphone', windows.ports)
   assert.deepEqual(windows.actions, ['settings:microphone'])
 })

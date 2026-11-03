@@ -1,3 +1,4 @@
+import type { AudioChannel, PlatformId } from '../shared/types'
 import { SPEECH_START_LEVEL } from './vad'
 
 export type AudioHealth = 'listening' | 'silent' | 'low-level' | 'no-frames'
@@ -7,6 +8,22 @@ export const AUDIO_HEALTH_MESSAGES: Record<AudioHealth, string> = {
   silent: 'Silent — check the source if speech is playing.',
   'low-level': 'Low audio level — raise the source volume if speech is playing.',
   'no-frames': 'No audio frames — reconnect this source.'
+}
+
+/**
+ * Windows loopback is the post-mix signal of the Default Device: it follows the master volume and mute,
+ * and it is not the Default Communications Device that call apps route headsets to. Both produce a
+ * silent pipeline that looks healthy, so the hint names the setting to change. A microphone pipeline
+ * on Windows has none of this and keeps the shared copy.
+ */
+const WINDOWS_AUDIO_HEALTH_MESSAGES: Record<AudioHealth, string> = {
+  ...AUDIO_HEALTH_MESSAGES,
+  silent: 'Silent — Faangin hears the Windows Default Device. In Sound settings set your headset or speakers as Default Device (not only Default Communications Device), and unmute Windows volume.',
+  'low-level': 'Low audio level — raise the Windows output volume; computer audio follows it.'
+}
+
+export function audioHealthMessages(platform: PlatformId, channel: AudioChannel): Readonly<Record<AudioHealth, string>> {
+  return platform === 'win32' && channel === 'system' ? WINDOWS_AUDIO_HEALTH_MESSAGES : AUDIO_HEALTH_MESSAGES
 }
 
 /** Per-source diagnostics only. Energy is not evidence of recognized speech. */

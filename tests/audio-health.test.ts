@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AudioHealthTracker, AUDIO_HEALTH_MESSAGES } from '../src/capture/audio-health'
+import { AudioHealthTracker, AUDIO_HEALTH_MESSAGES, audioHealthMessages } from '../src/capture/audio-health'
 import { VoiceActivity } from '../src/capture/vad'
 
 function frames(tracker: AudioHealthTracker, from: number, until: number, level: number): void {
@@ -53,6 +53,16 @@ test('invalid levels and stale times cannot refresh health or masquerade as adeq
   assert.equal(tracker.read(3_101), 'no-frames')
   assert.throws(() => tracker.read(NaN)); assert.throws(() => tracker.read(99))
   assert.throws(() => new AudioHealthTracker(Infinity)); assert.throws(() => new AudioHealthTracker(-1))
+})
+
+test('Windows loopback health copy names the Default Device and master volume; microphones and other platforms keep the shared table', () => {
+  const windows = audioHealthMessages('win32', 'system')
+  assert.equal(windows.silent, 'Silent — Faangin hears the Windows Default Device. In Sound settings set your headset or speakers as Default Device (not only Default Communications Device), and unmute Windows volume.')
+  assert.equal(windows['low-level'], 'Low audio level — raise the Windows output volume; computer audio follows it.')
+  assert.equal(windows.listening, AUDIO_HEALTH_MESSAGES.listening); assert.equal(windows['no-frames'], AUDIO_HEALTH_MESSAGES['no-frames'])
+  assert.strictEqual(audioHealthMessages('win32', 'microphone'), AUDIO_HEALTH_MESSAGES, 'the Default Device hint describes playback, not a microphone')
+  for (const channel of ['microphone', 'system'] as const) { assert.strictEqual(audioHealthMessages('darwin', channel), AUDIO_HEALTH_MESSAGES); assert.strictEqual(audioHealthMessages('linux', channel), AUDIO_HEALTH_MESSAGES) }
+  assert.deepEqual(AUDIO_HEALTH_MESSAGES, { listening: 'Listening', silent: 'Silent — check the source if speech is playing.', 'low-level': 'Low audio level — raise the source volume if speech is playing.', 'no-frames': 'No audio frames — reconnect this source.' })
 })
 
 test('independent sources and a fresh capture generation do not inherit warning or admission state', () => {

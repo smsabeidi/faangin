@@ -3,23 +3,20 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
 import WebSocket from 'ws'
 import { writeDocumentFixtures } from './fixtures.mjs'
+import { appProcessKill, resolveAppExecutable } from './lib/app-executable.mjs'
 import { runDesktopWorkflow, verifyDesktopPersistence } from './smoke-workflow.mjs'
 import { startSmokeProvider } from './smoke-provider.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const require = createRequire(import.meta.url)
 const configuredApp = process.env.FAANGIN_APP_PATH
 const nativeAudio = process.env.FAANGIN_SMOKE_NATIVE_AUDIO === '1'
-if (nativeAudio && !configuredApp) throw new Error('FAANGIN_SMOKE_NATIVE_AUDIO requires FAANGIN_APP_PATH for the packaged Faangin permission identity.')
+if (nativeAudio && !configuredApp) throw new Error('FAANGIN_SMOKE_NATIVE_AUDIO requires FAANGIN_APP_PATH so the packaged Faangin, not the development Electron binary, performs the native capture.')
 const fixture = await mkdtemp(join(tmpdir(), 'faangin-smoke-'))
 await writeDocumentFixtures(fixture)
-const executable = configuredApp
-  ? (configuredApp.endsWith('.app') ? join(configuredApp, 'Contents', 'MacOS', 'Faangin') : configuredApp)
-  : require('electron')
+const executable = resolveAppExecutable(configuredApp)
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 const redact = value => String(value).replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
 function launch(markerName) {
@@ -57,10 +54,10 @@ async function ready(running) {
 async function stop(running) {
   if (!running?.child.pid || running.exitCode !== undefined) return
   const child = running.child
-  try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, 'SIGTERM') } catch { child.kill('SIGTERM') }
+  appProcessKill(child, 'SIGTERM')
   await Promise.race([new Promise(resolve => child.once('exit', resolve)), delay(2000)])
   if (running.exitCode === undefined) {
-    try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') }
+    appProcessKill(child, 'SIGKILL')
     await Promise.race([new Promise(resolve => child.once('exit', resolve)), delay(1000)])
   }
 }

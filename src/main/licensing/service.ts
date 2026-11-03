@@ -1,13 +1,14 @@
 import * as realCloud from '../faangin-cloud'
-import { CloudError, LICENSE_PUBLIC_KEYS, type DeviceInfo, type DeviceSignInStart } from '../faangin-cloud'
+import { CloudError, LICENSE_PUBLIC_KEYS, proTransport, type DeviceInfo, type DeviceSignInStart, type InferenceTransport } from '../faangin-cloud'
 import type { BillingPlan, BillingSummary, SignInPrompt } from '../../shared/billing-types'
 import type { AccountStore, StoredSession } from './account-store'
 import { allowedExternalUrl, type CloudConfig, type ExternalPurpose } from './config'
 import type { DeviceIdentity } from './device-identity'
 import { deriveLicenseState } from './state'
+import { startActivationServer, type ActivationLease } from './activation-server'
 
 /** The slice of faangin-cloud.ts the service uses; tests pass a fake. */
-export type CloudApi = Pick<typeof realCloud, 'startDeviceSignIn' | 'waitForDeviceSignIn' | 'exchangeCustomToken' | 'refreshIdToken' | 'callFunction' | 'fetchLicense' | 'verifyLicenseWithKeys'>
+export type CloudApi = Pick<typeof realCloud, 'startDeviceSignIn' | 'waitForDeviceSignIn' | 'exchangeDeviceToken' | 'refreshAuthSession' | 'revokeAuthSession' | 'callFunction' | 'fetchLicense' | 'verifyLicenseWithKeys'>
 
 export interface LicenseServiceOptions {
   /** Null when the build has no accounts backend. */
@@ -23,7 +24,12 @@ export interface LicenseServiceOptions {
   now?: () => number
   /** Re-check the license once a day while the app runs (default true). */
   dailyRefresh?: boolean
+  /** Bounded reconciliation for Checkout webhooks that arrive after the browser returns. */
+  purchaseRefreshMs?: number
+  activationServer?: typeof startActivationServer
 }
+
+export type InferenceAccess = { kind: 'unconfigured' | 'byok' } | { kind: 'pro'; transport: InferenceTransport }
 
 /** An error whose message is safe to show the user as is. */
 export class BillingError extends Error {
@@ -35,15 +41,16 @@ class SessionRevoked extends Error {}
 
 const PLANS: readonly BillingPlan[] = ['byok', 'pro_monthly', 'pro_annual']
 const DAY_MS = 24 * 60 * 60 * 1000
-const ID_TOKEN_MARGIN_MS = 5 * 60_000
+const ACCESS_TOKEN_MARGIN_MS = 5 * 60_000
 const FOCUS_REFRESH_GAP_MS = 10_000
+const PURCHASE_REFRESH_ATTEMPTS = 12
 /** Server messages for these codes are written for people (already bought, seats full, device cap). */
 const SPEAKABLE_CODES = new Set(['FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'])
 
 const MESSAGES = {
   unconfigured: 'This build of Faangin is not connected to an accounts service.',
   signedOutAlready: 'Sign in first.',
-  encryption: 'OS credential encryption is unavailable. Unlock your keychain and try again.',
+  encryption: 'OS credential encryption is unavailable. Unlock your system credential store and try again.',
   codeExpired: 'The sign-in code expired. Start again to get a new one.',
   signInFailed: 'Sign-in could not finish. Check your connection and start again.',
   startFailed: 'Faangin could not reach the accounts service. Check your connection and try again.',
@@ -64,26 +71,33 @@ export class LicenseService {
   private session: StoredSession | null = null
   private token: string | null = null
   private device: DeviceInfo | null = null
-  private idMemo: { idToken: string; expiresAt: number } | null = null
+  private accessMemo: { accessToken: string; expiresAt: number } | null = null
+  private activation: ActivationLease | null = null
   private signIn: SignInPrompt | null = null
   private signInAbort: AbortController | null = null
   private busy = false
   private error: string | null = null
   private awaitingPurchase = false
+  private expectedPurchase: 'byok' | 'pro' | null = null
+  private awaitingBillingReturn = false
+  private purchaseTimer: ReturnType<typeof setTimeout> | null = null
+  private purchaseChecks = 0
   private lastFocusRefresh = 0
   private queue: Promise<unknown> = Promise.resolve()
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(private readonly options: LicenseServiceOptions) {
     this.cloud = options.cloud ?? realCloud
-    this.publicKeys = options.publicKeys ?? LICENSE_PUBLIC_KEYS
+    this.publicKeys = options.publicKeys ?? options.config?.licensePublicKeys ?? LICENSE_PUBLIC_KEYS
     this.now = options.now ?? Date.now
   }
 
   /** Loads what is stored and re-checks the license in the background. Never blocks launch and needs no network. */
   async start(): Promise<void> {
     if (!this.options.config) return
-    this.session = await this.options.store.readSession()
+    const stored = await this.options.store.readSession()
+    this.session = stored?.provider === 'supabase' && stored.supabaseUrl === this.options.config.supabaseUrl ? stored : null
+    if (stored && !this.session) { await this.options.store.clearSession(); await this.options.store.clearLicense() }
     this.token = await this.options.store.readLicense()
     this.device = await this.options.identity.get()
     this.emit()
@@ -98,11 +112,15 @@ export class LicenseService {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     this.signInAbort?.abort()
+    void this.closeActivation()
+    if (this.purchaseTimer) clearTimeout(this.purchaseTimer)
+    this.purchaseTimer = null
+    this.purchaseChecks = PURCHASE_REFRESH_ATTEMPTS
   }
 
   summary(): BillingSummary {
     const raw = this.token ? this.cloud.verifyLicenseWithKeys(this.token, this.now(), this.publicKeys) : null
-    const verified = raw && (!this.session || raw.uid === this.session.uid) && (!this.device || raw.deviceId === this.device.deviceId) ? raw : null
+    const verified = raw && this.session && this.device && raw.uid === this.session.uid && raw.deviceId === this.device.deviceId ? raw : null
     return {
       state: deriveLicenseState({ configured: this.options.config !== null, signedIn: this.session !== null, hasToken: this.token !== null, verified }),
       signIn: this.signIn,
@@ -118,19 +136,29 @@ export class LicenseService {
     const config = this.requireConfig()
     if (!this.options.encryptionAvailable()) throw new BillingError(MESSAGES.encryption)
     this.signInAbort?.abort()
-    this.error = null
-    const device = await this.deviceInfo()
-    let start: DeviceSignInStart
-    try { start = await this.cloud.startDeviceSignIn(config.functionsBase, device) } catch { throw new BillingError(MESSAGES.startFailed) }
-    const url = allowedExternalUrl(start.verificationUrl, config, 'activate')
-    if (!url) throw new BillingError(MESSAGES.badLink)
-
     const controller = new AbortController()
     this.signInAbort = controller
-    this.signIn = { userCode: start.userCode, verificationUrl: url, expiresAt: this.now() + start.expiresIn * 1000 }
+    await this.closeActivation()
+    if (controller.signal.aborted || this.signInAbort !== controller) return this.summary()
+    this.signIn = null
+    this.error = null
+    this.emit()
+    let start: DeviceSignInStart
+    try { start = await this.cloud.startDeviceSignIn(config.functionsBase, await this.deviceInfo(), config.publishableKey) } catch {
+      if (controller.signal.aborted) return this.summary()
+      if (this.signInAbort === controller) this.signInAbort = null
+      throw new BillingError(MESSAGES.startFailed)
+    }
+    if (controller.signal.aborted || this.signInAbort !== controller) return this.summary()
+    const expiresAt = this.now() + start.expiresIn * 1000
+    const activation = await (this.options.activationServer ?? startActivationServer)({ supabaseUrl: config.supabaseUrl, publishableKey: config.publishableKey, functionsBase: config.functionsBase, userCode: start.userCode, deviceName: (await this.deviceInfo()).deviceName, expiresAt })
+    if (controller.signal.aborted || this.signInAbort !== controller) { await activation.close(); return this.summary() }
+    this.activation = activation
+    const url = activation.url
+    this.signIn = { userCode: start.userCode, verificationUrl: url, expiresAt }
     this.emit()
     void this.options.openExternal(url).catch(() => { /* the code and link stay on screen */ })
-    void this.finishSignIn(config, start, controller)
+    void this.finishSignIn(config, start, controller, activation)
     return this.summary()
   }
 
@@ -138,15 +166,24 @@ export class LicenseService {
     this.signInAbort?.abort()
     this.signInAbort = null
     this.signIn = null
+    void this.closeActivation()
     this.emit()
     return this.summary()
   }
 
+  /** Renderer links may reopen only this exact live lease, never arbitrary loopback services. */
+  isActivationUrl(raw: string): boolean {
+    return !!this.activation && this.signIn?.verificationUrl === raw && this.signIn.expiresAt > this.now()
+  }
+
   signOut(): Promise<BillingSummary> {
+    this.cancelSignIn()
     return this.exclusive(async () => {
+      const config = this.options.config, accessToken = this.accessMemo?.accessToken
       await this.dropAccount()
       this.error = null
       this.emit()
+      if (config && accessToken) void this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, accessToken).catch(() => {})
       return this.summary()
     })
   }
@@ -171,26 +208,63 @@ export class LicenseService {
   }
 
   /** Opens Stripe Checkout for `plan` in the browser; the license arrives when the app regains focus after paying. */
-  async openCheckout(plan: BillingPlan): Promise<BillingSummary> {
-    if (!PLANS.includes(plan)) throw new BillingError('Unknown plan.')
-    const url = await this.stripeLink('createCheckoutSession', { plan }, 'checkout', MESSAGES.checkout)
-    await this.open(url)
-    this.awaitingPurchase = true
-    this.error = null
-    this.emit()
-    return this.summary()
+  openCheckout(plan: BillingPlan): Promise<BillingSummary> {
+    return this.exclusive(async () => {
+      if (!PLANS.includes(plan)) throw new BillingError('Unknown plan.')
+      const url = await this.stripeLink('createCheckoutSession', { plan }, 'checkout', MESSAGES.checkout)
+      this.awaitingPurchase = true
+      this.expectedPurchase = plan === 'byok' ? 'byok' : 'pro'
+      try { await this.open(url) } catch (error) { this.awaitingPurchase = false; this.expectedPurchase = null; throw error }
+      this.beginPurchaseChecks()
+      this.error = null
+      this.emit()
+      return this.summary()
+    })
   }
 
-  async openPortal(): Promise<BillingSummary> {
-    await this.open(await this.stripeLink('createPortalSession', {}, 'portal', MESSAGES.portal))
-    return this.summary()
+  openPortal(): Promise<BillingSummary> {
+    return this.exclusive(async () => {
+      await this.open(await this.stripeLink('createPortalSession', {}, 'portal', MESSAGES.portal))
+      this.awaitingBillingReturn = true
+      this.beginPurchaseChecks()
+      return this.summary()
+    })
   }
 
   /** Call when a window gains focus: after Checkout the license is picked up without a manual refresh. */
   onWindowFocus(): void {
-    if (!this.awaitingPurchase || !this.session || this.now() - this.lastFocusRefresh < FOCUS_REFRESH_GAP_MS) return
+    if ((!this.awaitingPurchase && !this.awaitingBillingReturn) || !this.session || this.now() - this.lastFocusRefresh < FOCUS_REFRESH_GAP_MS) return
     this.lastFocusRefresh = this.now()
     void this.refresh({ background: true })
+  }
+
+  /** Account credentials and the gateway transport stay in the main process. */
+  requireInferenceAccess(): Promise<InferenceAccess> {
+    return this.exclusive(async () => {
+      const state = this.summary().state
+      if (state.kind === 'unavailable') return { kind: 'unconfigured' }
+      if (state.kind === 'signed-out') throw new BillingError('Sign in in Settings → Plan & account before requesting assistance.')
+      if (state.kind === 'no-plan') throw new BillingError('Choose a plan in Settings → Plan & account before requesting assistance.')
+      if (state.kind === 'locked') throw new BillingError('Check your license in Settings → Plan & account before requesting assistance.')
+      if (state.plan === 'byok') return { kind: 'byok' }
+      const gatewayBase = this.requireConfig().gatewayBase
+      if (!gatewayBase) throw new BillingError('This build has no Pro gateway configured. Update Faangin or contact support.')
+      try { await this.accessToken() } catch (error) {
+        await this.afterRefreshFailure(error, false)
+        this.emit()
+        throw new BillingError(this.error ?? MESSAGES.offline)
+      }
+      const uid = this.session!.uid
+      return { kind: 'pro', transport: proTransport(() => {
+        if (this.session?.uid !== uid || !this.accessMemo) throw new BillingError(MESSAGES.signedOutAlready)
+        return this.accessMemo.accessToken
+      }, gatewayBase, this.requireConfig().publishableKey) }
+    })
+  }
+
+  async proAccess(): Promise<{ transport: InferenceTransport } | null> {
+    const access = await this.requireInferenceAccess()
+    return access.kind === 'pro' ? { transport: access.transport } : null
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -214,42 +288,63 @@ export class LicenseService {
     return run
   }
 
-  private async finishSignIn(config: CloudConfig, start: DeviceSignInStart, controller: AbortController): Promise<void> {
+  private async finishSignIn(config: CloudConfig, start: DeviceSignInStart, controller: AbortController, activation: ActivationLease): Promise<void> {
+    // Email confirmations and password recovery remain useful after the device code expires.
+    // A fresh sign-in, explicit cancellation, disposal or the callback server's own one-hour limit closes it.
+    let keepCallback = false
     try {
-      const result = await this.cloud.waitForDeviceSignIn(config.functionsBase, start, { signal: controller.signal })
+      const result = await this.cloud.waitForDeviceSignIn(config.functionsBase, start, { signal: controller.signal, publishableKey: config.publishableKey })
+      if (controller.signal.aborted || this.signInAbort !== controller) return
       if (result.status === 'aborted') return
-      if (result.status === 'expired') { this.error = MESSAGES.codeExpired; return }
-      const session = await this.cloud.exchangeCustomToken(config.webApiKey, result.customToken, config.identityToolkitBase)
-      const stored: StoredSession = { uid: session.uid, refreshToken: session.refreshToken }
-      await this.options.store.writeSession(stored)
-      this.session = stored
-      this.idMemo = { idToken: session.idToken, expiresAt: session.expiresAt }
+      if (result.status === 'expired') { keepCallback = true; this.error = MESSAGES.codeExpired; return }
+      const session = await this.cloud.exchangeDeviceToken(config.supabaseUrl, config.publishableKey, result.tokenHash, result.uid)
+      if (controller.signal.aborted || this.signInAbort !== controller) {
+        void this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, session.accessToken).catch(() => {})
+        return
+      }
+      await this.exclusive(async () => {
+        if (controller.signal.aborted || this.signInAbort !== controller) return
+        const stored: StoredSession = { uid: session.uid, refreshToken: session.refreshToken, provider: 'supabase', supabaseUrl: config.supabaseUrl }
+        await this.options.store.writeSession(stored)
+        if (controller.signal.aborted || this.signInAbort !== controller) {
+          if (this.session) await this.options.store.writeSession(this.session)
+          else await this.options.store.clearSession()
+          return
+        }
+        this.session = stored
+        this.accessMemo = { accessToken: session.accessToken, expiresAt: session.expiresAt }
+      })
     } catch (error) {
-      if (!controller.signal.aborted) this.error = MESSAGES.signInFailed
+      if (!controller.signal.aborted) { keepCallback = true; this.error = MESSAGES.signInFailed }
       return
     } finally {
+      if (!keepCallback || controller.signal.aborted) {
+        await activation.close()
+        if (this.activation === activation) this.activation = null
+      }
       if (this.signInAbort === controller) { this.signInAbort = null; this.signIn = null }
       this.emit()
     }
-    await this.refresh()
+    if (!controller.signal.aborted) await this.refresh()
   }
 
-  private async idToken(): Promise<string> {
+  private async accessToken(): Promise<string> {
     const config = this.requireConfig()
     const session = this.session
     if (!session) throw new BillingError(MESSAGES.signedOutAlready)
-    if (this.idMemo && this.idMemo.expiresAt - this.now() > ID_TOKEN_MARGIN_MS) return this.idMemo.idToken
+    if (this.accessMemo && this.accessMemo.expiresAt - this.now() > ACCESS_TOKEN_MARGIN_MS) return this.accessMemo.accessToken
     try {
-      const next = await this.cloud.refreshIdToken(config.webApiKey, session.refreshToken, config.secureTokenBase)
-      this.idMemo = { idToken: next.idToken, expiresAt: next.expiresAt }
-      if (next.refreshToken !== session.refreshToken || (next.uid && next.uid !== session.uid)) {
-        const updated: StoredSession = { uid: next.uid || session.uid, refreshToken: next.refreshToken }
+      const next = await this.cloud.refreshAuthSession(config.supabaseUrl, config.publishableKey, session.refreshToken)
+      if (next.uid && next.uid !== session.uid) throw new SessionRevoked()
+      if (next.refreshToken !== session.refreshToken) {
+        const updated: StoredSession = { uid: session.uid, refreshToken: next.refreshToken, provider: 'supabase', supabaseUrl: config.supabaseUrl }
         await this.options.store.writeSession(updated)
         this.session = updated
       }
-      return next.idToken
+      this.accessMemo = { accessToken: next.accessToken, expiresAt: next.expiresAt }
+      return next.accessToken
     } catch (error) {
-      if (error instanceof CloudError && error.status >= 400 && error.status < 500 && error.status !== 429) throw new SessionRevoked()
+      if (error instanceof CloudError && (['UNAUTHENTICATED', 'refresh_token_not_found', 'refresh_token_already_used', 'session_not_found', 'user_not_found', 'user_banned', 'invalid_grant'].includes(error.code))) throw new SessionRevoked()
       throw error
     }
   }
@@ -259,12 +354,15 @@ export class LicenseService {
     const session = this.session
     if (!session) throw new BillingError(MESSAGES.signedOutAlready)
     const device = await this.deviceInfo()
-    const response = await this.cloud.fetchLicense(config.functionsBase, await this.idToken(), device)
+    const response = await this.cloud.fetchLicense(config.functionsBase, await this.accessToken(), device, config.publishableKey)
     const verified = this.cloud.verifyLicenseWithKeys(response.token, this.now(), this.publicKeys)
     if (!verified || verified.uid !== session.uid || verified.deviceId !== device.deviceId) throw new BillingError(MESSAGES.unverified)
     await this.options.store.writeLicense(response.token)
     this.token = response.token
-    this.awaitingPurchase = false
+    if (this.awaitingPurchase && verified.plan === this.expectedPurchase) {
+      this.awaitingPurchase = false
+      this.expectedPurchase = null
+    }
     this.error = null
   }
 
@@ -281,7 +379,7 @@ export class LicenseService {
       this.error = MESSAGES.deviceLimit
     } else if (error instanceof BillingError) {
       this.error = error.message
-    } else if (!background || this.summary().state.kind !== 'active') {
+    } else if (!background || !['active', 'grace'].includes(this.summary().state.kind)) {
       this.error = MESSAGES.offline
     }
   }
@@ -290,10 +388,15 @@ export class LicenseService {
     this.signInAbort?.abort()
     this.signInAbort = null
     this.signIn = null
+    await this.closeActivation()
     this.session = null
     this.token = null
-    this.idMemo = null
+    this.accessMemo = null
     this.awaitingPurchase = false
+    this.expectedPurchase = null
+    this.awaitingBillingReturn = false
+    if (this.purchaseTimer) clearTimeout(this.purchaseTimer)
+    this.purchaseTimer = null
     await this.options.store.clearSession()
     await this.options.store.clearLicense()
   }
@@ -303,10 +406,10 @@ export class LicenseService {
     if (!this.session) throw new BillingError(MESSAGES.signedOutAlready)
     let result: { url?: unknown } | undefined
     try {
-      result = await this.cloud.callFunction<{ url?: unknown }>(config.functionsBase, name, data, await this.idToken())
+      result = await this.cloud.callFunction<{ url?: unknown }>(config.functionsBase, name, data, await this.accessToken(), config.publishableKey)
     } catch (error) {
       if (error instanceof SessionRevoked || (error instanceof CloudError && error.code === 'UNAUTHENTICATED')) {
-        await this.exclusive(() => this.dropAccount())
+        await this.dropAccount()
         this.error = MESSAGES.revoked
         this.emit()
         throw new BillingError(MESSAGES.revoked)
@@ -320,5 +423,27 @@ export class LicenseService {
 
   private async open(url: string): Promise<void> {
     try { await this.options.openExternal(url) } catch { throw new BillingError(MESSAGES.browser) }
+  }
+
+  private async closeActivation(): Promise<void> {
+    const activation = this.activation
+    this.activation = null
+    await activation?.close()
+  }
+
+  private beginPurchaseChecks(): void {
+    if (this.purchaseTimer) clearTimeout(this.purchaseTimer)
+    this.purchaseChecks = 0
+    this.schedulePurchaseCheck()
+  }
+
+  private schedulePurchaseCheck(): void {
+    if ((!this.awaitingPurchase && !this.awaitingBillingReturn) || !this.session || this.purchaseChecks >= PURCHASE_REFRESH_ATTEMPTS) return
+    this.purchaseTimer = setTimeout(() => {
+      this.purchaseTimer = null
+      this.purchaseChecks += 1
+      void this.refresh({ background: true }).finally(() => { this.schedulePurchaseCheck() })
+    }, this.options.purchaseRefreshMs ?? 5_000)
+    this.purchaseTimer.unref?.()
   }
 }

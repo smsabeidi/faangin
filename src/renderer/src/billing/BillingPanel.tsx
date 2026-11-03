@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ArrowUpRight, Check, Copy, CreditCard, LogOut, RefreshCw, X } from 'lucide-react'
 import type { BillingPlan, BillingSummary, LicensedPlan } from '../../../shared/billing-types'
+import { platformCopy } from '../../../shared/platform-copy'
 import { Spinner } from '../components'
 import { useBilling } from './useBilling'
 
@@ -14,56 +15,57 @@ const PLAN_NAMES: Record<LicensedPlan, string> = { byok: 'BYOK license', pro: 'P
 
 const dateOf = (ms: number): string => new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 
-export function BillingPanel() {
+export function BillingPanel({ platform }: { platform: string }) {
   const billing = useBilling()
   const { summary } = billing
   const error = billing.actionError ?? summary?.error ?? null
+  const device = platformCopy(platform).deviceNoun
   return <section className="settings-card billing-card">
-    <div className="settings-card-heading"><span><CreditCard size={18}/></span><div><h2>Plan & account</h2><p>Sign in to activate a Faangin plan on this Mac.</p></div></div>
+    <div className="settings-card-heading"><span><CreditCard size={18}/></span><div><h2>Plan & account</h2><p>Sign in to activate a Faangin plan on this {device}.</p></div></div>
     <div className="settings-card-body">
       {error && <p className="billing-error" role="alert">{error}</p>}
-      {!summary ? <Spinner label="Loading"/> : <Body summary={summary} billing={billing}/>}
+      {!summary ? <Spinner label="Loading"/> : <Body summary={summary} billing={billing} device={device}/>}
     </div>
   </section>
 }
 
-function Body({ summary, billing }: { summary: BillingSummary; billing: ReturnType<typeof useBilling> }) {
+function Body({ summary, billing, device }: { summary: BillingSummary; billing: ReturnType<typeof useBilling>; device: string }) {
   const { state, busy } = summary
   switch (state.kind) {
     case 'unavailable':
       return <p className="billing-muted">This build of Faangin is not connected to an accounts service. Everything else keeps working with your own OpenAI key.</p>
     case 'signed-out':
       return summary.signIn ? <SignInCode summary={summary} billing={billing}/> : <>
-        <p>Sign in once with your browser. This Mac is registered to your account; one account can use up to three devices.</p>
+        <p>Sign in once with your browser. This {device} is registered to your account; one account can use up to three devices.</p>
         <div className="billing-actions"><button className="button primary small" disabled={busy} onClick={() => { void billing.signIn() }}><ArrowUpRight size={14}/>Sign in</button></div>
       </>
     case 'no-plan':
       return <>
         <p>You are signed in, and no plan is active on this account yet.</p>
         <Offers summary={summary} billing={billing}/>
-        <Footer summary={summary} billing={billing} check/>
+        <Footer summary={summary} billing={billing} device={device} check manage/>
       </>
     case 'active':
       return <>
         <div className="billing-plan-row"><strong>{PLAN_NAMES[state.plan]}</strong><span className="connection-badge connected"><span className="status-dot"/>{state.pastDue ? 'Payment failed' : 'Active'}</span></div>
-        {state.plan === 'byok' && <p className="billing-muted">Licensed on this Mac.</p>}
+        {state.plan === 'byok' && <p className="billing-muted">Licensed on this {device}.</p>}
         {state.plan === 'pro' && state.periodEnd !== null && <p className="billing-muted">{state.cancelAtPeriodEnd ? 'Ends' : 'Renews'} {dateOf(state.periodEnd)}</p>}
         {state.pastDue && <p className="billing-warning">Your last payment failed. Update your card in Manage billing; access continues while Stripe retries.</p>}
         <div className="billing-actions"><button className="button subtle small" disabled={busy} onClick={() => { void billing.manage() }}><ArrowUpRight size={14}/>Manage billing</button></div>
         {state.plan === 'byok' && <Offers summary={summary} billing={billing} only={['pro_monthly', 'pro_annual']} title="Add Pro"/>}
-        <Footer summary={summary} billing={billing}/>
+        <Footer summary={summary} billing={billing} device={device}/>
       </>
     case 'grace':
       return <>
         <div className="billing-plan-row"><strong>{PLAN_NAMES[state.plan]}</strong><span className="connection-badge"><span className="status-dot"/>Needs a check</span></div>
         <p>Your license is past its 30-day check but keeps working until {dateOf(state.graceUntil)}. Reconnect to refresh it.</p>
-        <Footer summary={summary} billing={billing} check/>
+        <Footer summary={summary} billing={billing} device={device} check manage/>
       </>
     case 'locked':
       return <>
         <div className="billing-plan-row"><strong>License expired</strong><span className="connection-badge danger"><span className="status-dot"/>Reconnect</span></div>
-        <p>This Mac could not refresh its license in time. Check again while online, or sign out and back in.</p>
-        <Footer summary={summary} billing={billing} check/>
+        <p>This {device} could not refresh its license in time. Check again while online, or sign out and back in.</p>
+        <Footer summary={summary} billing={billing} device={device} check manage/>
       </>
   }
 }
@@ -93,10 +95,11 @@ function Offers({ summary, billing, only, title }: { summary: BillingSummary; bi
   </div>
 }
 
-function Footer({ summary, billing, check }: { summary: BillingSummary; billing: ReturnType<typeof useBilling>; check?: boolean }): ReactNode {
+function Footer({ summary, billing, device, check, manage }: { summary: BillingSummary; billing: ReturnType<typeof useBilling>; device: string; check?: boolean; manage?: boolean }): ReactNode {
   return <div className="billing-footer">
-    {summary.deviceName && <span className="billing-muted">This Mac: {summary.deviceName}</span>}
+    {summary.deviceName && <span className="billing-muted">This {device}: {summary.deviceName}</span>}
     <div className="billing-actions">
+      {manage && <button className="button subtle small" disabled={summary.busy} onClick={() => { void billing.manage() }}><ArrowUpRight size={14}/>Manage billing</button>}
       {check && <button className="button subtle small" disabled={summary.busy} onClick={() => { void billing.refresh() }}>{summary.busy ? <Spinner label="Checking"/> : <><RefreshCw size={14}/>Check again</>}</button>}
       <button className="text-button danger-text" onClick={() => { void billing.signOut() }}><LogOut size={13}/>Sign out</button>
     </div>

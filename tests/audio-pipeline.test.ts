@@ -1,22 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AudioPipeline } from '../src/capture/pipeline'
-import { acquireMicrophone, audioCaptureError, microphoneMissing } from '../src/capture/media'
-import type { AudioChannel } from '../src/shared/types'
+import { acquireMicrophone, audioCaptureError, audioTrackMissing, defaultOutput, defaultOutputChanged, microphoneMissing, type OutputIdentity } from '../src/capture/media'
+import type { AudioChannel, PlatformId } from '../src/shared/types'
 
-function fixture(channel: AudioChannel = 'microphone') {
+function fixture(channel: AudioChannel = 'microphone', options: { platform?: PlatformId; outputIdentity?: OutputIdentity | null; videoEnded?: boolean } = {}) {
   let at = 0, active = true, tick = () => {}, watching = false, writes = 0, commits = 0, levels = 0, resumes = 0, closes = 0
   const statuses: Array<{ message: string; failed?: boolean }> = []
   const written: ArrayBuffer[] = [], reportedLevels: number[] = []
   const track = { onended: null as (() => void) | null, onmute: null as (() => void) | null, onunmute: null as (() => void) | null, muted: false, stops: 0, stop() { this.stops++ }, getSettings: () => ({ deviceId: 'headset' }) }
-  const videoTrack = { onended: null as (() => void) | null, stops: 0, stop() { this.stops++ } }
+  const videoTrack = { onended: null as (() => void) | null, onmute: null as (() => void) | null, readyState: options.videoEnded ? 'ended' : 'live', stops: 0, stop() { this.stops++ } }
   const stream = { getAudioTracks: () => [track], getTracks: () => [track, videoTrack] } as unknown as MediaStream
   const source = { disconnected: 0, connect() {}, disconnect() { this.disconnected++ } }
   const gain = { gain: { value: 1 }, disconnected: 0, connect() {}, disconnect() { this.disconnected++ } }
   const node = { port: { onmessage: null as ((event: { data: unknown }) => void) | null }, onprocessorerror: null as (() => void) | null, disconnected: 0, connect() {}, disconnect() { this.disconnected++ } }
   const context = { state: 'suspended', audioWorklet: { async addModule() {} }, destination: {}, createMediaStreamSource: () => source, createGain: () => gain,
     async resume() { resumes++; this.state = 'running' }, async close() { closes++; this.state = 'closed' } }
-  const pipeline = new AudioPipeline({ stream, context: context as unknown as AudioContext, channel, current: () => active, now: () => at,
+  const pipeline = new AudioPipeline({ stream, context: context as unknown as AudioContext, channel, platform: options.platform, outputIdentity: options.outputIdentity, current: () => active, now: () => at,
     watch: check => { tick = check; watching = true; return () => { watching = false } },
     frame: pcm => { writes++; written.push(pcm) }, commit: () => { commits++ }, level: value => { levels++; reportedLevels.push(value) }, status: (message, failed) => statuses.push({ message, failed }) })
   return { pipeline, context, track, videoTrack, source, gain, node, stream, statuses, written, reportedLevels,
@@ -181,13 +181,80 @@ test('permission denial and revoked capture never retry or switch the selected m
 test('native acquisition errors explain the affected source and a recovery action', () => {
   for (const source of ['microphone', 'system'] as const) {
     for (const name of ['NotAllowedError', 'PermissionDeniedError']) {
-      const message = audioCaptureError(source, { name })
+      const message = audioCaptureError(source, { name }, 'darwin')
       assert.match(message, /access was blocked/)
       assert.match(message, /Stop listening.*system settings.*already allowed.*fully quit and reopen.*Start listening/)
       assert.doesNotMatch(message, /permission was denied/)
     }
   }
-  assert.match(audioCaptureError('microphone', { name: 'NotReadableError' }), /device is connected and available/)
+  assert.match(audioCaptureError('microphone', { name: 'NotReadableError' }, 'darwin'), /device is connected and available/)
+})
+
+test('Windows copy points at Sound settings instead of a screen-recording permission the OS does not have', () => {
+  for (const name of ['NotAllowedError', 'PermissionDeniedError']) {
+    const message = audioCaptureError('system', { name }, 'win32')
+    assert.match(message, /^Computer audio could not be started\. Choose Stop listening, then Start listening again/)
+    assert.match(message, /default playback device in Windows Sound settings/)
+    assert.doesNotMatch(message, /screen|privacy|quit and reopen/)
+    assert.equal(audioCaptureError('microphone', { name }, 'win32'), audioCaptureError('microphone', { name }, 'darwin'), 'the microphone path is gated by main before capture starts and keeps the shared copy')
+  }
+  assert.match(audioCaptureError('microphone', { name: 'NotReadableError' }, 'win32'), /connected and available, and that microphone access for desktop apps is on in Windows privacy settings, then reconnect audio\.$/)
+  assert.equal(audioCaptureError('system', { name: 'NotReadableError' }, 'win32'), audioCaptureError('system', { name: 'NotReadableError' }, 'darwin'))
+  for (const name of ['NotFoundError', 'OverconstrainedError', 'AbortError', 'SomethingElse']) for (const channel of ['microphone', 'system'] as const) {
+    assert.equal(audioCaptureError(channel, { name }, 'win32'), audioCaptureError(channel, { name }, 'darwin'))
+  }
+  assert.equal(audioCaptureError('system', new Error('Audio device disconnected.'), 'win32'), 'Audio device disconnected.', 'main string-matches this status for its restart path')
+  assert.equal(audioTrackMissing('system', 'win32'), 'No computer audio was provided. Set a default playback device in Windows Sound settings, then reconnect audio.')
+  assert.equal(audioTrackMissing('system', 'darwin'), 'No system audio track was provided. Allow screen and system audio recording in system settings, then reconnect audio.')
+  assert.equal(audioTrackMissing('system', 'linux'), audioTrackMissing('system', 'darwin'))
+  for (const platform of ['darwin', 'win32', 'linux'] as const) assert.equal(audioTrackMissing('microphone', platform), 'No microphone audio track was provided. Connect a microphone, then reconnect audio.')
+})
+
+test('a Windows loopback whose admission video track already ended starts, streams and stops without touching that track', async () => {
+  const f = fixture('system', { platform: 'win32', videoEnded: true }); await f.start()
+  for (let i = 0; i < 5; i++) f.frame(.02, 500)
+  assert.deepEqual(f.statuses, [{ message: 'Listening', failed: undefined }])
+  assert.equal(f.videoTrack.onended, null); assert.equal(f.videoTrack.onmute, null)
+  assert.ok(f.stats().writes > 0)
+  f.pipeline.stop()
+  assert.equal(f.track.stops, 1); assert.equal(f.videoTrack.readyState, 'ended')
+  assert.equal(f.stats().closes, 1); assert.equal(f.stats().watching, false)
+})
+
+test('Windows loopback pipelines report the Default Device hint while microphones and other platforms keep the generic silence copy', async () => {
+  const silence = async (platform?: PlatformId, channel: AudioChannel = 'system') => {
+    const f = fixture(channel, { platform }); await f.start()
+    f.frame(0); f.setTime(8_100); f.frame(0); f.tick()
+    f.pipeline.stop()
+    return f.statuses.at(-1)!.message
+  }
+  assert.match(await silence('win32'), /^Silent — Faangin hears the Windows Default Device\./)
+  assert.equal(await silence('win32', 'microphone'), 'Silent — check the source if speech is playing.', 'a silent Windows microphone is not a playback-device problem')
+  assert.equal(await silence('darwin'), 'Silent — check the source if speech is playing.')
+  assert.equal(await silence(), 'Silent — check the source if speech is playing.')
+  assert.equal(await silence('linux'), 'Silent — check the source if speech is playing.')
+  assert.equal(await silence('linux', 'microphone'), 'Silent — check the source if speech is playing.')
+})
+
+test('the default output identity is remembered only for the Windows loopback and only while the pipeline is open', async () => {
+  const speakers = { label: 'Default - Speakers (Realtek(R) Audio)', groupId: 'g-speakers' }
+  const devices = (output: OutputIdentity | null) => [
+    { kind: 'audioinput' as const, deviceId: 'default', label: 'Default - Microphone', groupId: 'g-mic' },
+    ...(output ? [{ kind: 'audiooutput' as const, deviceId: 'default', ...output }, { kind: 'audiooutput' as const, deviceId: 'communications', label: `Communications - ${output.label}`, groupId: output.groupId }] : [])
+  ]
+  assert.deepEqual(defaultOutput(devices(speakers)), speakers)
+  assert.equal(defaultOutput(devices(null)), null)
+  assert.equal(defaultOutputChanged(speakers, devices(speakers)), false)
+  assert.equal(defaultOutputChanged(speakers, devices({ label: 'Default - Headset (Jabra)', groupId: 'g-jabra' })), true)
+  assert.equal(defaultOutputChanged(speakers, devices({ label: '', groupId: 'g-jabra' })), true, 'a hidden label still exposes the group change')
+  assert.equal(defaultOutputChanged(speakers, devices(null)), false, 'a vanished default belongs to the ended-track restart path')
+  assert.equal(defaultOutputChanged(null, devices(speakers)), false)
+  const windows = fixture('system', { platform: 'win32', outputIdentity: speakers }); await windows.start()
+  assert.deepEqual(windows.pipeline.outputIdentity(), speakers)
+  windows.pipeline.stop(); assert.equal(windows.pipeline.outputIdentity(), null)
+  const mac = fixture('system', { platform: 'darwin', outputIdentity: null }); await mac.start()
+  assert.equal(mac.pipeline.outputIdentity(), null); assert.equal(fixture().pipeline.outputIdentity(), null)
+  mac.pipeline.stop()
 })
 
 test('hardware inventory changes only revoke the missing active microphone', async () => {

@@ -6,19 +6,13 @@ import WebSocket, { type ClientOptions } from 'ws'
 /**
  * Public keys (base64 SPKI DER) allowed to sign licenses: the current one first, the next one during a rotation.
  * TODO: paste the key that `node scripts/gen-license-key.mjs` prints on stderr ("PUBLIC KEY ...") for the
- * environment this build talks to. The private half goes to Secret Manager only (LICENSE_SIGNING_KEY).
+ * environment this build talks to. The private half goes to Supabase Edge secrets only (LICENSE_SIGNING_KEY).
  */
 export const LICENSE_PUBLIC_KEYS: readonly string[] = [
   'REPLACE_WITH_CURRENT_LICENSE_PUBLIC_KEY'
 ]
 
-export const IDENTITY_TOOLKIT_BASE = 'https://identitytoolkit.googleapis.com'
-export const SECURE_TOKEN_BASE = 'https://securetoken.googleapis.com'
-/** Auth emulator equivalents (pass as the `base` argument). */
-export const EMULATOR_IDENTITY_TOOLKIT_BASE = 'http://127.0.0.1:9099/identitytoolkit.googleapis.com'
-export const EMULATOR_SECURE_TOKEN_BASE = 'http://127.0.0.1:9099/securetoken.googleapis.com'
-
-/** Any non-2xx answer. `code` is the HttpsError status (e.g. FAILED_PRECONDITION) or the API's error code. */
+/** Any non-2xx answer. `code` is the HttpsError status (e.g. FAILED_PRECONDITION) or the account API's error code. */
 export class CloudError extends Error {
   constructor(readonly code: string, message: string, readonly status = 0) {
     super(message)
@@ -26,55 +20,60 @@ export class CloudError extends Error {
   }
 }
 
-type ErrorBody = { error?: string | { status?: string; code?: string | number; message?: string } }
+type ErrorBody = { error?: string | { status?: string; code?: string | number; message?: string }; code?: string; error_code?: string; error_description?: string; msg?: string; message?: string }
 
 async function request<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, init)
+  const timeout = AbortSignal.timeout(20_000)
+  const response = await fetch(url, { ...init, redirect: 'error', signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
   const text = await response.text()
   let body: unknown = null
   try { body = text ? JSON.parse(text) : null } catch { /* not JSON; handled below */ }
   if (response.ok) return body as T
   const error = (body as ErrorBody | null)?.error
-  if (typeof error === 'string') throw new CloudError(error, error, response.status)
-  throw new CloudError(error?.status ?? String(error?.code ?? `http_${response.status}`), error?.message ?? `HTTP ${response.status}`, response.status)
+  if (typeof error === 'string') throw new CloudError((body as ErrorBody).error_code ?? (body as ErrorBody).code ?? error, (body as ErrorBody).error_description ?? (body as ErrorBody).msg ?? error, response.status)
+  throw new CloudError(error?.status ?? String(error?.code ?? (body as ErrorBody | null)?.error_code ?? (body as ErrorBody | null)?.code ?? `http_${response.status}`), error?.message ?? (body as ErrorBody | null)?.msg ?? (body as ErrorBody | null)?.message ?? `HTTP ${response.status}`, response.status)
 }
 
-function postJson<T>(url: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
-  return request<T>(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) })
+function postJson<T>(url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<T> {
+  return request<T>(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal })
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 // Device sign-in (deviceCodeStart / deviceCodePoll are plain HTTP functions)
 
 export interface DeviceInfo { deviceId: string; deviceName: string }
-export interface DeviceSignInStart { deviceCode: string; userCode: string; verificationUrl: string; expiresIn: number; interval: number }
+export interface DeviceSignInStart { deviceCode: string; userCode: string; expiresIn: number; interval: number }
 export type DeviceSignInPoll =
   | { status: 'pending' }
-  | { status: 'approved'; customToken: string; uid: string }
+  | { status: 'approved'; tokenHash: string; uid: string }
   | { status: 'expired' }
 export type DeviceSignInResult = Exclude<DeviceSignInPoll, { status: 'pending' }> | { status: 'aborted' }
 
-/** Step 1: ask for a code. Show `userCode` (as ABCD-EFGH) and open `verificationUrl` in the browser. */
-export function startDeviceSignIn(functionsBase: string, device: DeviceInfo): Promise<DeviceSignInStart> {
-  return postJson(`${functionsBase}/deviceCodeStart`, device)
+/** Step 1: ask for a code. Show `userCode` (as ABCD-EFGH) in the main-owned local activation page. */
+export function startDeviceSignIn(functionsBase: string, device: DeviceInfo, publishableKey: string): Promise<DeviceSignInStart> {
+  return postJson(`${functionsBase}/deviceCodeStart`, device, { apikey: publishableKey })
 }
 
 /** One poll. */
-export function pollDeviceSignIn(functionsBase: string, deviceCode: string): Promise<DeviceSignInPoll> {
-  return postJson(`${functionsBase}/deviceCodePoll`, { deviceCode })
+export function pollDeviceSignIn(functionsBase: string, deviceCode: string, options: { signal?: AbortSignal; publishableKey?: string } = {}): Promise<DeviceSignInPoll> {
+  return postJson(`${functionsBase}/deviceCodePoll`, { deviceCode }, { ...(options.publishableKey ? { apikey: options.publishableKey } : {}) }, options.signal)
 }
 
 /** Polls every `interval` seconds until approved, expired (server says so or `expiresIn` passed) or `signal` aborts. */
 export async function waitForDeviceSignIn(
   functionsBase: string,
   start: Pick<DeviceSignInStart, 'deviceCode' | 'interval' | 'expiresIn'>,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; publishableKey?: string } = {}
 ): Promise<DeviceSignInResult> {
   const deadline = Date.now() + start.expiresIn * 1000
   for (;;) {
     if (options.signal?.aborted) return { status: 'aborted' }
     if (Date.now() >= deadline) return { status: 'expired' }
-    const poll = await pollDeviceSignIn(functionsBase, start.deviceCode)
+    let poll: DeviceSignInPoll
+    try { poll = await pollDeviceSignIn(functionsBase, start.deviceCode, options) } catch (error) {
+      if (options.signal?.aborted) return { status: 'aborted' }
+      throw error
+    }
     if (poll.status !== 'pending') return poll
     if (!(await sleep(start.interval * 1000, options.signal))) return { status: 'aborted' }
   }
@@ -91,50 +90,56 @@ function sleep(ms: number, signal?: AbortSignal): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Firebase Auth REST (no SDK in the main process)
+// Supabase Auth REST (no Auth SDK or credentials in the renderer)
 
-export interface AuthSession { uid: string; idToken: string; refreshToken: string; expiresAt: number }
+export interface AuthSession { uid: string; accessToken: string; refreshToken: string; expiresAt: number }
+interface SupabaseSession { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; expires_at?: unknown; user?: { id?: unknown } }
 
-function uidFromIdToken(idToken: string): string {
-  const payload = JSON.parse(Buffer.from(idToken.split('.')[1] ?? '', 'base64url').toString('utf8')) as { user_id?: string; sub?: string }
-  return payload.user_id ?? payload.sub ?? ''
+function authSession(body: SupabaseSession): AuthSession {
+  if (!body || typeof body.access_token !== 'string' || !body.access_token || typeof body.refresh_token !== 'string' || !body.refresh_token || typeof body.user?.id !== 'string' || !body.user.id) throw new CloudError('INVALID_RESPONSE', 'The account service returned an invalid session.')
+  const expiresAt = typeof body.expires_at === 'number' ? body.expires_at * 1000 : Date.now() + Number(body.expires_in) * 1000
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new CloudError('INVALID_RESPONSE', 'The account service returned an expired session.')
+  return { uid: body.user.id, accessToken: body.access_token, refreshToken: body.refresh_token, expiresAt }
 }
 
-/** Trades the custom token from device sign-in for an ID token + refresh token. Store the refresh token with safeStorage. */
-export async function exchangeCustomToken(apiKey: string, customToken: string, base = IDENTITY_TOOLKIT_BASE): Promise<AuthSession> {
-  const body = await postJson<{ idToken: string; refreshToken: string; expiresIn: string }>(
-    `${base}/v1/accounts:signInWithCustomToken?key=${encodeURIComponent(apiKey)}`,
-    { token: customToken, returnSecureToken: true }
-  )
-  return { uid: uidFromIdToken(body.idToken), idToken: body.idToken, refreshToken: body.refreshToken, expiresAt: Date.now() + Number(body.expiresIn) * 1000 }
+/** Exchanges the one-use device approval for a separate desktop session, then verifies its user online. */
+export async function exchangeDeviceToken(supabaseUrl: string, publishableKey: string, tokenHash: string, expectedUid: string): Promise<AuthSession> {
+  const session = authSession(await postJson<SupabaseSession>(`${supabaseUrl}/auth/v1/verify`, { token_hash: tokenHash, type: 'email' }, { apikey: publishableKey }))
+  const user = await request<{ id?: unknown }>(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publishableKey, authorization: `Bearer ${session.accessToken}` } })
+  if (session.uid !== expectedUid || user?.id !== expectedUid) throw new CloudError('UNAUTHENTICATED', 'The approved account did not match the desktop session.', 401)
+  return session
 }
 
-/** ID tokens last an hour; this gets a new one (and possibly a new refresh token, keep the returned one). */
-export async function refreshIdToken(apiKey: string, refreshToken: string, base = SECURE_TOKEN_BASE): Promise<AuthSession> {
-  const body = await request<{ id_token: string; refresh_token: string; expires_in: string; user_id: string }>(
-    `${base}/v1/token?key=${encodeURIComponent(apiKey)}`,
-    { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }).toString() }
-  )
-  return { uid: body.user_id || uidFromIdToken(body.id_token), idToken: body.id_token, refreshToken: body.refresh_token, expiresAt: Date.now() + Number(body.expires_in) * 1000 }
+/** Refresh tokens rotate. Persist the returned token atomically before dispatching another refresh. */
+export async function refreshAuthSession(supabaseUrl: string, publishableKey: string, refreshToken: string): Promise<AuthSession> {
+  return authSession(await postJson<SupabaseSession>(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, { refresh_token: refreshToken }, { apikey: publishableKey }))
 }
 
-/** Keeps a session fresh: `get()` is synchronous for proTransport; call `ensureFresh()` before a request or session. */
-export function idTokenSource(apiKey: string, session: AuthSession, options: { base?: string; onRefresh?: (session: AuthSession) => void } = {}) {
+/** Revokes this desktop session only; other browsers and Macs stay signed in. */
+export async function revokeAuthSession(supabaseUrl: string, publishableKey: string, accessToken: string): Promise<void> {
+  await postJson(`${supabaseUrl}/auth/v1/logout?scope=local`, {}, { apikey: publishableKey, authorization: `Bearer ${accessToken}` })
+}
+
+/** Keeps one main-process session fresh; the getter is synchronous for WebSocket admission. */
+export function accessTokenSource(supabaseUrl: string, publishableKey: string, session: AuthSession, options: { onRefresh?: (session: AuthSession) => void | Promise<void> } = {}) {
   let current = session
   let pending: Promise<AuthSession> | null = null
   const refresh = (): Promise<AuthSession> => {
-    pending ??= refreshIdToken(apiKey, current.refreshToken, options.base)
-      .then(next => { current = next; options.onRefresh?.(next); return next })
+    pending ??= refreshAuthSession(supabaseUrl, publishableKey, current.refreshToken)
+      .then(async next => {
+        if (next.uid !== current.uid) throw new CloudError('UNAUTHENTICATED', 'The refreshed account did not match this session.', 401)
+        await options.onRefresh?.(next); current = next; return next
+      })
       .finally(() => { pending = null })
     return pending
   }
   return {
-    get: () => current.idToken,
+    get: () => current.accessToken,
     session: () => current,
     refresh,
     ensureFresh: async (): Promise<string> => {
       if (current.expiresAt - Date.now() < 5 * 60_000) await refresh()
-      return current.idToken
+      return current.accessToken
     }
   }
 }
@@ -142,17 +147,17 @@ export function idTokenSource(apiKey: string, session: AuthSession, options: { b
 // ---------------------------------------------------------------------------------------------------------------
 // Callables
 
-/** onCall protocol: POST { data } with the ID token; returns `result` or throws CloudError with the HttpsError status. */
-export async function callFunction<T>(functionsBase: string, name: string, data: unknown, idToken: string): Promise<T> {
-  const body = await postJson<{ result?: T }>(`${functionsBase}/${name}`, { data }, { authorization: `Bearer ${idToken}` })
+/** Account Edge API: POST { data } with the access token and public apikey; unwraps result or throws a stable CloudError. */
+export async function callFunction<T>(functionsBase: string, name: string, data: unknown, accessToken: string, publishableKey: string): Promise<T> {
+  const body = await postJson<{ result?: T }>(`${functionsBase}/${name}`, { data }, { authorization: `Bearer ${accessToken}`, apikey: publishableKey })
   return body.result as T
 }
 
 export interface LicenseResponse { token: string; plan: 'byok' | 'pro'; status: string; expiresAt: number; graceUntil: number }
 
 /** issueLicense: FAILED_PRECONDITION when nothing is bought, RESOURCE_EXHAUSTED when a new device is over the cap. */
-export function fetchLicense(functionsBase: string, idToken: string, device: DeviceInfo): Promise<LicenseResponse> {
-  return callFunction<LicenseResponse>(functionsBase, 'issueLicense', device, idToken)
+export function fetchLicense(functionsBase: string, accessToken: string, device: DeviceInfo, publishableKey: string): Promise<LicenseResponse> {
+  return callFunction<LicenseResponse>(functionsBase, 'issueLicense', device, accessToken, publishableKey)
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -183,7 +188,13 @@ export function verifyLicense(token: string, publicKeyBase64: string, nowMs = Da
     const key = createPublicKey({ key: Buffer.from(publicKeyBase64, 'base64'), format: 'der', type: 'spki' })
     if (!verifySignature(null, payloadBytes, key, Buffer.from(parts[2], 'base64url'))) return null
     const payload = JSON.parse(payloadBytes.toString('utf8')) as LicensePayload
-    if (payload.v !== 1 || typeof payload.uid !== 'string' || typeof payload.exp !== 'number' || typeof payload.grace !== 'number') return null
+    if (payload.v !== 1 || typeof payload.uid !== 'string' || !payload.uid || (payload.plan !== 'byok' && payload.plan !== 'pro')) return null
+    if (payload.status !== 'active' && payload.status !== 'past_due') return null
+    if (typeof payload.deviceId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(payload.deviceId)) return null
+    if (![nowMs, payload.iat, payload.exp, payload.grace].every(value => typeof value === 'number' && Number.isFinite(value))) return null
+    if (payload.iat > nowMs + 5 * 60_000 || payload.exp <= payload.iat || payload.grace < payload.exp) return null
+    if ([payload.periodEnd, payload.rampUntil].some(value => value !== undefined && (typeof value !== 'number' || !Number.isFinite(value)))) return null
+    if (payload.cancelAtPeriodEnd !== undefined && typeof payload.cancelAtPeriodEnd !== 'boolean') return null
     if (nowMs >= payload.grace) return null
     return { ...payload, inGrace: nowMs >= payload.exp }
   } catch {
@@ -201,7 +212,7 @@ export function verifyLicenseWithKeys(token: string, nowMs = Date.now(), keys: r
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Pro transport: the app keeps calling api.openai.com; this sends those calls to the gateway with the Firebase ID token.
+// Pro transport: the app keeps calling api.openai.com; this sends those calls to the gateway with the Supabase access token.
 
 const OPENAI_HTTP = 'https://api.openai.com'
 const OPENAI_WS = 'wss://api.openai.com'
@@ -221,25 +232,31 @@ export interface InferenceTransport {
 }
 
 /**
- * `getIdToken` must be synchronous (WebSockets open synchronously): use `idTokenSource(...).get` and call
+ * `getAccessToken` must be synchronous (WebSockets open synchronously): use `accessTokenSource(...).get` and call
  * `ensureFresh()` before starting an answer or a live session. Non-OpenAI URLs pass through untouched.
  */
-export function proTransport(getIdToken: () => string, gatewayBase: string): InferenceTransport {
+export function proTransport(getAccessToken: () => string, gatewayBase: string, publishableKey?: string): InferenceTransport {
   return {
     fetch: (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const target = rewriteOpenAiUrl(url, gatewayBase)
       if (target === url) return globalThis.fetch(input, init)
       const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-      headers.set('authorization', `Bearer ${getIdToken()}`)
-      return globalThis.fetch(target, { ...init, headers })
+      headers.set('authorization', `Bearer ${getAccessToken()}`)
+      if (publishableKey) headers.set('apikey', publishableKey)
+      // Request inputs carry their method, stream, signal and options on the object, not in `init`.
+      // Rebuild it against the gateway before applying overrides so a POST never becomes an empty GET.
+      return input instanceof Request
+        ? globalThis.fetch(new Request(target, input), { ...init, headers, redirect: 'error' })
+        : globalThis.fetch(target, { ...init, headers, redirect: 'error' })
     },
     createWebSocket: (url, options) => {
       const target = rewriteOpenAiUrl(url, gatewayBase)
       if (target === url) return new WebSocket(url, options)
       const headers: Record<string, string> = {}
-      for (const [name, value] of Object.entries(options.headers ?? {})) if (name.toLowerCase() !== 'authorization') headers[name] = value
-      headers.Authorization = `Bearer ${getIdToken()}`
+      for (const [name, value] of Object.entries(options.headers ?? {})) if (name.toLowerCase() !== 'authorization' && (!publishableKey || name.toLowerCase() !== 'apikey')) headers[name] = value
+      headers.Authorization = `Bearer ${getAccessToken()}`
+      if (publishableKey) headers.apikey = publishableKey
       return new WebSocket(target, { ...options, headers })
     }
   }

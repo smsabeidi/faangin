@@ -174,7 +174,7 @@ test('evaluation retains strict decoder failures but continues independent varia
     assert.deepEqual(report.trials[0].error, { code: 'invalid_interview_response', transportCode: 'malformed_response' })
     assert.equal(report.trials[1].answer, 'Keep the explicit no-retry policy.')
     assert.ok(!readFileSync(reportPath, 'utf8').includes('synthetic-never-sent'))
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })
 
 test('evaluation collects a current framing failure and later cases but still aborts access or transport failures', async () => {
@@ -199,7 +199,7 @@ test('evaluation collects a current framing failure and later cases but still ab
     await assert.rejects(runLiveEvaluation({ baseline: compilePrompt, apiKey: 'synthetic-never-sent', model: 'gpt-6-luna', reportPath, fixtures: [fixture, next], generate: async () => { failedCalls++; throw Object.assign(new Error('Synthetic transport failure'), { code: 'quota_exhausted' }) } }), { code: 'quota_exhausted' })
     assert.equal(failedCalls, 1)
     assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).complete, false)
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })
 
 

@@ -9,6 +9,7 @@ function errorMessage(error: unknown): string {
 export function useBilling() {
   const [summary, setSummary] = useState<BillingSummary | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pendingActions, setPendingActions] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -19,11 +20,13 @@ export function useBilling() {
 
   const act = useCallback(async (call: () => Promise<BillingSummary>) => {
     setActionError(null)
+    setPendingActions(count => count + 1)
     try { setSummary(await call()) } catch (error) { setActionError(errorMessage(error)) }
+    finally { setPendingActions(count => count - 1) }
   }, [])
 
   return {
-    summary,
+    summary: summary ? { ...summary, busy: summary.busy || pendingActions > 0 } : null,
     actionError,
     signIn: () => act(() => window.faangin.billingSignIn()),
     cancelSignIn: () => act(() => window.faangin.billingCancelSignIn()),

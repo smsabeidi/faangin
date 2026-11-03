@@ -9,6 +9,7 @@ class Window implements OverlayWindowPort {
   visible = false
   focused = false
   focusable = true
+  skipTaskbar: boolean | null = null
   ignoresMouse = false
   blurCalls = 0
   focusCalls = 0
@@ -18,8 +19,9 @@ class Window implements OverlayWindowPort {
   isDestroyed() { return this.destroyed }
   isFocused() { return this.focused }
   setIgnoreMouseEvents(value: boolean, ...options: unknown[]) { this.ignoresMouse = value; this.forwarded.push(...options) }
-  // Model Electron's macOS behavior: this does not remove existing focus.
-  setFocusable(value: boolean) { this.focusable = value }
+  // Model Electron: macOS does not remove existing focus here, and Windows couples the call to SetSkipTaskbar(!focusable).
+  setFocusable(value: boolean) { this.focusable = value; this.skipTaskbar = !value }
+  setSkipTaskbar(value: boolean) { this.skipTaskbar = value }
   blur() { this.focused = false; this.blurCalls++ }
   showInactive() { this.visible = true; this.inactiveShows++ }
   show() { this.visible = true; this.activeShows++; if (this.focusable) this.focused = true }
@@ -35,6 +37,15 @@ test('a new overlay accepts mouse input without requesting keyboard focus during
   assert.deepEqual(window.forwarded, [])
   assert.equal(window.visible, true); assert.equal(window.focused, false)
   assert.equal(window.activeShows + window.focusCalls, 0)
+})
+
+test('every native mode change re-asserts the hidden taskbar button that Windows couples to focusability', () => {
+  const policy = new OverlayInteractionPolicy(), window = new Window()
+  policy.attach(window)
+  assert.equal(window.skipTaskbar, true)
+  policy.setPassive(true); assert.equal(window.skipTaskbar, true)
+  policy.setPassive(false); assert.equal(window.skipTaskbar, true)
+  policy.showOutput(); assert.equal(window.skipTaskbar, true)
 })
 
 test('enabling click-through on a focused interactive overlay relinquishes existing macOS key focus', () => {

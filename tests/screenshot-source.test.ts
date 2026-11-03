@@ -86,6 +86,24 @@ test('verified display metadata is copied so later display changes cannot alter 
   assert.deepEqual(before[0], display())
 })
 
+test('Windows-shaped sources resolve by the numeric display_id Electron maps from the monitor, at any DPI scale', () => {
+  // Electron on Windows names screens `screen:<index>:0`, reports display_id as the display::win id and windows as `window:<HWND>:0`.
+  const laptop = display('2528732444', { width: 1536, height: 864, scaleFactor: 1.25 }), external = display('1234567890', { width: 2560, height: 1440, scaleFactor: 1.5 })
+  const screens = [source('screen:0:0', '2528732444'), source('screen:1:0', '1234567890')], windowsDisplays = [laptop, external]
+  const primary = resolveScreenshotSource(screens, undefined, '2528732444', owned, windowsDisplays, windowsDisplays)
+  assert.strictEqual(primary.source, screens[0]); assert.deepEqual(primary.display, laptop)
+  const chosen = resolveScreenshotSource(screens, 'screen:1:0', '2528732444', owned, windowsDisplays, windowsDisplays)
+  assert.strictEqual(chosen.source, screens[1]); assert.deepEqual(chosen.display, external)
+  const hwnd = source('window:131726:0', '')
+  assert.deepEqual(resolveScreenshotSource([...screens, hwnd], hwnd.id, '2528732444', owned, windowsDisplays, windowsDisplays), { source: hwnd })
+  // A duplicated or remote display leaves display_id empty; the default and explicit paths both refuse to guess which monitor it is.
+  const duplicated = source('screen:0:0', '')
+  assert.throws(() => resolveScreenshotSource([duplicated, screens[1]], undefined, '2528732444', owned, windowsDisplays, windowsDisplays), /unavailable/)
+  assert.throws(() => resolveScreenshotSource([duplicated], duplicated.id, '2528732444', owned, windowsDisplays, windowsDisplays), /cannot be verified/)
+  // Only the DIP bounds and scale are compared, so physical-pixel thumbnails on a mixed-DPI desktop need no conversion.
+  assert.throws(() => resolveScreenshotSource(screens, 'screen:1:0', '2528732444', owned, windowsDisplays, [laptop, display('1234567890', { width: 2560, height: 1440, scaleFactor: 1 })]), /changed during capture/)
+})
+
 test('window capture does not infer scale from a display ID or demand stable display metrics', () => {
   const foreignWindow = source('window:other:0')
   const result = resolveScreenshotSource([foreignWindow], foreignWindow.id, '1', owned, displays, [display('1', { scaleFactor: 1 })])

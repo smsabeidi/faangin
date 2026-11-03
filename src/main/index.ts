@@ -2,7 +2,7 @@ import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, M
 import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { open, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Repository } from './repository'
 import { AttachmentSelection } from './attachment-selection'
@@ -13,17 +13,19 @@ import { compilePrompt } from './prompts'
 import * as validate from './validation'
 import { CaptureFence } from '../capture/fence'
 import { createLiveTranscriber, generateAnswer, generateCompiledAnswer, verifyConfiguredModels } from './inference'
+import { createManagedTranscriber } from './managed-transcriber'
 import { waitForSurface } from './surface-ready'
 import { validateMicrophoneInventory } from './microphone-inventory'
 import { sessionMarkdown } from './session-export'
 import { PresetCatalog } from './presets'
 import { durablePresetSnapshot } from './preset-persistence'
-import { memoryCandidates, selectMemoryCandidates, editMemorySnippet, resolveMemorySnippets, type MemorySnippet } from './context-memory'
+import { memoryCandidates, editMemorySnippet, resolveMemorySnippets, type MemorySnippet } from './context-memory'
 import { prepareMemorySelection } from './memory-selection'
 import { WindowStateManager, jsonWindowStateStore, type WindowBounds, type WindowLayout } from './window-state'
 import { constrainOverlayBounds, defaultOverlayBounds, overlayExpandedHeight, overlaySizeLimits, OVERLAY_LAYOUT } from './overlay-layout'
 import { createLicensing, type LicenseService } from './licensing'
-import { ShortcutManager, applyStartupShortcutBindings, resolveShortcutBindings, SHORTCUT_ACTIONS, type ShortcutBinding } from './shortcut-manager'
+import { accountAllowsInference, accountHasPro, requireAccountInference } from '../shared/account-access'
+import { ShortcutManager, applyStartupShortcutBindings, resolveShortcutBindings, SHORTCUT_ACTIONS } from './shortcut-manager'
 import { MacDockPolicy, OverlayInteractionPolicy } from './native-policy'
 import { CapturePolicy } from './capture-policy'
 import { CaptureLifecycle, type CaptureLease } from './capture-lifecycle'
@@ -35,8 +37,8 @@ import { answerReasoning } from './model-capabilities'
 import { interruptionReason, shouldInterruptInterviewAnswer, shortcutGenerationInput, waitForInterruptedRequests, type InterviewInterruption } from './interview-interruptions'
 import { ManualPreparationFence } from './manual-preparation'
 import { CaptureSolveCoordinator, CaptureSolveImages, captureSolveConnectionIdentity } from './capture-solve'
-import { capturePermissionRequestAllowed, capturePermissionCheckAllowed } from './capture-permissions'
-import { requestSetupPermission, type SetupPermission } from './permission-setup'
+import { capturePermissionRequestAllowed, capturePermissionCheckAllowed, displayMediaResponse } from './capture-permissions'
+import { requestSetupPermission } from './permission-setup'
 import { AccessSetupCoordinator, ACCESS_SETUP_MESSAGE, checkSystemAudioReadiness, setupAudioPermissionAllowed, setupAudioPermissionCheckAllowed, type SystemAudioReadinessResult } from './access-setup'
 import { assertSystemAudioConsent, systemAudioConsented, systemAudioConsentReceipt } from './system-audio-consent'
 import { probeNativeSystemAudio } from './native-audio-probe'
@@ -45,14 +47,18 @@ import { normalizeCompatibleChatEndpoint, validateCompatibleChatConfiguration, g
 import { release, tmpdir } from 'node:os'
 import type { AccessPermissionKind, AccessSetupState, Action, Answer, AppEvent, AppState, Attachment, AudioChannel, CaptureCommand, MicrophoneDevice, Session, Settings, TranscriptTurn, WindowKind } from '../shared/types'
 import { DEFAULT_SETTINGS } from '../shared/types'
+import { platform } from './platform'
+import trayIconPath from '../../resources/icon.png?asset'
 
 const mainDirectory = __dirname
+// Every renderer bundle a window may load lives here; local file requests outside it are refused.
+const rendererRoot = resolve(mainDirectory, '../renderer')
 const smoke = process.env.FAANGIN_SMOKE === '1'
 const smokeVisible = smoke && process.env.FAANGIN_QA_VISIBLE === '1'
 const liveFixture = smoke && !!process.env.FAANGIN_USER_DATA_DIR && process.env.FAANGIN_SMOKE_LIVE_FIXTURE === '1'
 const screenshotFixture = liveFixture && process.env.FAANGIN_SMOKE_CAPTURE_FIXTURE === '1'
 const fixtureDataPath = process.env.FAANGIN_USER_DATA_DIR ? resolve(process.env.FAANGIN_USER_DATA_DIR) : ''
-const ownedAccessFixture = smoke && !!fixtureDataPath && (/^\/private\/tmp\/faangin-/.test(fixtureDataPath) || /^\/tmp\/faangin-/.test(fixtureDataPath) || fixtureDataPath.startsWith(resolve(tmpdir()) + '/faangin-'))
+const ownedAccessFixture = smoke && !!fixtureDataPath && (/^\/private\/tmp\/faangin-/.test(fixtureDataPath) || /^\/tmp\/faangin-/.test(fixtureDataPath) || !!pathWithin(resolve(tmpdir()), fixtureDataPath)?.startsWith('faangin-'))
 const accessFixtureMode = ownedAccessFixture ? (process.env.FAANGIN_SMOKE_ACCESS_FIXTURE || (process.env.FAANGIN_SMOKE_ACCESS_READY === '1' ? 'ready' : '')) : ''
 const accessFixtureEnabled = accessFixtureMode === 'required' || accessFixtureMode === 'ready'
 const fixtureOSGranted = accessFixtureEnabled && (accessFixtureMode === 'ready' || process.env.FAANGIN_SMOKE_ACCESS_OS_GRANTED === '1')
@@ -61,6 +67,7 @@ let accessFixtureProbeResult = 'success'
 const accessTelemetry = { gateBlocks: 0, statusChecks: 0, permissionRequests: 0, systemAudioChecks: 0, backgroundAudioChecks: 0, allTracksStopped: true, activeProbeTracks: 0, probeTracksStarted: 0, probeTracksStopped: 0, captureStarts: 0, generationStarts: 0, screenCaptures: 0, cloudRequests: 0 }
 if (process.env.FAANGIN_USER_DATA_DIR && smoke) app.setPath('userData', resolve(process.env.FAANGIN_USER_DATA_DIR))
 app.setName('Faangin')
+if (platform.appUserModelId) app.setAppUserModelId(platform.appUserModelId)
 app.enableSandbox()
 let repo: Repository, settings: Settings, workspace: BrowserWindow | null = null, overlay: BrowserWindow | null = null, captureWindow: BrowserWindow | null = null, documentWindow: BrowserWindow | null = null, tray: Tray | null = null
 let currentSessionId: string | null = null, quitting = false, captureGeneration = 0
@@ -83,11 +90,11 @@ let accessRequestPending = false
 let systemAudioConsent = false
 const overlayInteraction = new OverlayInteractionPolicy()
 const dockPolicy = new MacDockPolicy({
-  platform: process.platform,
+  platform: platform.id,
   setActivationPolicy: policy => app.setActivationPolicy(policy),
   hide: () => app.dock!.hide(),
   show: () => app.dock!.show(),
-  onError: error => emit({ type: 'error', message: `Dock visibility could not be changed: ${safeError(error)}. The Faangin menu bar menu remains available.` })
+  onError: error => emit({ type: 'error', message: `Dock visibility could not be changed: ${safeError(error)}. The Faangin ${platform.recoveryMenuName.toLowerCase()} menu remains available.` })
 })
 const shortcutManager = new ShortcutManager(smoke ? { register: () => true, unregister() {} } : globalShortcut, shortcutAction)
 const capturePolicy = new CapturePolicy({ idleTimeoutMs: 0 })
@@ -124,9 +131,31 @@ let capturePermissionProbe: CapturePermissionProbe | null = null
 const revokedChannels = new Set<AudioChannel>()
 const capturesPerSecond = new Map<AudioChannel, { at: number; bytes: number }>()
 let accessibility: AppState['accessibility'] = { reduceTransparency: false, reduceMotion: false, increaseContrast: false }
-let accessibilitySubscription: number | null = null
+let accessibilityUnsubscribe: (() => void) | null = null
 let appearanceRefresh: NodeJS.Immediate | null = null
 function userDataFile(name: string): string { return join(app.getPath('userData'), name) }
+/** Containment via node:path: a string prefix test misses Windows separators, drive-letter case and `..` escapes. */
+function pathWithin(root: string, path: string): string | null {
+  const inside = relative(root, path)
+  return inside && !isAbsolute(inside) && inside !== '..' && !inside.startsWith(`..${sep}`) ? inside : null
+}
+async function writeSecretFile(path: string, data: Buffer): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`
+  try {
+    // The modes are POSIX hardening; Windows ignores them and the profile ACL already restricts %APPDATA%.
+    await writeFile(temporary, data, { mode: 0o600 })
+    // Windows antivirus and search indexers briefly hold a freshly written file, failing the rename with EPERM or EBUSY.
+    for (let attempt = 1; ; attempt++) {
+      try { await rename(temporary, path); break }
+      catch (error) {
+        if (!['EPERM', 'EBUSY', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+        if (attempt === 5) throw new Error('The key file is in use by another program. Close it and try again.')
+        await new Promise(resolve => setTimeout(resolve, 50 * attempt))
+      }
+    }
+    chmodSync(path, 0o600)
+  } finally { await unlink(temporary).catch(() => {}) }
+}
 async function readBounded(path: string, limit: number): Promise<Buffer> {
   const file = await open(path, 'r')
   try {
@@ -141,8 +170,13 @@ async function readBounded(path: string, limit: number): Promise<Buffer> {
 function safeError(error: unknown): string {
   return (error instanceof Error ? error.message : 'The operation failed.').replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]').slice(0, 1000)
 }
+function exportFileName(title: string, extension: string): string {
+  // Windows rejects reserved device names (CON, NUL, COM1…) and names ending in a dot or space, whatever the extension.
+  const stem = title.replace(/[^\w .-]/g, '_').replace(/[ .]+$/, '') || 'session'
+  return `${/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem) ? `${stem}_` : stem}.${extension}`
+}
 function requireKey(): string {
-  if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. Unlock your keychain and restart Faangin.')
+  if (!platform.credentialEncryptionAvailable(safeStorage)) throw new Error(platform.credentialUnavailableMessage('read'))
   const path = userDataFile('openai.key.enc')
   if (!existsSync(path)) throw new Error('Enter your replacement OpenAI API key in Settings first.')
   try { return safeStorage.decryptString(readFileSync(path)) } catch { throw new Error('The saved key could not be decrypted. Replace it in Settings.') }
@@ -151,7 +185,7 @@ function keyConfigured(): boolean { return existsSync(userDataFile('openai.key.e
 function compatibleCredential(endpoint: string): CompatibleChatCredential | undefined {
   const path = userDataFile('compatible-chat.key.enc')
   if (!existsSync(path)) return undefined
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Unlock OS credential storage before using the configured chat key.')
+  if (!platform.credentialEncryptionAvailable(safeStorage)) throw new Error('Unlock OS credential storage before using the configured chat key.')
   try {
     const value = JSON.parse(safeStorage.decryptString(readFileSync(path))) as CompatibleChatCredential
     if (value.endpoint !== endpoint) throw new Error('destination-changed')
@@ -160,7 +194,9 @@ function compatibleCredential(endpoint: string): CompatibleChatCredential | unde
   } catch { throw new Error('The compatible chat key is unavailable or belongs to another endpoint. Replace or remove it in Settings; your OpenAI key is never reused.') }
 }
 function compatibleKeyConfigured(): boolean { try { return !!settings.compatibleChatEndpoint && !!compatibleCredential(settings.compatibleChatEndpoint) } catch { return false } }
-function chatConfigured(): boolean { return settings.chatProvider === 'openai' ? keyConfigured() : !!settings.compatibleChatEndpoint && !!(settings.smartMode ? settings.compatibleChatSmartModel : settings.compatibleChatModel) }
+function proConfigured(): boolean { return accountHasPro(licensing?.summary().state) }
+function transcriptionConfigured(): boolean { return accountAllowsInference(licensing?.summary().state) && (proConfigured() || keyConfigured()) }
+function chatConfigured(): boolean { return accountAllowsInference(licensing?.summary().state) && (settings.chatProvider === 'openai' ? proConfigured() || keyConfigured() : !!settings.compatibleChatEndpoint && !!(settings.smartMode ? settings.compatibleChatSmartModel : settings.compatibleChatModel)) }
 function fullSession(id: string, includeDeleted = false): Session {
   const stored = repo.get(id, includeDeleted)
   const active = new Map([...requests.values()].filter(request => request.sessionId === id && request.epoch === stored.contextEpoch).map(request => [request.answer.id, request.answer]))
@@ -168,7 +204,7 @@ function fullSession(id: string, includeDeleted = false): Session {
 }
 function permissions(): AppState['permissions'] {
   if (accessFixtureEnabled) return { platform: process.platform, ...accessFixturePermissions }
-  return { platform: process.platform, microphone: process.platform === 'darwin' || process.platform === 'win32' ? systemPreferences.getMediaAccessStatus('microphone') : 'unknown', screen: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'unknown' }
+  return { platform: process.platform, microphone: platform.permissionStatus('microphone', systemPreferences), screen: platform.permissionStatus('screen', systemPreferences) }
 }
 function accessSetupState(): AccessSetupState { return accessSetup.snapshot(permissions()) }
 function accessSetupBlocked(): boolean {
@@ -197,13 +233,13 @@ function refreshAccessReadiness(): AccessSetupState {
 }
 async function openPermissionSettings(kind: AccessPermissionKind): Promise<void> {
   if (accessFixtureEnabled) return
-  if (process.platform === 'darwin') await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${kind === 'microphone' ? 'Privacy_Microphone' : 'Privacy_ScreenCapture'}`)
-  else if (process.platform === 'win32') await shell.openExternal(kind === 'microphone' ? 'ms-settings:privacy-microphone' : 'ms-settings:privacy')
-  else throw new Error('Open your desktop system settings to configure capture permissions.')
+  const url = platform.permissionSettingsUrl(kind)
+  if (!url) throw new Error('Your system has no settings page for this permission.')
+  await shell.openExternal(url)
 }
 async function requestComputerAudioAccess(background = false): Promise<void> {
   if (capturePolicy.state().phase !== 'idle' || captureState.active) throw new Error('Stop listening before checking computer audio access.')
-  if (process.platform === 'darwin' && permissions().screen !== 'granted') throw new Error('Allow screen access first, then check computer audio.')
+  if (platform.screenAccessGatesSystemAudio && permissions().screen !== 'granted') throw new Error('Allow screen access first, then check computer audio.')
   accessSetup.beginAudioCheck(); accessTelemetry.systemAudioChecks++; if (background) accessTelemetry.backgroundAudioChecks++; emitState()
   let result: SystemAudioReadinessResult
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -225,9 +261,9 @@ async function requestComputerAudioAccess(background = false): Promise<void> {
     accessTelemetry.allTracksStopped = result?.allTracksStopped === true
     const success = result?.verified === true && result?.allTracksStopped === true
     const denied = result.error === 'NotAllowedError' || result.error === 'PermissionDeniedError'
-    const issue = success ? undefined : denied ? 'Computer audio access was not allowed. Enable Faangin in Screen & System Audio Recording, then retry the access check.' : 'Computer audio could not be verified. Check your output device and system permissions, then retry the access check.'
+    const issue = success ? undefined : platform.systemAudioUnavailableMessage(denied)
     accessSetup.finishAudioCheck(success, issue, denied)
-    if (!success) { if (denied && !background) await openPermissionSettings('system-audio'); throw new Error(issue) }
+    if (!success) { if (denied && !background && platform.screenAccessGatesSystemAudio) await openPermissionSettings('system-audio'); throw new Error(issue) }
   } catch (error) {
     if (accessSetupState().checking) accessSetup.finishAudioCheck(false, 'Computer audio access could not be checked. Retry after checking system settings.')
     throw error
@@ -239,7 +275,7 @@ async function requestComputerAudioAccess(background = false): Promise<void> {
   }
 }
 function state(kind: WindowKind = 'workspace'): AppState {
-  return { settings, accessSetup: accessSetupState(), systemAudioConsented: systemAudioConsent, accessibility: { ...accessibility }, keyConfigured: keyConfigured(), chatConfigured: chatConfigured(), compatibleKeyConfigured: compatibleKeyConfigured(), overlayClickThrough: overlayInteraction.passive, captureSolve: captureSolve.state(), permissions: permissions(), sessions: repo.list(), currentSession: currentSessionId ? fullSession(currentSessionId) : null, version: app.getVersion(), windowKind: kind, capture: { ...captureState }, liveSuggestions: liveSuggestionStatus(), shortcuts, presets: presetCatalog.snapshot(), storageWarnings: [...repo.diagnostics().issueCodes, ...(presetRecoveryRequired ? ['preset-recovery-required'] : [])] }
+  return { settings, accessSetup: accessSetupState(), systemAudioConsented: systemAudioConsent, accessibility: { ...accessibility }, keyConfigured: keyConfigured(), transcriptionConfigured: transcriptionConfigured(), proConfigured: proConfigured(), billing: licensing?.summary(), chatConfigured: chatConfigured(), compatibleKeyConfigured: compatibleKeyConfigured(), overlayClickThrough: overlayInteraction.passive, captureSolve: captureSolve.state(), permissions: permissions(), sessions: repo.list(), currentSession: currentSessionId ? fullSession(currentSessionId) : null, version: app.getVersion(), windowKind: kind, capture: { ...captureState }, liveSuggestions: liveSuggestionStatus(), shortcuts, presets: presetCatalog.snapshot(), storageWarnings: [...repo.diagnostics().issueCodes, ...(presetRecoveryRequired ? ['preset-recovery-required'] : [])] }
 }
 function savePresetCatalog(next: PresetCatalog): void {
   const snapshot = durablePresetSnapshot(next.snapshot(), savedPresetSnapshot, id => {
@@ -269,14 +305,10 @@ function clearSessionAux(id: string): void {
 }
 function uiWindows(): BrowserWindow[] { return [workspace, overlay].filter((window): window is BrowserWindow => !!window && !window.isDestroyed()) }
 function windowBackground(isOverlay: boolean): string {
-  if (!accessibility.reduceTransparency && (isOverlay || process.platform === 'darwin')) return '#00000000'
-  return nativeTheme.shouldUseDarkColors ? '#111111' : '#f5f5f7'
+  return platform.windowBackground({ isOverlay, reduceTransparency: accessibility.reduceTransparency, dark: nativeTheme.shouldUseDarkColors })
 }
 function applyWindowAppearance(window: BrowserWindow, isOverlay: boolean): void {
-  window.setBackgroundColor(windowBackground(isOverlay))
-  // Native HUD material can obscure apps beneath the transparent overlay.
-  // The overlay uses its renderer tint; the workspace retains macOS vibrancy.
-  if (process.platform === 'darwin') window.setVibrancy(isOverlay || accessibility.reduceTransparency ? null : 'window')
+  platform.applyWindowMaterial(window, { isOverlay, reduceTransparency: accessibility.reduceTransparency, dark: nativeTheme.shouldUseDarkColors })
   // Keep text and controls fully legible; the renderer applies user opacity to the background.
   if (isOverlay) window.setOpacity(1)
 }
@@ -297,12 +329,12 @@ function setupAppearance(): void {
   nativeTheme.themeSource = settings.theme
   refreshAppearance()
   nativeTheme.on('updated', scheduleAppearanceRefresh)
-  if (process.platform === 'darwin') accessibilitySubscription = systemPreferences.subscribeWorkspaceNotification('NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification', scheduleAppearanceRefresh)
+  accessibilityUnsubscribe = platform.subscribeAccessibilityChanges(systemPreferences, scheduleAppearanceRefresh)
 }
 function disposeAppearance(): void {
   nativeTheme.off('updated', scheduleAppearanceRefresh)
   if (appearanceRefresh) { clearImmediate(appearanceRefresh); appearanceRefresh = null }
-  if (accessibilitySubscription !== null) { systemPreferences.unsubscribeWorkspaceNotification(accessibilitySubscription); accessibilitySubscription = null }
+  accessibilityUnsubscribe?.(); accessibilityUnsubscribe = null
 }
 function sendUI(window: BrowserWindow, event: AppEvent): void { try { if (!window.webContents.isDestroyed()) window.webContents.send('faangin:event', event) } catch {} }
 function recordDiagnosticError(error: unknown): void {
@@ -318,10 +350,15 @@ function sendCapture(command: CaptureCommand): void { try { if (captureWindow &&
 function emitCapture(): void { emit({ type: 'capture-status', ...captureState }) }
 function rendererURL(surface: string, kind?: WindowKind): string {
   if (process.env.ELECTRON_RENDERER_URL) { const url = new URL(`${surface}.html`, process.env.ELECTRON_RENDERER_URL.endsWith('/') ? process.env.ELECTRON_RENDERER_URL : `${process.env.ELECTRON_RENDERER_URL}/`); if (kind) url.searchParams.set('window', kind); return url.href }
-  const url = pathToFileURL(join(mainDirectory, `../renderer/${surface}.html`)); if (kind) url.searchParams.set('window', kind); return url.href
+  const url = pathToFileURL(join(rendererRoot, `${surface}.html`)); if (kind) url.searchParams.set('window', kind); return url.href
 }
 function isLocalURL(value: string, surface: string): boolean {
-  try { const expected = new URL(rendererURL(surface)), actual = new URL(value); return actual.protocol === expected.protocol && actual.host === expected.host && actual.pathname === expected.pathname } catch { return false }
+  try {
+    const expected = new URL(rendererURL(surface)), actual = new URL(value)
+    // Chromium canonicalizes Windows drive letters to upper case while pathToFileURL keeps the launch spelling; compare paths, not strings.
+    if (expected.protocol === 'file:') return actual.protocol === 'file:' && relative(fileURLToPath(expected), fileURLToPath(actual)) === ''
+    return actual.protocol === expected.protocol && actual.host === expected.host && actual.pathname === expected.pathname
+  } catch { return false }
 }
 function validSender(event: IpcMainInvokeEvent | IpcMainEvent, kind: 'ui' | 'capture' | 'document'): void {
   const window = BrowserWindow.fromWebContents(event.sender)
@@ -355,7 +392,8 @@ function secureSession(target: ElectronSession, kind: 'ui' | 'capture' | 'docume
   target.setDevicePermissionHandler(() => false)
   target.webRequest.onBeforeRequest((details, callback) => {
     const url = new URL(details.url)
-    if (url.protocol === 'file:') { const path = fileURLToPath(url); callback({ cancel: !path.startsWith(resolve(mainDirectory, '../renderer') + '/') }); return }
+    // fileURLToPath throws for file URLs Node cannot map to a path (no drive letter on Windows, encoded separators anywhere); those are outside the renderer root too.
+    if (url.protocol === 'file:') { let inside = false; try { inside = !!pathWithin(rendererRoot, fileURLToPath(url)) } catch {} callback({ cancel: !inside }); return }
     if (process.env.ELECTRON_RENDERER_URL && new URL(process.env.ELECTRON_RENDERER_URL).origin === url.origin && (url.protocol === 'http:' || url.protocol === 'ws:')) { callback({}); return }
     callback({ cancel: true })
   })
@@ -368,9 +406,7 @@ function secureSession(target: ElectronSession, kind: 'ui' | 'capture' | 'docume
       const setupCurrent = () => !!setupLease && accessSetupLease === setupLease && setupLease.expiresAt > Date.now() && !!setupContents && !setupContents.isDestroyed() && accessSetupWindow?.webContents === setupContents && setupLease.contents === setupContents && request.frame === setupContents.mainFrame && isLocalURL(request.frame.url, 'capture')
       if (setupCurrent()) {
         const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 }, fetchWindowIcons: false })
-        const source = sources.find(item => item.display_id === String(screen.getPrimaryDisplay().id))
-        if (!source || !setupCurrent()) { respond({}); return }
-        respond({ video: source, audio: 'loopback' }); return
+        respond(displayMediaResponse(sources, String(screen.getPrimaryDisplay().id), platform.id, setupCurrent())); return
       }
       const generation = captureGeneration, sessionId = capturePolicy.state().sessionId, contents = captureWindow?.webContents
       const current = () => !!contents && !contents.isDestroyed() && captureWindow?.webContents === contents && request.frame === contents.mainFrame && isLocalURL(request.frame.url, 'capture') && generation === captureGeneration && fence.acceptsFrames(generation) && !!sessionId && capturePolicy.state().sessionId === sessionId && settings.systemAudio && !revokedChannels.has('system')
@@ -383,12 +419,10 @@ function secureSession(target: ElectronSession, kind: 'ui' | 'capture' | 'docume
       if (nativeProbe) nativeProbe.sourceEnumerationStarted = true
       const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
       if (nativeProbe) { nativeProbe.sourcesEnumerated = true; nativeProbe.sourceCount = sources.length }
-      const primary = screen.getPrimaryDisplay()
-      const source = sources.find(item => item.display_id === String(primary.id))
-      if (nativeProbe) nativeProbe.sourceSelected = !!source
-      if (!source || !current()) { respond({}); return }
-      // Electron 44 routes macOS default-output loopback through CoreAudio Tap.
-      respond({ video: source, audio: 'loopback' })
+      // Electron 44 captures default-output loopback via CoreAudio Tap on macOS and WASAPI loopback on Windows.
+      const answer = displayMediaResponse(sources, String(screen.getPrimaryDisplay().id), platform.id, current())
+      if (nativeProbe) nativeProbe.sourceSelected = 'video' in answer
+      respond(answer)
     } catch (error) { if (nativeProbe) nativeProbe.sourceError = error instanceof Error ? error.name : 'SourceError'; respond({}) }
   }, { useSystemPicker: false })
 }
@@ -400,7 +434,6 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
   secureSession(targetSession, role)
   const isOverlay = kind === 'overlay'
   const isUI = surface === 'index'
-  const nativeMaterial = isUI && !isOverlay && process.platform === 'darwin' && !accessibility.reduceTransparency
   const area = screen.getPrimaryDisplay().workArea
   const layout: WindowLayout = isOverlay ? {
     defaultBounds: defaultOverlayBounds(area, settings.overlayCollapsed, settings.overlayExpandedHeight), minWidth: OVERLAY_LAYOUT.minWidth, minHeight: settings.overlayCollapsed ? OVERLAY_LAYOUT.collapsedHeight : OVERLAY_LAYOUT.minHeight,
@@ -414,16 +447,16 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     width: isOverlay ? OVERLAY_LAYOUT.width : 1280, height: isOverlay ? OVERLAY_LAYOUT.height : 840,
     ...(bounds ?? {}), minWidth: Math.min(layout.minWidth, bounds?.width ?? area.width), minHeight: Math.min(layout.minHeight, bounds?.height ?? area.height), resizable: !isOverlay || !settings.overlayCollapsed,
     ...(overlayLimits ? { minWidth: overlayLimits.minWidth, minHeight: overlayLimits.minHeight, maxWidth: overlayLimits.maxWidth, maxHeight: overlayLimits.maxHeight, fullscreenable: false, maximizable: false } : {}),
+    ...(isUI ? (isOverlay ? platform.overlayWindowOptions() : platform.workspaceWindowOptions({ reduceTransparency: accessibility.reduceTransparency })) : {}),
     show: false, focusable: !isOverlay || !overlayInteraction.passive, frame: !isOverlay, transparent: isOverlay, alwaysOnTop: isOverlay, skipTaskbar: isOverlay || surface !== 'index',
     backgroundColor: isUI ? windowBackground(isOverlay) : '#101014',
-    ...(nativeMaterial ? { vibrancy: 'window' as const, visualEffectState: 'followWindow' as const } : {}),
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false, partition, preload: join(mainDirectory, '../preload/index.js'), additionalArguments: [`--faangin-surface=${surface === 'index' ? kind : surface}`, ...(smoke ? ['--faangin-smoke'] : []), ...(liveFixture && surface === 'index' ? ['--faangin-live-fixture'] : [])], spellcheck: false, backgroundThrottling: surface !== 'capture' }
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (surface === 'index') {
       try {
         const destination = new URL(url)
-        if (destination.protocol === 'https:' && !destination.username && !destination.password && url.length <= 8192) {
+        if ((destination.protocol === 'https:' || licensing?.isActivationUrl(destination.href)) && !destination.username && !destination.password && url.length <= 8192) {
           void shell.openExternal(destination.href).catch(() => emit({ type: 'error', message: 'The link could not be opened in your browser.' }))
         }
       } catch { /* Keep malformed or non-web destinations outside the desktop process. */ }
@@ -439,7 +472,8 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     applyWindowAppearance(window, isOverlay)
     window.on('focus', () => { scheduleAppearanceRefresh(); refreshAccessReadiness() })
     if (isOverlay) {
-      overlayWindowLayout = layout; window.setAlwaysOnTop(true, 'floating'); window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); overlayInteraction.attach(window)
+      overlayWindowLayout = layout; platform.applyOverlayLevel(window); overlayInteraction.attach(window)
+      // Double-clicking an app-region drag area toggles maximize on Windows, which would push the overlay past its layout limits.
       window.setMaximizable(false); window.setFullScreenable(false)
       window.on('maximize', () => { window.unmaximize(); applyOverlayLayout() })
       window.on('enter-full-screen', () => { window.setFullScreen(false) })
@@ -452,6 +486,13 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
       if (!quitting && !window.isDestroyed() && !overlayInteraction.desiredVisible) window.show()
     })
     window.on('close', event => { if (!quitting && !smoke) { event.preventDefault(); if (isOverlay) overlayInteraction.hide(); else window.hide() } })
+    // Windows ends a session (log-off, restart, shutdown) without 'before-quit' and allows no asynchronous work afterwards.
+    window.on('session-end', () => {
+      if (quitting) return
+      quitting = true
+      for (const ui of uiWindows()) ui.webContents.session.flushStorageData()
+      dockPolicy.dispose(); disposeAppearance(); disposeCapturePolicy(); windowState?.dispose(); cancelRequests(); liveReplies.reset(); licensing?.dispose(); shortcutManager.dispose(); tray?.destroy(); repo?.close()
+    })
   }
   void window.loadURL(rendererURL(surface, kind))
   return window
@@ -604,6 +645,7 @@ async function generateManual(input: ReturnType<typeof validate.generateInput>):
 }
 function generate(input: ReturnType<typeof validate.generateInput>, automatic?: AutomaticGeneration): { requestId: string } {
   requireAccessSetup()
+  requireAccountInference(licensing?.summary().state)
   accessTelemetry.generationStarts++; accessTelemetry.cloudRequests++
   if (automatic) { if (automatic.signal.aborted || !automaticReplyAllowed(automatic.candidate)) throw new Error('Live suggestion cancelled.') }
   else if (liveReplies.snapshot().phase !== 'paused') { liveReplies.reset(); refreshLiveSuggestions() }
@@ -615,11 +657,19 @@ function generate(input: ReturnType<typeof validate.generateInput>, automatic?: 
   const partials = !automatic && captureState.active && captureState.sessionId === session.id ? [...partialTranscripts.values()].filter(turn => turn.sessionId === session.id) : []
   const memory = input.action === 'draft' ? [] : resolveMemorySnippets(session.id, selectedMemory.get(session.id) ?? [], id => repo.get(id))
   const snapshotSettings = presetCatalog.settingsFor(session.id, session.mode, settings), snapshotSession = { ...session, transcript: automatic ? liveReplyTranscript(session, automatic.candidate) : [...session.transcript, ...partials], answers: session.answers, attachments: [] }
-  const selectedOpenAIModel = (input.smart ?? snapshotSettings.smartMode) ? snapshotSettings.smartModel : snapshotSettings.fastModel
-  const structuredReply = automatic && session.mode === 'interview' && snapshotSettings.chatProvider === 'openai' && supportsStructuredInterviewReply(selectedOpenAIModel)
-  const compiled = compilePrompt({ action: input.action, prompt: input.prompt ?? '', settings: snapshotSettings, session: snapshotSession, attachments: selected, smart: input.smart ?? snapshotSettings.smartMode, memory, ...(automatic ? { replyTarget: automatic.candidate.turn.id, automatic: { source: settings.liveSuggestionSource, channels: [...captureResources?.listening ?? []] } } : {}), ...(structuredReply ? { responseProtocol: 'json' } : {}) })
+  const managed = proConfigured() && snapshotSettings.chatProvider === 'openai'
+  // The gateway owns model selection. Compile capabilities against its published defaults.
+  if (managed) { snapshotSettings.fastModel = DEFAULT_SETTINGS.fastModel; snapshotSettings.smartModel = DEFAULT_SETTINGS.smartModel }
+  const smart = managed && automatic ? false : input.smart ?? snapshotSettings.smartMode
+  const selectedOpenAIModel = smart ? snapshotSettings.smartModel : snapshotSettings.fastModel
+  const structuredReply = automatic && !managed && session.mode === 'interview' && snapshotSettings.chatProvider === 'openai' && supportsStructuredInterviewReply(selectedOpenAIModel)
+  const compiled = compilePrompt({ action: input.action, prompt: input.prompt ?? '', settings: snapshotSettings, session: snapshotSession, attachments: selected, smart, memory, ...(automatic ? { replyTarget: automatic.candidate.turn.id, automatic: { source: settings.liveSuggestionSource, channels: [...captureResources?.listening ?? []] } } : {}), ...(structuredReply ? { responseProtocol: 'json' } : {}) })
+  if (managed && automatic) {
+    compiled.maxOutputTokens = 300
+    compiled.instructions += '\nManaged hands-free delivery: keep the required ASSIST or WAIT decision line. After ASSIST, give a complete concise reply within 180 words. For long code or full solutions, give the next useful step and suggest the manual Solve action.'
+  }
   const compatible = snapshotSettings.chatProvider === 'compatible' ? validateCompatibleChatConfiguration({ endpoint: snapshotSettings.compatibleChatEndpoint, model: (input.smart ?? snapshotSettings.smartMode) ? snapshotSettings.compatibleChatSmartModel : snapshotSettings.compatibleChatModel, vision: snapshotSettings.compatibleChatVision }) : null
-  const apiKey = compatible ? undefined : requireKey(), credential = compatible ? compatibleCredential(compatible.endpoint) : undefined
+  const apiKey = compatible || managed ? undefined : requireKey(), credential = compatible ? compatibleCredential(compatible.endpoint) : undefined
   repo.shadowIfHistoryOff(input.sessionId)
   const requestId = randomUUID(), abort = new AbortController()
   const abortAutomatic = () => {
@@ -628,7 +678,7 @@ function generate(input: ReturnType<typeof validate.generateInput>, automatic?: 
     else abort.abort()
   }
   if (automatic) { automatic.signal.addEventListener('abort', abortAutomatic, { once: true }); if (automatic.signal.aborted) abortAutomatic() }
-  const answer: Answer = { id: randomUUID(), requestId, sessionId: input.sessionId, origin: automatic ? 'automatic' : 'manual', action: input.action, prompt: input.prompt ?? '', text: '', model: compatible?.model ?? ((input.smart ?? snapshotSettings.smartMode) ? snapshotSettings.smartModel : snapshotSettings.fastModel), status: 'streaming', createdAt: Date.now(), usedPartialContext: compiled.sources.provisional, ...(compiled.transcriptReferences ? { transcriptReferences: compiled.transcriptReferences } : {}), context: { transcriptIds: compiled.sources.transcriptIds, attachmentIds: compiled.sources.attachmentIds, priorAnswerIds: compiled.sources.priorAnswerIds, memorySourceIds: compiled.sources.memorySourceIds, truncated: compiled.sources.truncated, ...(compiled.sources.replyTargetId ? { replyTargetId: compiled.sources.replyTargetId } : {}), ...(compiled.sources.interviewContextKey ? { interviewContextKey: compiled.sources.interviewContextKey } : {}), ...(compiled.sources.interviewSnapshot ? { interviewSnapshot: compiled.sources.interviewSnapshot } : {}), ...(compiled.sources.interruptedAnswerIds?.length ? { interruptedAnswerIds: compiled.sources.interruptedAnswerIds } : {}) } }
+  const answer: Answer = { id: randomUUID(), requestId, sessionId: input.sessionId, origin: automatic ? 'automatic' : 'manual', action: input.action, prompt: input.prompt ?? '', text: '', model: compatible?.model ?? selectedOpenAIModel, status: 'streaming', createdAt: Date.now(), usedPartialContext: compiled.sources.provisional, ...(compiled.transcriptReferences ? { transcriptReferences: compiled.transcriptReferences } : {}), context: { transcriptIds: compiled.sources.transcriptIds, attachmentIds: compiled.sources.attachmentIds, priorAnswerIds: compiled.sources.priorAnswerIds, memorySourceIds: compiled.sources.memorySourceIds, truncated: compiled.sources.truncated, ...(compiled.sources.replyTargetId ? { replyTargetId: compiled.sources.replyTargetId } : {}), ...(compiled.sources.interviewContextKey ? { interviewContextKey: compiled.sources.interviewContextKey } : {}), ...(compiled.sources.interviewSnapshot ? { interviewSnapshot: compiled.sources.interviewSnapshot } : {}), ...(compiled.sources.interruptedAnswerIds?.length ? { interruptedAnswerIds: compiled.sources.interruptedAnswerIds } : {}) } }
   let settle!: () => void
   const done = new Promise<void>(resolve => { settle = resolve })
   const request: GenerationRequest = { abort, sessionId: input.sessionId, epoch, answer, done, settle, terminalPublished: false, published: false }
@@ -657,9 +707,14 @@ function generate(input: ReturnType<typeof validate.generateInput>, automatic?: 
         publishAnswer()
         answer.text += visible; emit({ type: 'answer-delta', requestId, sessionId: input.sessionId, delta: visible, firstTokenMs: answer.firstTokenMs })
       }
-      const result = compatible ? await generateCompatibleAnswer(compiled, compatible, { signal: abort.signal, credential, onDelta }) : await generateCompiledAnswer(compiled, answer.model, { apiKey: apiKey!, signal: abort.signal, onDelta })
+      const access = licensing ? await licensing.requireInferenceAccess() : { kind: 'unconfigured' as const }
+      if (abort.signal.aborted) throw new Error('Request cancelled.')
+      if (!canPublish(input.sessionId, epoch) || (automatic && !automaticReplyAllowed(automatic.candidate))) throw new Error('The interview changed. Start the answer again.')
+      // Never fall back to a personal key if paid access changes during admission.
+      if (!compatible && managed !== (access.kind === 'pro')) throw new Error('Your plan changed. Start the answer again with your current plan.')
+      const result = compatible ? await generateCompatibleAnswer(compiled, compatible, { signal: abort.signal, credential, onDelta }) : await generateCompiledAnswer(compiled, managed ? selectedOpenAIModel : answer.model, { apiKey: managed ? 'faangin-managed' : apiKey!, signal: abort.signal, onDelta, ...(managed && access.kind === 'pro' ? { transport: access.transport, managedMode: automatic ? 'handsfree' as const : smart ? 'smart' as const : 'fast' as const } : {}) })
       if (!canPublish(input.sessionId, epoch)) return
-      if (!abort.signal.aborted) { if (decoder) decoder.finish(); else answer.text = result.text }
+      if (!abort.signal.aborted && !result.skipped) { if (decoder) decoder.finish(); else answer.text = result.text }
       answer.model = result.model; answer.inputTokens = result.inputTokens; answer.outputTokens = result.outputTokens; answer.status = abort.signal.aborted ? 'cancelled' : 'complete'
       if (input.action === 'notes' && answer.status === 'complete' && !repo.applyGeneratedNotes(input.sessionId, epoch, snapshotSession.notes, answer.text)) {
         emit({ type: 'error', message: 'Your notes changed while this answer was generated. Your edits were kept; the generated notes are available in Assistance.', code: 'notes_changed' })
@@ -714,7 +769,10 @@ function abortableCapture<T>(operation: Promise<T>, signal: AbortSignal, timeout
 }
 async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<CaptureLease> {
   requireAccessSetup()
-  const apiKey = requireKey(), session = repo.get(sessionId), options = { ...settings }
+  const access = licensing ? await licensing.requireInferenceAccess() : { kind: 'unconfigured' as const }
+  if (signal.aborted) throw new Error('Capture acquisition cancelled.')
+  const managed = access.kind === 'pro'
+  const apiKey = managed ? 'faangin-managed' : requireKey(), session = repo.get(sessionId), options = { ...settings }
   if (!options.microphone && !options.systemAudio) throw new Error('Enable microphone or system audio in Settings.')
   const token = fence.begin(sessionId, session.contextEpoch), startup = new AbortController()
   captureGeneration = token; captureStartup = startup
@@ -741,7 +799,7 @@ async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<C
         }
         resources.sourceTimer = null
       }, 30_000)
-      sendCapture({ type: 'start', generation: token, sessionId, microphone: resources.pipelines.has('microphone'), systemAudio: resources.pipelines.has('system'), microphoneDeviceId: options.microphoneDeviceId })
+      sendCapture({ type: 'start', generation: token, sessionId, microphone: resources.pipelines.has('microphone'), systemAudio: resources.pipelines.has('system'), microphoneDeviceId: options.microphoneDeviceId, platform: platform.id })
       await abortableCapture(resources.ready, activationSignal, 31_000, 'No audio source became ready. Check capture permissions and start again.')
       assertCurrent()
       if (captureStartup === startup) captureStartup = null
@@ -757,7 +815,7 @@ async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<C
       startup.abort()
       if (resources.sourceTimer) { clearTimeout(resources.sourceTimer); resources.sourceTimer = null }
       resources.readyReject(new Error('Capture acquisition cancelled.'))
-      sendCapture({ type: 'stop', generation: token, sessionId, microphone: false, systemAudio: false, microphoneDeviceId: '' })
+      sendCapture({ type: 'stop', generation: token, sessionId, microphone: false, systemAudio: false, microphoneDeviceId: '', platform: platform.id })
     },
     dispose() {
       if (disposed) return disposed
@@ -780,10 +838,12 @@ async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<C
   try {
     assertCurrent()
     let microphoneAllowed = options.microphone
-    if (options.microphone && process.platform === 'darwin') {
-      let permissionMessage = 'Microphone permission was denied. Open macOS permission settings.'
-      try { microphoneAllowed = await abortableCapture(systemPreferences.askForMediaAccess('microphone'), startup.signal, 30_000, 'Microphone permission is still pending. Check macOS permission settings and try again.') }
-      catch (error) { assertCurrent(); if (!options.systemAudio) throw error; microphoneAllowed = false; permissionMessage = safeError(error) }
+    if (options.microphone) {
+      let permissionMessage = ''
+      try {
+        const access = await abortableCapture(platform.microphoneAccess(systemPreferences), startup.signal, 30_000, platform.pendingMicrophoneMessage())
+        microphoneAllowed = access.allowed; permissionMessage = access.message ?? ''
+      } catch (error) { assertCurrent(); if (!options.systemAudio) throw error; microphoneAllowed = false; permissionMessage = safeError(error) }
       assertCurrent()
       if (!microphoneAllowed) {
         if (!options.systemAudio) throw new Error(permissionMessage)
@@ -797,7 +857,8 @@ async function acquireCapture(sessionId: string, signal: AbortSignal): Promise<C
     const enabled = (['microphone', 'system'] as AudioChannel[]).filter(channel => channel === 'microphone' ? microphoneAllowed : options.systemAudio)
     await Promise.allSettled(enabled.map(async channel => {
       try {
-        const transcriber = await createLiveTranscriber({ apiKey, model: options.transcriptionModel, language: options.inputLanguage, channel, context: transcriptionContext(session, options, channel), signal: startup.signal,
+        const transcriber = await (managed ? createManagedTranscriber : createLiveTranscriber)({ apiKey, model: managed ? DEFAULT_SETTINGS.transcriptionModel : options.transcriptionModel, language: options.inputLanguage, channel, context: transcriptionContext(session, options, channel), signal: startup.signal,
+          ...(access.kind === 'pro' ? { transport: access.transport, managedTranscription: true, beforeReconnect: async () => { const renewed = await licensing?.requireInferenceAccess(); if (renewed?.kind !== 'pro') throw new Error('Your Pro plan changed. Restart listening with your current plan.') } } : {}),
           onPartial: (itemId, text, capturedAt) => {
             if (!current() || revokedChannels.has(channel)) return
             const id = `${sessionId}:${token}:${channel}:${itemId}`, previous = partialTranscripts.get(id)
@@ -906,7 +967,7 @@ function releaseChannel(token: number, channel: AudioChannel): void {
   if (channel === settings.liveSuggestionSource) liveReplies.reset()
   for (const [id, turn] of partialTranscripts) if (turn.channel === channel) partialTranscripts.delete(id)
   emit({ type: 'transcript-clear', sessionId: resources.sessionId, channel })
-  sendCapture({ type: 'stop-channel', generation: token, sessionId: resources.sessionId, channel, microphone: false, systemAudio: false, microphoneDeviceId: '' })
+  sendCapture({ type: 'stop-channel', generation: token, sessionId: resources.sessionId, channel, microphone: false, systemAudio: false, microphoneDeviceId: '', platform: platform.id })
   const pipeline = resources.pipelines.get(channel); resources.pipelines.delete(channel); live.delete(channel)
   // A failed source does not admit another turn; already committed finals may still arrive.
   if (pipeline) {
@@ -993,12 +1054,16 @@ const screenshotCapture = new ScreenshotCapture<Electron.NativeImage>({
     return () => { app.removeListener('browser-window-created', created) }
   },
   displays: () => screen.getAllDisplays().map(display => ({ id: String(display.id), width: display.bounds.width, height: display.bounds.height, scaleFactor: display.scaleFactor })),
-  sources: async thumbnailSize => screenshotFixture
+  sources: async (thumbnailSize, types) => screenshotFixture
     ? [{ id: 'screen:fixture', name: 'Synthetic capture fixture', display_id: String(screen.getPrimaryDisplay().id), thumbnail: nativeImage.createFromBitmap(Buffer.alloc(64 * 64 * 4, 255), { width: 64, height: 64 }) }]
-    : desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize, fetchWindowIcons: false }),
+    : desktopCapturer.getSources({ types: [...types], thumbnailSize, fetchWindowIcons: false }),
   mayRestore: window => window !== overlay || overlayInteraction.desiredVisible,
   quitting: () => quitting
 })
+/** Screenshots need screen-recording consent only where the OS has that permission. */
+function assertScreenRecordingAllowed(): void {
+  if (platform.screenPermissionRequired && platform.permissionStatus('screen', systemPreferences) === 'denied') throw new Error(`Screen recording permission is denied. Enable Faangin in ${platform.settingsAppName}, then restart the app.`)
+}
 async function screenshot(sessionId: string, sourceId?: string, assertOperationCurrent?: () => void, oneShotCapture = false): Promise<Attachment> {
   requireAccessSetup()
   accessTelemetry.screenCaptures++
@@ -1006,7 +1071,7 @@ async function screenshot(sessionId: string, sourceId?: string, assertOperationC
   repo.get(sessionId)
   if (oneShotCapture) captureSolveImages.replacement(sessionId, attachments.get(sessionId) ?? [])
   else if ((attachments.get(sessionId) ?? []).length >= 4) throw new Error('Remove an image before adding more than four attachments.')
-  if (!screenshotFixture && process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') === 'denied') throw new Error('Screen recording permission is denied. Enable Faangin in macOS settings, then restart the app.')
+  if (!screenshotFixture) assertScreenRecordingAllowed()
   const epoch = repo.epoch(sessionId), chosenId = sourceId || settings.screenshotSourceId || undefined
   const assertCurrent = () => { assertOperationCurrent?.(); if (!canPublish(sessionId, epoch)) throw new Error('This session changed during capture. The screenshot was not saved.') }
   const captured = await screenshotCapture.capture({ sessionId, sourceId: chosenId, primaryDisplayId: String(screen.getPrimaryDisplay().id), assertCurrent })
@@ -1050,7 +1115,7 @@ async function previewScreenshotRegion(sessionId: string, ownerId: string, sourc
   requireAccessSetup()
   repo.get(sessionId); screenshotRegions.canCreate(ownerId)
   if ((attachments.get(sessionId) ?? []).length >= 4) throw new Error('Remove an image before adding more than four attachments.')
-  if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') === 'denied') throw new Error('Screen recording permission is denied. Enable Faangin in macOS settings, then restart the app.')
+  assertScreenRecordingAllowed()
   const epoch = repo.epoch(sessionId), assertCurrent = () => { if (!canPublish(sessionId, epoch)) throw new Error('This session changed during capture. The region preview was not saved.') }
   const captured = await screenshotCapture.capture({ sessionId, sourceId: sourceId || settings.screenshotSourceId || undefined, primaryDisplayId: String(screen.getPrimaryDisplay().id), assertCurrent })
   assertCurrent()
@@ -1130,18 +1195,23 @@ function microphoneInventory(): Promise<MicrophoneDevice[]> {
 let licensing: LicenseService | null = null
 function setupLicensing(): void {
   const service = licensing = createLicensing({
-    userDataPath: app.getPath('userData'), packaged: app.isPackaged, env: process.env,
+    userDataPath: app.getPath('userData'), packaged: app.isPackaged, env: process.env, defaultDeviceName: platform.defaultDeviceName,
+    ...(ownedAccessFixture && liveFixture ? { cloudConfig: null } : {}),
     secrets: {
-      available: () => safeStorage.isEncryptionAvailable() && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'),
+      available: () => platform.credentialEncryptionAvailable(safeStorage),
       encrypt: plain => safeStorage.encryptString(plain), decrypt: data => safeStorage.decryptString(data)
     },
     openExternal: url => shell.openExternal(url),
-    onChange: summary => { for (const window of uiWindows()) { try { if (!window.webContents.isDestroyed()) window.webContents.send('faangin:billing-change', summary) } catch {} } }
+    onChange: summary => {
+      if (!accountAllowsInference(summary.state)) { cancelRequests(); liveReplies.reset(); void stopCapture().catch(recordDiagnosticError) }
+      for (const window of uiWindows()) { try { if (!window.webContents.isDestroyed()) window.webContents.send('faangin:billing-change', summary) } catch {} }
+      emitState()
+    }
   })
   handle('billing-state', [0, 0], () => service.summary())
   handle('billing-sign-in', [0, 0], () => service.startSignIn())
   handle('billing-cancel-sign-in', [0, 0], () => service.cancelSignIn())
-  handle('billing-sign-out', [0, 0], () => service.signOut())
+  handle('billing-sign-out', [0, 0], () => { cancelRequests(); liveReplies.reset(); void stopCapture().catch(recordDiagnosticError); return service.signOut() })
   handle('billing-refresh', [0, 0], () => service.refresh())
   handle('billing-checkout', [1, 1], (_event, plan) => service.openCheckout(validate.oneOf(plan, ['byok', 'pro_monthly', 'pro_annual'] as const)))
   handle('billing-manage', [0, 0], () => service.openPortal())
@@ -1203,7 +1273,7 @@ function setupIPC(): void {
             window.webContents.executeJavaScript(`(${probeNativeSystemAudio.toString()})()`, true),
             new Promise<never>((_resolve, reject) => { hardTimer = setTimeout(() => { if (!window.isDestroyed()) window.destroy(); reject(new Error('Native system audio probe exceeded its cleanup deadline.')) }, 14_000) })
           ])
-          return { ...result, nativeDisplay: { reachedDisplayHandler: probe.reachedDisplayHandler, sourceEnumerationStarted: probe.sourceEnumerationStarted, sourcesEnumerated: probe.sourcesEnumerated, sourceCount: probe.sourceCount, sourceSelected: probe.sourceSelected, callbackResponded: probe.callbackResponded, callbackGranted: probe.callbackGranted, ...(probe.sourceError ? { sourceError: probe.sourceError } : {}), screenAccess: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'not-applicable' } }
+          return { ...result, nativeDisplay: { reachedDisplayHandler: probe.reachedDisplayHandler, sourceEnumerationStarted: probe.sourceEnumerationStarted, sourcesEnumerated: probe.sourcesEnumerated, sourceCount: probe.sourceCount, sourceSelected: probe.sourceSelected, callbackResponded: probe.callbackResponded, callbackGranted: probe.callbackGranted, ...(probe.sourceError ? { sourceError: probe.sourceError } : {}), screenAccess: platform.permissionStatus('screen', systemPreferences) } }
         }
         // Reach Electron's real permission callback, but deny source selection before
         // asking macOS for a screen/audio stream. No OS source or provider is opened.
@@ -1255,7 +1325,9 @@ function setupIPC(): void {
     applyDockPreference()
     nativeTheme.themeSource = settings.theme
     refreshAppearance()
-    app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
+    // Only a packaged app may enroll itself at login; a dev run would register the bare Electron binary. Re-asserted on every save so a
+    // login item removed outside the app follows the saved preference again.
+    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
     for (const window of uiWindows()) window.setContentProtection(settings.privacyMode)
     emitState(); return settings
   })
@@ -1263,9 +1335,8 @@ function setupIPC(): void {
     if (capturePolicy.state().phase !== 'idle' || requests.size || connectionTest) throw new Error('Stop capture, running answers, and connection tests before replacing the key.')
     const key = validate.text(value, 1024).trim()
     if (!key.startsWith('sk-') || /\s/.test(key)) throw new Error('Enter a valid OpenAI API key.')
-    if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. No key was saved.')
-    const path = userDataFile('openai.key.enc'), temporary = `${path}.${randomUUID()}.tmp`
-    try { await writeFile(temporary, safeStorage.encryptString(key), { mode: 0o600 }); await rename(temporary, path); chmodSync(path, 0o600) } finally { await unlink(temporary).catch(() => {}) }
+    if (!platform.credentialEncryptionAvailable(safeStorage)) throw new Error(platform.credentialUnavailableMessage('save'))
+    await writeSecretFile(userDataFile('openai.key.enc'), safeStorage.encryptString(key))
     emitState(); return { configured: true }
   })
   handle('key-remove', [0, 0], async () => { cancelRequests(); await stopCapture(); await unlink(userDataFile('openai.key.enc')).catch(error => { if (error.code !== 'ENOENT') throw error }); emitState() })
@@ -1275,9 +1346,8 @@ function setupIPC(): void {
     const endpoint = normalizeCompatibleChatEndpoint(endpointValue), apiKey = validate.text(keyValue, 1024).trim()
     if (endpoint !== settings.compatibleChatEndpoint) throw new Error('Save the compatible endpoint settings before saving its key.')
     if (/\s/.test(apiKey)) throw new Error('The compatible chat key must not contain whitespace.')
-    if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. No key was saved.')
-    const path = userDataFile('compatible-chat.key.enc'), temporary = `${path}.${randomUUID()}.tmp`
-    try { await writeFile(temporary, safeStorage.encryptString(JSON.stringify({ endpoint, apiKey })), { mode: 0o600 }); await rename(temporary, path); chmodSync(path, 0o600) } finally { await unlink(temporary).catch(() => {}) }
+    if (!platform.credentialEncryptionAvailable(safeStorage)) throw new Error(platform.credentialUnavailableMessage('save'))
+    await writeSecretFile(userDataFile('compatible-chat.key.enc'), safeStorage.encryptString(JSON.stringify({ endpoint, apiKey })))
     emitState(); return { configured: true }
   })
   handle('compatible-key-remove', [0, 0], async () => { cancelRequests(); await unlink(userDataFile('compatible-chat.key.enc')).catch(error => { if (error.code !== 'ENOENT') throw error }); emitState() })
@@ -1285,11 +1355,13 @@ function setupIPC(): void {
     if (connectionTest) throw new Error('A connection test is already running. Stop it or wait for it to finish.')
     const snapshot = { ...settings }, controller = new AbortController(); connectionTest = controller
     try {
+      const access = licensing ? await licensing.requireInferenceAccess() : { kind: 'unconfigured' as const }
       const compatible = snapshot.chatProvider === 'compatible'
+      const managed = !compatible && access.kind === 'pro'
       const endpoint = compatible ? normalizeCompatibleChatEndpoint(snapshot.compatibleChatEndpoint) : null
       const credential = endpoint ? compatibleCredential(endpoint) : undefined
-      const apiKey = compatible ? undefined : requireKey()
-      const modelIds = [...new Set((compatible ? [snapshot.compatibleChatModel, snapshot.compatibleChatSmartModel] : [snapshot.fastModel, snapshot.smartModel]).filter(Boolean))]
+      const apiKey = compatible ? undefined : managed ? 'faangin-managed' : requireKey()
+      const modelIds = [...new Set((compatible ? [snapshot.compatibleChatModel, snapshot.compatibleChatSmartModel] : managed ? [DEFAULT_SETTINGS.fastModel, DEFAULT_SETTINGS.smartModel] : [snapshot.fastModel, snapshot.smartModel]).filter(Boolean))]
       if (!modelIds.length) throw new Error('Save a Fast or Smart model before testing it.')
       const checks = []
       for (const model of modelIds) {
@@ -1300,7 +1372,7 @@ function setupIPC(): void {
             await generateCompatibleAnswer({ instructions: 'Reply with OK only.', input: [{ role: 'user', content: 'Connection test. Reply OK.' }], maxOutputTokens: 16, sources: { transcriptIds: [], attachmentIds: [], priorAnswerIds: [], memorySourceIds: [], truncated: false, provisional: false } }, configuration, { signal: controller.signal, credential, onDelta() {} })
           } else {
             const session: Session = { id: 'connection-test', title: 'Connection test', mode: 'meeting', status: 'idle', createdAt: 0, updatedAt: 0, notes: '', transcript: [], answers: [], attachments: [], contextEpoch: 0 }
-            await generateAnswer({ action: 'ask', prompt: 'Connection test. Reply OK only.', settings: { ...DEFAULT_SETTINGS, fastModel: model, smartModel: model, instructions: 'Reply with OK only.' }, session, attachments: [] }, { apiKey: apiKey!, signal: controller.signal, maxOutputTokens: 'reasoning' in answerReasoning(model) && answerReasoning(model).reasoning?.effort === 'low' ? 512 : 16, onDelta() {} })
+            await generateAnswer({ action: 'ask', prompt: 'Connection test. Reply OK only.', settings: { ...DEFAULT_SETTINGS, fastModel: model, smartModel: model, instructions: 'Reply with OK only.' }, session, attachments: [] }, { apiKey: apiKey!, signal: controller.signal, maxOutputTokens: 'reasoning' in answerReasoning(model) && answerReasoning(model).reasoning?.effort === 'low' ? 512 : 16, onDelta() {}, ...(managed && access.kind === 'pro' ? { transport: access.transport, managedMode: model === DEFAULT_SETTINGS.smartModel ? 'smart' : 'fast' } : {}) })
           }
           checks.push({ label: model, model, ok: true, message: 'A small streamed response completed. Vision and audio are not verified.' })
         } catch (error) { checks.push({ label: model, model, ok: false, message: safeError(error) }) }
@@ -1427,7 +1499,7 @@ function setupIPC(): void {
   })
   handle('export', [2, 2], async (event, value, formatValue) => {
     const session = fullSession(validate.id(value), true), format = validate.oneOf(formatValue, ['markdown', 'json'])
-    const selected = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender)!, { defaultPath: `${session.title.replace(/[^\w .-]/g, '_')}.${format === 'json' ? 'json' : 'md'}`, filters: [{ name: format, extensions: [format === 'json' ? 'json' : 'md'] }] })
+    const selected = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender)!, { defaultPath: exportFileName(session.title, format === 'json' ? 'json' : 'md'), filters: [{ name: format, extensions: [format === 'json' ? 'json' : 'md'] }] })
     if (selected.canceled || !selected.filePath) return null
     const content = format === 'json' ? JSON.stringify({ ...session, attachments: session.attachments.map(({ dataUrl: _data, ...metadata }) => metadata) }, null, 2) : sessionMarkdown(session)
     await writeFile(selected.filePath, content, { mode: 0o600 }); return { path: selected.filePath }
@@ -1463,7 +1535,7 @@ function setupIPC(): void {
     try {
       if (kind === 'system-audio') { await requestComputerAudioAccess(); return }
       await requestSetupPermission(kind, {
-        platform: process.platform,
+        promptsNatively: platform.promptsForMicrophone,
         status: permission => permissions()[permission],
         requestMicrophone: async () => { if (accessFixtureEnabled) { accessFixturePermissions.microphone = 'granted'; return true }; return systemPreferences.askForMediaAccess('microphone') },
         enumerateScreens: async () => { if (accessFixtureEnabled) { accessFixturePermissions.screen = 'granted'; return [] }; return desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 }, fetchWindowIcons: false }) },
@@ -1574,7 +1646,7 @@ function refreshMenu(): void {
     { id: 'overlay-reset-layout', label: 'Reset overlay size & position', click: () => { try { resetOverlayLayout(); makeOverlayInteractive() } catch (error) { emit({ type: 'error', message: `Overlay layout could not be reset: ${safeError(error)}` }) } } },
     { label: 'Make overlay interactive', click: () => makeOverlayInteractive() },
     { label: 'Click-through overlay', type: 'checkbox', checked: overlayInteraction.passive, accelerator: active.find(binding => binding.action === 'toggle-interaction')?.accelerator, click: () => shortcutAction('toggle-interaction') },
-    ...(process.platform === 'darwin' ? [{ label: 'Show in Dock', type: 'checkbox' as const, checked: !settings.hideDockIcon, click: () => {
+    ...(platform.supportsHiddenAppIcon ? [{ label: 'Show in Dock', type: 'checkbox' as const, checked: !settings.hideDockIcon, click: () => {
       try { settings = repo.saveSettings({ ...settings, hideDockIcon: !settings.hideDockIcon }); applyDockPreference(); refreshMenu(); emitState() }
       catch (error) { emit({ type: 'error', message: `Dock preference could not be saved: ${safeError(error)}` }); refreshMenu() }
     } }] : []),
@@ -1589,8 +1661,9 @@ function setupMenu(): void {
   const result = applyStartupShortcutBindings(shortcutManager, settings.shortcutPreset, settings.shortcutOverrides)
   if (!result.ok) emit({ type: 'error', message: result.message })
   if (!smoke) {
-    const image = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAI0lEQVR4nGNgGGzgP5F4iBhAFqCqASQ5fXAaQBYYBgbQHwAAq6FHuddDHPYAAAAASUVORK5CYII=')
-    image.setTemplateImage(true); tray = new Tray(image); tray.setToolTip(`Faangin ${app.getVersion()}`)
+    tray = new Tray(platform.trayIcon(trayIconPath, nativeImage)); tray.setToolTip(`Faangin ${app.getVersion()}`)
+    // A taskbar OS opens the tray menu on right-click only, so left-click restores the workspace; the macOS menu-bar extra pops its menu on any click.
+    if (platform.appPresence === 'taskbar') tray.on('click', () => showWindow('workspace'))
   }
   refreshMenu()
 }
@@ -1598,6 +1671,7 @@ if (!smoke && !app.requestSingleInstanceLock()) app.quit()
 else {
   app.on('second-instance', () => showWindow('workspace'))
   app.whenReady().then(async () => {
+    // POSIX hardening: Windows ignores these modes and %APPDATA% already carries the profile's user-only ACL.
     const data = app.getPath('userData'); mkdirSync(data, { recursive: true, mode: 0o700 }); chmodSync(data, 0o700)
     repo = new Repository(userDataFile('faangin.sqlite')); settings = repo.settings()
     let savedAccessSetup: unknown
@@ -1667,10 +1741,10 @@ else {
 app.on('activate', () => {
   // Accessory-policy changes and explicit overlay interaction can activate the
   // app too. They must not open a workspace over the app beneath the overlay.
-  if (repo && !quitting && (!smoke || smokeVisible) && !(process.platform === 'darwin' && settings.hideDockIcon) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
+  if (repo && !quitting && (!smoke || smokeVisible) && !(platform.supportsHiddenAppIcon && settings.hideDockIcon) && !overlayInteraction.desiredVisible && !uiWindows().some(window => window.isVisible())) showWindow('workspace')
 })
 app.on('browser-window-focus', () => licensing?.onWindowFocus())
-app.on('window-all-closed', () => { if (process.platform !== 'darwin' || smoke) app.quit() })
+app.on('window-all-closed', () => { if (platform.quitsWhenAllWindowsClosed || smoke) app.quit() })
 app.on('web-contents-created', (_event, contents) => { contents.session.on('will-download', event => event.preventDefault()) })
 app.on('before-quit', event => {
   if (quitting) return

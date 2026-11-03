@@ -28,6 +28,13 @@ test('diagnostics include only useful versions, bounded health metadata, counter
   assert.deepEqual(report.errorCounts, { 'provider-timeout': 1 })
 })
 
+test('Windows reports pass through their platform and the not-required screen permission instead of reading as unknown', () => {
+  const report = buildDiagnosticBundle({ ...metadata(), platform: 'win32', arch: 'x64', permissions: { microphone: 'denied', screen: 'not-required' } }, now)
+  assert.equal(report.platform, 'win32'); assert.equal(report.arch, 'x64')
+  assert.deepEqual(report.permissions, { microphone: 'denied', screen: 'not-required' })
+  assert.deepEqual(buildDiagnosticBundle({ ...metadata(), permissions: { microphone: 'not-required', screen: 'Not-Required' } }, now).permissions, { microphone: 'not-required', screen: 'unknown' })
+})
+
 test('diagnostics report only the allowlisted selected chat provider without endpoints, model aliases or credentials', () => {
   const marker = 'PRIVATE_PROVIDER_MARKER', settings = { ...DEFAULT_SETTINGS, chatProvider: 'compatible', compatibleChatEndpoint: `https://${marker}.example/private-route`, compatibleChatModel: marker, compatibleChatSmartModel: marker, compatibleChatVision: true, compatibleApiKey: marker }
   const input = { ...metadata(), settings, provider: marker }

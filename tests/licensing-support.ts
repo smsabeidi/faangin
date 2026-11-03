@@ -14,9 +14,9 @@ export const DAY = 24 * 3600 * 1000
 export const NOW = 1_800_000_000_000
 export const DEVICE: DeviceInfo = { deviceId: 'a'.repeat(64), deviceName: 'Test Mac' }
 export const CONFIG: CloudConfig = {
-  functionsBase: 'https://us-central1-faangin-staging.cloudfunctions.net',
-  webApiKey: 'web-key',
-  hostingOrigin: 'https://faangin-staging.web.app'
+  supabaseUrl: 'https://fixture.supabase.co',
+  publishableKey: 'sb_publishable_fixture',
+  functionsBase: 'https://fixture.supabase.co/functions/v1/faangin-api'
 }
 
 export function keyPair() {
@@ -71,26 +71,29 @@ export interface HarnessOptions {
   secrets?: { available: boolean }
   /** Keys the service trusts; defaults to the harness signing key. */
   trust?: string[]
+  purchaseRefreshMs?: number
 }
 
 /** A LicenseService on a temp directory with real persistence, real verification and a scripted backend. */
 export function harness(t: TestContext, options: HarnessOptions = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'faangin-licensing-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }))
   const signer = keyPair()
   const clock = { now: NOW }
   const secrets = fakeSecrets(options.secrets)
   const store = new AccountStore({ userDataPath: dir, secrets })
   const opened: string[] = []
   const changes: BillingSummary[] = []
+  const activation = { closed: 0, opened: 0 }
   const calls: { name: string; args: unknown[] }[] = []
   const token = (overrides: Partial<LicensePayload> = {}) => makeToken(licensePayload(clock.now, overrides), signer.privateKey)
 
   const defaults: Record<keyof CloudApi, (...args: any[]) => unknown> = {
-    startDeviceSignIn: async (): Promise<DeviceSignInStart> => ({ deviceCode: 'device-code', userCode: 'ABCD-EFGH', verificationUrl: `${CONFIG.hostingOrigin}/activate?code=ABCD-EFGH`, expiresIn: 600, interval: 5 }),
-    waitForDeviceSignIn: async () => ({ status: 'approved', customToken: 'custom-token', uid: 'user-1' }),
-    exchangeCustomToken: async () => ({ uid: 'user-1', idToken: 'id-token-1', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
-    refreshIdToken: async () => ({ uid: 'user-1', idToken: 'id-token-2', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
+    startDeviceSignIn: async (): Promise<DeviceSignInStart> => ({ deviceCode: 'device-code', userCode: 'ABCD-EFGH', expiresIn: 600, interval: 5 }),
+    waitForDeviceSignIn: async () => ({ status: 'approved', tokenHash: 'custom-token', uid: 'user-1' }),
+    exchangeDeviceToken: async () => ({ uid: 'user-1', accessToken: 'id-token-1', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
+    refreshAuthSession: async () => ({ uid: 'user-1', accessToken: 'id-token-2', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
+    revokeAuthSession: async () => {},
     callFunction: async () => { throw new Error('unexpected callFunction') },
     fetchLicense: async () => ({ token: token(), plan: 'byok', status: 'active', expiresAt: clock.now + 30 * DAY, graceUntil: clock.now + 44 * DAY }),
     verifyLicenseWithKeys: realCloud.verifyLicenseWithKeys
@@ -108,11 +111,13 @@ export function harness(t: TestContext, options: HarnessOptions = {}) {
     encryptionAvailable: secrets.available,
     onChange: summary => { changes.push(summary) },
     cloud,
-    publicKeys: options.trust ?? [signer.publicKeyBase64],
+    publicKeys: options.trust ?? (options.config?.licensePublicKeys ? undefined : [signer.publicKeyBase64]),
     now: () => clock.now,
-    dailyRefresh: false
+    activationServer: async () => { activation.opened++; return { url: 'http://127.0.0.1:41234/activate?code=ABCD-EFGH&lease=fixture', close: async () => { activation.closed++ } } },
+    dailyRefresh: false,
+    purchaseRefreshMs: options.purchaseRefreshMs
   })
   t.after(() => service.dispose())
   const count = (name: keyof CloudApi) => calls.filter(call => call.name === name).length
-  return { service, store, dir, signer, clock, opened, changes, calls, count, token, secrets }
+  return { service, store, dir, signer, clock, opened, changes, calls, count, token, secrets, activation }
 }

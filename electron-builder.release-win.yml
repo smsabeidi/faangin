@@ -1,0 +1,45 @@
+# Explicit public-distribution configuration for Windows. Local dist:win stays unsigned.
+# scripts/release-win.mjs drives this on a Windows host, verifies the Authenticode
+# signature with signtool and writes SHA256SUMS; it is the only supported entry point.
+appId: com.faangin.desktop
+productName: Faangin
+directories:
+  output: dist/release-win
+  buildResources: resources
+files:
+  - out/**
+  # electron-vite treats resources/ as the main-process public directory, so the tray icon's ?asset import resolves to this
+  # path at runtime instead of a copy under out/; buildResources is otherwise excluded from the asar.
+  - resources/icon.png
+  - package.json
+  - '!node_modules/**/test/**'
+  - '!node_modules/**/tests/**'
+asar: true
+npmRebuild: false
+forceCodeSigning: true
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Faangin-${version}-Windows-${arch}-setup.${ext}
+  requestedExecutionLevel: asInvoker
+  # The certificate is imported from CSC_LINK with CSC_KEY_PASSWORD; nothing here names a file or secret.
+  # Azure Trusted Signing is the alternative: release-win.mjs adds win.azureSignOptions (endpoint,
+  # codeSigningAccountName, certificateProfileName, publisherName) from the AZURE_* variables and the
+  # TrustedSigning PowerShell module authenticates with AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET.
+  signtoolOptions:
+    publisherName: Muhammed Salim
+  # There is no updater, so the installer must not embed a publisher check for an update feed.
+  verifyUpdateCodeSignature: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Faangin
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  # No updater: no .blockmap next to the installer.
+  differentialPackage: false
+publish: null

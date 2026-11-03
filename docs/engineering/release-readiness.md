@@ -2,6 +2,8 @@
 
 Date: October 13, 2026 · Preserved 0.2.0/0.2.1/0.2.2 checkpoints and latest 0.2.3 Live suggestions candidate
 
+Windows: the [Windows port 0.4.3](#windows-port-043) entry of November 2, 2026 supersedes the "Windows remains open" wording in the dated candidate sections below; the [Windows engineering record](windows.md) holds the detail.
+
 Historical candidates retain their verification: 0.2.0 passed 313 tests, [0.2.1](#latency-candidate-021) 334 and [0.2.2](#spoken-question-candidate-022) 343, with their final builds/packages/smoke/checksums. The latest [0.2.3 Live suggestions candidate](#live-suggestions-candidate-023) adds opt-in automatic Reply; final verification/package evidence is pending. Native physical acceptance, signing, live model/audio quality and exact commercial parity remain open.
 
 ## Checked workflows
@@ -30,9 +32,10 @@ QA used a separate app identity and workspace, preserving the primary app’s da
 3. Save an Interview brief and select a response preset. Exercise Hint, Solve, Review, Debug, Design and Behavioral with appropriate real inputs; copy code/answers, cancel, explicitly retry and inspect timings. Confirm code is analyzed without execution.
 4. Import/select/reorder/remove images and validate that only selected images are dispatched. Choose **Capture a region**, drag on the local preview or enter preview-image pixel bounds, and confirm **Add region**. Verify cancel/expiry/reset/foreign-window rejection without attachment mutation, then certify actual source/permission/Retina/mixed-DPI cases on the final package. Generated-image fixtures are not physical capture acceptance.
 5. Test microphone and default-output system audio separately and together. Exercise permissions, source loss, Stop/Pause/Resume, sleep/wake, device changes, idle ending and long sessions; inspect provisional/final order and incomplete transcript notices.
-6. Check the overlay at 0%, 35% and 100% over bright/dark apps; collapse/expand, keyboard recovery, click-through, full-screen and monitor changes. Exercise Reduce Transparency/Motion/Increase Contrast and VoiceOver.
+6. Check the overlay at 0%, 35% and 100% over bright/dark apps; collapse/expand, keyboard recovery, click-through, full-screen and monitor changes. Exercise Reduce Transparency/Motion/Increase Contrast and VoiceOver on macOS, and Transparency effects, Animation effects, contrast themes and Narrator on Windows.
 7. Search/filter saved sessions and explicitly select/edit/remove prior excerpts. Generate notes, then choose **Draft** or **Notes → Draft follow-up**. Verify finalized-only passage snapshots and source dialog, bounded source scrolling, preserved retry wording and notes independence; inspect inline/titled/reference-style source links and excerpts after copy/Markdown export and reopen. Drafts are reviewed and copied, never sent automatically. Test export, reset, Trash/restore/permanent deletion and history-off restart without erasing old snapshots or promoting RAM sessions.
 8. Export/review diagnostic metadata and execute the documented fresh-install/device/provider/language matrix plus a 60-minute resource run. Keep native fixture results distinct from provider/model quality and commercial parity.
+9. On Windows, open the workspace and overlay from the system-tray recovery menu (left-click shows the workspace; right-click lists every action), confirm taskbar grouping under one Faangin button, close every window and confirm the process stays resident with its tray icon (windows hide rather than close, so `window-all-closed` does not fire), then quit from the tray, and log off with a session open to exercise `session-end`.
 
 ## Latency and quality
 
@@ -63,6 +66,26 @@ The read-only preflight checks required settings, Apple tools, installed identit
 
 This pipeline has passed configuration and fixture checks only. No real signed/notarized artifact has been produced in this session.
 
+## Signed Windows release
+
+`npm run dist:win` produces the unsigned local Windows installer. `npm run release:win` runs `scripts/release-win.mjs` with the separate `electron-builder.release-win.yml` configuration and output directory `dist/release-win`, so the unsigned `dist/win-unpacked` is preserved. The command must run on a Windows host with the Windows SDK signing tools (`signtool.exe` on `PATH` or in an installed Windows 10/11 SDK); it refuses any other host. It never publishes.
+
+Supply credentials through your secure environment. Do not commit certificates, private keys, passwords or client secrets. Configure exactly one strategy:
+
+| Strategy | Required settings |
+| --- | --- |
+| Imported `.pfx` certificate | `CSC_LINK` (file path or base64) and `CSC_KEY_PASSWORD` |
+| Azure Trusted Signing | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_CODE_SIGNING_ENDPOINT` (the HTTPS endpoint of the account region), `AZURE_CODE_SIGNING_ACCOUNT_NAME`, `AZURE_CERTIFICATE_PROFILE_NAME`; the TrustedSigning PowerShell module must be installed |
+
+```powershell
+npm run release:win -- --check
+npm run release:win
+```
+
+The read-only preflight checks the host, the strategy and `signtool` availability without building. An explicit release run builds the production bundles, clears `dist/release-win`, packages the x64 NSIS installer with `forceCodeSigning: true` and `--publish never` (for Azure, `win.azureSignOptions` is added per run so the config file never names an account), runs `signtool verify /pa /v` on `win-unpacked/Faangin.exe` and on `Faangin-<version>-Windows-x64-setup.exe` and requires both a successful verification and a secure timestamp, removes `.blockmap` files and channel manifests (there is no updater), and writes `SHA256SUMS` over the installer. Only environment variable names appear in its diagnostics; child-process output is kept in memory. `tests/release-win.test.ts` verifies the host guard, strategy rules, secret non-disclosure, Authenticode verification, checksum and metadata rules and the `--check` CLI; `tests/release-config.test.ts` pins the two Windows configurations.
+
+This pipeline has passed fixture checks only, on macOS. No signed Windows installer has been produced, and SmartScreen reputation for a new signing identity accrues only after signed installers have been distributed.
+
 ## Remaining production gates
 
 | Gate | Current state | Required action |
@@ -73,12 +96,19 @@ This pipeline has passed configuration and fixture checks only. No real signed/n
 | Physical audio and permissions | Controlled lifecycle fixtures passed; recording not run | Test actual enabled sources, denial/revocation/device/loopback/sleep and recovery cases |
 | Complete native acceptance | Earlier brief/preset/0% save and overlay geometry checked; new draft/source/notes AX state observed; final control attempt stopped at locked Mac | Unlock and resolve screenshot/click discrepancies; actual region capture, backdrop/monitor/full-screen/click-through, library/export, accessibility and long-session matrix |
 | Apple public distribution | Executable is ad hoc/linker-signed, with no Developer ID team or sealed-resource signature; no notarization run | Supply real Apple credentials and verify the separate signed-release pipeline and fresh install |
-| Windows and x64 | Configuration exists; native operation uncertified | Validate Windows after macOS acceptance and gate x64 on actual architecture tests |
+| Windows x64 | `src/main/platform/win32.ts`, Windows shortcut rules, NSIS configuration, `release:win` and a `windows-latest` CI job exist with unit coverage; no Windows machine has run the app and no CI run is recorded | Run the suite, build, smoke and `dist:win` on Windows; execute the physical matrix in [windows.md](windows.md#verification) (microphone switch, loopback, overlay over conferencing apps, shortcuts and AltGr, tray, installer on a clean profile); sign with `release:win` |
+| macOS x64 | Not packaged; only arm64 targets exist | Gate x64 on actual architecture tests if it is added |
 | Exact parity | Public/source research, no complete native commercial baseline | Versioned authorized reference observations and behavior-specific measurements |
 
-The full [PRD](../prd.md) and D1 [delivery plan](delivery-plan.md#full-parity-expansion-work) remain in scope: Windows, bundled local speech, expanded providers, search/citations, slide/local integrations, managed inference, accounts/entitlements, hosted sharing/sync, calendar preparation, billing, mobile, original prep/web utilities, referral operations and safe updates/version surfaces. These are tracked requirements, not silently removed from the project or counted as delivered by local desktop packaging.
+The full [PRD](../prd.md) and D1 [delivery plan](delivery-plan.md#full-parity-expansion-work) remain in scope: Windows physical acceptance, bundled local speech, expanded providers, search/citations, slide/local integrations, managed inference, accounts/entitlements, hosted sharing/sync, calendar preparation, billing, mobile, original prep/web utilities, referral operations and safe updates/version surfaces. These are tracked requirements, not silently removed from the project or counted as delivered by local desktop packaging.
 
 No credential supplied in chat was saved or used. No Apple identity, account or publishing credential was fabricated. No signed/public production release or absolute screen-share invisibility is certified by this checkpoint.
+
+## Windows port 0.4.3
+
+November 2, 2026. Windows support is implemented in the shared codebase through the `DesktopPlatform` contract (`src/main/platform`), with Windows-specific shortcut rules, the committed ICO and NSIS x64 installer configuration, the `release:win` signing script and a `windows-latest` job in `.github/workflows/desktop-ci.yml`. Unit tests on macOS exercise the win32 branches with explicit platform ids (`tests/platform.test.ts`, `tests/shortcut-manager.test.ts`, `tests/release-config.test.ts`, `tests/release-win.test.ts`, `tests/ico.test.ts` and the UI tests that take win32 paths); `npm run test:win32` runs the suite with `process.platform` simulated as `win32`. The CI job typechecks, tests, builds, smokes the development and packaged app, builds the unsigned installer and uploads both artifacts once it runs; no run is recorded here.
+
+Acceptance remains pending in full: no Windows machine has run the app, no Windows-built installer or signed installer exists, and microphone switch handling, WASAPI loopback, overlay ordering over conferencing applications, content protection, shortcuts on AltGr layouts, tray and taskbar behaviour, `session-end`, DPAPI failure copy and installer behaviour on a clean profile are all unobserved. The ordered list is in [windows.md](windows.md#verification). macOS behaviour is unchanged by the port.
 
 ## Latency candidate 0.2.1
 

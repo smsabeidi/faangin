@@ -25,13 +25,15 @@ export interface InferenceTransport {
 interface DeadlineOptions { connectMs?: number; firstTokenMs?: number; inactivityMs?: number; totalMs?: number }
 export interface GenerationOptions {
   apiKey: string
+  /** Main-process Pro routing; capabilities are still checked against the selected model. */
+  managedMode?: 'fast' | 'smart' | 'handsfree'
   signal: AbortSignal
   onDelta: (delta: string) => void
   transport?: InferenceTransport
   deadlines?: DeadlineOptions
   maxOutputTokens?: number
 }
-export interface AnswerResult { text: string; model: string; inputTokens?: number; outputTokens?: number }
+export interface AnswerResult { text: string; model: string; inputTokens?: number; outputTokens?: number; skipped?: boolean }
 
 function validKey(apiKey: string): string {
   const key = apiKey.trim()
@@ -46,6 +48,12 @@ function safeProviderError(status?: number, value?: unknown): InferenceError {
   const object = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   const detail = object.error && typeof object.error === 'object' ? object.error as Record<string, unknown> : object
   const code = typeof detail.code === 'string' ? detail.code : typeof detail.type === 'string' ? detail.type : ''
+  if (code === 'no_pro' || status === 402) return new InferenceError('permission_denied', 'Faangin Pro access is required. Open Account & billing to refresh your plan or manage billing.')
+  if (code === 'blocked') return new InferenceError('permission_denied', 'This Faangin account cannot start Pro sessions. Contact support for help with your account.')
+  if (code === 'allowance_exhausted') return new InferenceError('quota_exhausted', 'Your Faangin Pro answer allowance is used for this period. Open Account & billing to review your plan.')
+  if (code === 'backstop') return new InferenceError('quota_exhausted', 'Your Faangin Pro usage limit has been reached. Try again after the allowance renews or contact support.')
+  if (code === 'concurrency') return new InferenceError('rate_limited', 'Two Faangin Pro answers are already running. Wait for one to finish, then retry.')
+  if (code === 'pro_paused') return new InferenceError('offline', 'Faangin Pro sessions are temporarily paused. Your work is saved; try again later.')
   if (status === 401 || ['invalid_api_key', 'authentication_error'].includes(code)) return new InferenceError('invalid_credentials', 'OpenAI rejected the API key. Replace it in Settings and test the connection.')
   if (status === 403 || code === 'permission_denied') return new InferenceError('permission_denied', 'This OpenAI project does not have permission for the selected model. Check project access or select another model.')
   if (code === 'insufficient_quota' || code === 'quota_exceeded') return new InferenceError('quota_exhausted', 'OpenAI quota is exhausted. Check billing and project limits before trying again.')
@@ -182,7 +190,7 @@ export async function generateCompiledAnswer(prompt: CompiledPrompt, selectedMod
     const fetcher = options.transport?.fetch ?? globalThis.fetch
     const response = await abortable(fetcher(RESPONSES_URL, {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ model, instructions: prompt.instructions, input: prompt.input, stream: true, store: false, max_output_tokens: maxOutputTokens, ...answerReasoning(model, prompt.reasoningEffort), ...(prompt.responseProtocol === 'json' ? { text: { format: STRUCTURED_INTERVIEW_FORMAT } } : {}) }),
+      body: JSON.stringify({ model: options.managedMode ?? model, instructions: prompt.instructions, input: prompt.input, stream: true, store: false, max_output_tokens: maxOutputTokens, ...answerReasoning(model, prompt.reasoningEffort), ...(prompt.responseProtocol === 'json' ? { text: { format: STRUCTURED_INTERVIEW_FORMAT } } : {}) }),
       signal: controller.signal
     }), controller.signal)
     clear(connectionTimer)
@@ -221,6 +229,7 @@ export async function generateCompiledAnswer(prompt: CompiledPrompt, selectedMod
     }
     if (controller.signal.aborted) throw abortError ?? cancelled()
     if (!completed) throw malformed()
+    if (options.managedMode === 'handsfree' && completed.id === 'resp_faangin_skipped' && !text && Array.isArray(completed.output) && completed.output.length === 0) return { text: '', model, inputTokens: 0, outputTokens: 0, skipped: true }
     const authoritativeText = finalText(completed)
     if (authoritativeText && authoritativeText !== text) {
       if (!authoritativeText.startsWith(text)) throw malformed()
@@ -283,14 +292,20 @@ export interface TranscriberOptions {
   onFinal: (itemId: string, text: string, capturedAt: number, utteranceComplete: boolean) => void
   /** An empty/silent endpoint can complete an already-finalized transport chunk. */
   onUtteranceComplete?: (itemId: string, capturedAt: number) => void
+  /** A silent endpoint with no local transport chunk can complete a carried chunk after reconnecting. */
+  onSilentEndpoint?: () => void
   onIncomplete?: (message: string) => void
   onError: (message: string) => void
   /** Cancels admission until session.updated; stop() owns finalization after readiness. */
   signal?: AbortSignal
   transport?: InferenceTransport
+  /** Only the authenticated Pro gateway may acknowledge a deliberately muted turn. */
+  managedTranscription?: boolean
+  /** Trusted managed-gateway control; callers drain and rotate before an Edge worker retires. */
+  onSessionExpiring?: () => void
   deadlines?: { connectMs?: number; finalizeMs?: number; closeMs?: number; flushMs?: number }
 }
-export interface LiveTranscriber { write(pcm: Uint8Array): void; commit(utteranceComplete?: boolean): void; flush(): Promise<void>; stop(): Promise<void> }
+export interface LiveTranscriber { write(pcm: Uint8Array): void; commit(utteranceComplete?: boolean): void; flush(utteranceComplete?: boolean): Promise<void>; stop(): Promise<void> }
 
 export async function createLiveTranscriber(options: TranscriberOptions): Promise<LiveTranscriber> {
   if (options.signal?.aborted) throw cancelled()
@@ -363,7 +378,8 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
   const completeSilentEndpoint = (): void => {
     // Never release a held question if even a short audible correction remains
     // unfinalized. No synthetic audio/text or empty provider commit is needed.
-    if (audibleSamples || !lastCommit || lastCommit.utteranceComplete) return
+    if (audibleSamples) return
+    if (!lastCommit || lastCommit.utteranceComplete) { options.onSilentEndpoint?.(); return }
     lastCommit.utteranceComplete = true
     if (lastCommit.itemId && published.has(lastCommit.itemId)) options.onUtteranceComplete?.(lastCommit.itemId, lastCommit.capturedAt)
   }
@@ -380,13 +396,14 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
     try { event = JSON.parse(raw.toString()) } catch { fail(malformed()); return }
     if (!event || typeof event !== 'object') { fail(malformed()); return }
     if (event.type === 'session.updated') { if (!ready && !stopping) { ready = true; clearTimeout(connectTimer); options.signal?.removeEventListener('abort', admissionAbort); readyResolve() }; return }
+    if (options.managedTranscription && event.type === 'faangin.session.expiring') { options.onSessionExpiring?.(); return }
     if (event.type === 'error' || event.type === 'conversation.item.input_audio_transcription.failed') { fail(safeProviderError(undefined, event)); return }
     const id = typeof event.item_id === 'string' && event.item_id.length <= 128 ? event.item_id : undefined
     if (event.type === 'input_audio_buffer.committed') {
       if (!id || published.has(id) || commits.some(item => item.itemId === id)) return
       const slot = commits.find(item => !item.itemId)
       if (!slot) { fail(malformed()); return }
-      slot.itemId = id; slot.final = items.get(id)?.final; flushFinals(); return
+      slot.itemId = id; slot.final = options.managedTranscription && /^faangin_muted_\d+$/.test(id) ? '' : items.get(id)?.final; flushFinals(); return
     }
     if (event.type !== 'conversation.item.input_audio_transcription.delta' && event.type !== 'conversation.item.input_audio_transcription.completed') return
     if (!id) { fail(malformed()); return }
@@ -441,9 +458,10 @@ export async function createLiveTranscriber(options: TranscriberOptions): Promis
       if (audioBytes < MIN_COMMIT_BYTES) { if (utteranceComplete) completeSilentEndpoint(); return }
       commitBuffered(utteranceComplete)
     },
-    flush(): Promise<void> {
+    flush(utteranceComplete = true): Promise<void> {
       if (!ready || stopping || failed || closed) return Promise.reject(new InferenceError('offline', 'The question audio is disconnected. Check the transcript or restart listening before answering.'))
-      if (audioBytes >= MIN_COMMIT_BYTES && audibleSamples >= 240) commitBuffered()
+      if (audioBytes >= MIN_COMMIT_BYTES && audibleSamples >= 240) commitBuffered(utteranceComplete)
+      else if (utteranceComplete) completeSilentEndpoint()
       if (failed || closed) return Promise.reject(new InferenceError('offline', 'The question could not be finalized. Restart listening or type the question.'))
       if (!commits.length) return Promise.resolve()
       return new Promise<void>((resolve, reject) => {

@@ -17,7 +17,7 @@ async function run() {
   const fixtureSuite = process.env.FAANGIN_DELIVERY_SUITE || 'development'
   if (!['development', 'holdout'].includes(fixtureSuite)) throw new Error('Unknown evaluation suite.')
   const fixtures = fixtureSuite === 'holdout' ? HOLDOUT_FIXTURES : DELIVERY_FIXTURES
-  const savedDirectory = path.join(os.homedir(), 'Library/Application Support/Faangin')
+  const savedDirectory = path.join(app.getPath('appData'), 'Faangin')
   const keyFile = path.join(savedDirectory, 'openai.key.enc')
   if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(keyFile)) throw new Error('The saved encrypted OpenAI connection is unavailable.')
   let model = process.env.FAANGIN_DELIVERY_MODEL || DEFAULT_SETTINGS.fastModel
@@ -30,7 +30,7 @@ async function run() {
   const apiKey = safeStorage.decryptString(fs.readFileSync(keyFile))
   const baseline = loadBaselineCompiler(path.resolve(__dirname, '..'))
   try {
-    const reportPath = process.env.FAANGIN_DELIVERY_REPORT || `/private/tmp/faangin-response-delivery-${fixtureSuite === 'holdout' ? 'holdout-' : ''}live.json`
+    const reportPath = process.env.FAANGIN_DELIVERY_REPORT || path.join(os.tmpdir(), `faangin-response-delivery-${fixtureSuite === 'holdout' ? 'holdout-' : ''}live.json`)
     const selectedCaseIds = process.env.FAANGIN_DELIVERY_CASES?.split(',').filter(Boolean)
     const report = await runLiveEvaluation({ baseline: baseline.compiler, apiKey, model, revision: baseline.revision, reportPath, selectedCaseIds, fixtures, fixtureSuite, reasoningOverride, onProgress: progress => console.log(JSON.stringify(progress)) })
     console.log(JSON.stringify({ complete: true, model, fixtureSuite, reasoningOverride: report.reasoningOverride, trialCount: report.trials.length, automaticDispositionGate: report.automaticDispositionGate, reportPath }))

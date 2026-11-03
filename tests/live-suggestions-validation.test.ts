@@ -36,7 +36,7 @@ test('a legacy saved configuration leaves automatic requests disabled', () => {
     repo.close(); repo = new Repository(path)
     assert.equal(repo.settings().liveSuggestions, true)
     assert.equal(repo.settings().liveSuggestionSource, 'microphone')
-  } finally { repo?.close(); rmSync(directory, { recursive: true, force: true }) }
+  } finally { repo?.close(); rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })
 
 test('renderer requests cannot assign the automatic answer origin', () => {

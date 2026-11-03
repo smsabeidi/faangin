@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { CloudError } from '../src/main/faangin-cloud'
 import { BillingError } from '../src/main/licensing/service'
 import { CONFIG, DAY, DEVICE, deferred, harness, keyPair, makeToken, licensePayload, NOW, until } from './licensing-support'
 
-const signedIn = { uid: 'user-1', refreshToken: 'refresh-1' }
+const signedIn = { uid: 'user-1', refreshToken: 'refresh-1', provider: 'supabase' as const, supabaseUrl: CONFIG.supabaseUrl }
 const checkoutUrl = 'https://checkout.stripe.com/c/pay/cs_test_1'
 const portalUrl = 'https://billing.stripe.com/p/session/test_1'
 
@@ -32,44 +34,50 @@ test('sign-in shows the code, opens the activation page, and ends with an active
 
   const prompt = (await service.startSignIn()).signIn
   assert.equal(prompt?.userCode, 'ABCD-EFGH')
-  assert.equal(prompt?.verificationUrl, 'https://faangin-staging.web.app/activate?code=ABCD-EFGH')
-  assert.deepEqual(opened, ['https://faangin-staging.web.app/activate?code=ABCD-EFGH'])
+  assert.equal(prompt?.verificationUrl, 'http://127.0.0.1:41234/activate?code=ABCD-EFGH&lease=fixture')
+  assert.deepEqual(opened, ['http://127.0.0.1:41234/activate?code=ABCD-EFGH&lease=fixture'])
   assert.equal(service.summary().state.kind, 'signed-out', 'nothing is trusted until approval')
 
-  approval.resolve({ status: 'approved', customToken: 'custom-token', uid: 'user-1' })
+  approval.resolve({ status: 'approved', tokenHash: 'custom-token', uid: 'user-1' })
   await until(() => service.summary().state.kind === 'active', 'an active license')
   assert.deepEqual(service.summary().state, { kind: 'active', plan: 'byok', pastDue: false, periodEnd: null, cancelAtPeriodEnd: false })
   assert.equal(service.summary().signIn, null)
   assert.equal(service.summary().error, null)
   assert.deepEqual(await store.readSession(), signedIn)
   assert.equal(await store.readLicense(), token())
-  assert.equal(count('refreshIdToken'), 0, 'the ID token from sign-in is reused for the first license request')
-  assert.ok(!(await import('node:fs')).readFileSync(`${dir}/account-session.bin`).toString().includes('refresh-1'))
+  assert.equal(count('refreshAuthSession'), 0, 'the ID token from sign-in is reused for the first license request')
+  assert.ok(!readFileSync(join(dir, 'account-session.bin')).toString().includes('refresh-1'))
 })
 
-test('sign-in sends this device to the server and the exchange uses the web API key', async t => {
+test('sign-in sends this device to the server and the exchange uses the publishable key', async t => {
   const { service, calls } = harness(t)
   await service.start()
   await service.startSignIn()
   await until(() => service.summary().state.kind === 'active')
-  assert.deepEqual(calls.find(call => call.name === 'startDeviceSignIn')?.args, [CONFIG.functionsBase, DEVICE])
-  assert.deepEqual(calls.find(call => call.name === 'exchangeCustomToken')?.args, ['web-key', 'custom-token', undefined])
-  assert.deepEqual(calls.find(call => call.name === 'fetchLicense')?.args, [CONFIG.functionsBase, 'id-token-1', DEVICE])
+  assert.deepEqual(calls.find(call => call.name === 'startDeviceSignIn')?.args, [CONFIG.functionsBase, DEVICE, CONFIG.publishableKey])
+  assert.deepEqual(calls.find(call => call.name === 'exchangeDeviceToken')?.args, [CONFIG.supabaseUrl, CONFIG.publishableKey, 'custom-token', 'user-1'])
+  assert.deepEqual(calls.find(call => call.name === 'fetchLicense')?.args, [CONFIG.functionsBase, 'id-token-1', DEVICE, CONFIG.publishableKey])
 })
 
-test('a verification link outside the activation page is never opened or polled', async t => {
-  const { service, opened, count } = harness(t, { cloud: { startDeviceSignIn: async () => ({ deviceCode: 'd', userCode: 'ABCD-EFGH', verificationUrl: 'https://evil.example/activate?code=ABCD-EFGH', expiresIn: 600, interval: 5 }) } })
+test('the activation browser is a main-owned loopback lease and closes after cancellation', async t => {
+  const waiting = deferred<unknown>()
+  const { service, activation } = harness(t, { cloud: { waitForDeviceSignIn: () => waiting.promise } })
   await service.start()
-  await assert.rejects(service.startSignIn(), (error: unknown) => error instanceof BillingError && /unexpected link/.test(error.message))
-  assert.deepEqual(opened, [])
-  assert.equal(count('waitForDeviceSignIn'), 0)
-  assert.equal(service.summary().signIn, null)
+  await service.startSignIn()
+  assert.equal(activation.opened, 1)
+  assert.match(service.summary().signIn!.verificationUrl, /^http:\/\/127\.0\.0\.1:/)
+  assert.equal(service.isActivationUrl(service.summary().signIn!.verificationUrl), true)
+  assert.equal(service.isActivationUrl('http://127.0.0.1:41234/anything'), false)
+  service.cancelSignIn()
+  assert.equal(service.isActivationUrl('http://127.0.0.1:41234/activate?code=ABCD-EFGH&lease=fixture'), false)
+  waiting.resolve({ status: 'aborted' })
+  await until(() => activation.closed > 0)
 })
 
 test('sign-in does not start when the OS cannot protect the credential', async t => {
   const { service, count } = harness(t, { secrets: { available: false } })
   await service.start()
-  await assert.rejects(service.startSignIn(), /credential encryption is unavailable/)
+  await assert.rejects(service.startSignIn(), /credential encryption is unavailable\. Unlock your system credential store/)
   assert.equal(count('startDeviceSignIn'), 0)
 })
 
@@ -92,18 +100,25 @@ test('cancelling sign-in stops polling and leaves no error or session', async t 
   await new Promise(resolve => setTimeout(resolve, 10))
   assert.equal(service.summary().error, null)
   assert.equal(service.summary().state.kind, 'signed-out')
-  assert.equal(count('exchangeCustomToken'), 0)
+  assert.equal(count('exchangeDeviceToken'), 0)
   assert.equal(await store.readSession(), null)
 })
 
 test('an expired sign-in code says so', async t => {
-  const { service } = harness(t, { cloud: { waitForDeviceSignIn: async () => ({ status: 'expired' }) } })
+  const { service, activation } = harness(t, { cloud: { waitForDeviceSignIn: async () => ({ status: 'expired' }) } })
   await service.start()
   await service.startSignIn()
   await until(() => service.summary().error !== null)
   assert.match(service.summary().error!, /code expired/)
   assert.equal(service.summary().signIn, null)
   assert.equal(service.summary().state.kind, 'signed-out')
+  assert.equal(activation.closed, 0, 'email callbacks outlive the device code')
+  assert.equal(service.isActivationUrl('http://127.0.0.1:41234/activate?code=ABCD-EFGH&lease=fixture'), false)
+  await service.startSignIn()
+  await until(() => activation.opened === 2 && service.summary().signIn === null)
+  assert.equal(activation.closed, 1, 'a fresh sign-in cleans up the old callback')
+  service.dispose()
+  await until(() => activation.closed === 2)
 })
 
 test('a signed-in account with no purchase is no-plan, quietly, and a stale license is removed', async t => {
@@ -130,7 +145,7 @@ test('the fourth device gets the device-limit message and keeps its sign-in', as
 })
 
 test('a rejected sign-in token signs the user out and clears what was stored', async t => {
-  const { service, store, token } = harness(t, { cloud: { refreshIdToken: async () => { throw new CloudError('INVALID_ARGUMENT', 'TOKEN_EXPIRED', 400) } } })
+  const { service, store, token } = harness(t, { cloud: { refreshAuthSession: async () => { throw new CloudError('refresh_token_not_found', 'Invalid Refresh Token', 400) } } })
   await store.writeSession(signedIn)
   await store.writeLicense(token())
   await service.start()
@@ -163,8 +178,8 @@ test('offline, a working license keeps working and a background check stays quie
   assert.match(service.summary().error!, /keeps working offline/)
 })
 
-test('a 5xx while minting the ID token is offline, not a sign-out', async t => {
-  const { service, store } = harness(t, { cloud: { refreshIdToken: async () => { throw new CloudError('UNAVAILABLE', 'try later', 503) } } })
+test('a 5xx while refreshing the access token is offline, not a sign-out', async t => {
+  const { service, store } = harness(t, { cloud: { refreshAuthSession: async () => { throw new CloudError('UNAVAILABLE', 'try later', 503) } } })
   await store.writeSession(signedIn)
   await service.start()
   await service.refresh()
@@ -173,24 +188,24 @@ test('a 5xx while minting the ID token is offline, not a sign-out', async t => {
 })
 
 test('a rotated refresh token is persisted', async t => {
-  const { service, store } = harness(t, { cloud: { refreshIdToken: async () => ({ uid: 'user-1', idToken: 'id-token-9', refreshToken: 'refresh-rotated', expiresAt: NOW + 3600_000 }) } })
+  const { service, store } = harness(t, { cloud: { refreshAuthSession: async () => ({ uid: 'user-1', accessToken: 'id-token-9', refreshToken: 'refresh-rotated', expiresAt: NOW + 3600_000 }) } })
   await store.writeSession(signedIn)
   await service.start()
   await service.refresh()
-  assert.deepEqual(await store.readSession(), { uid: 'user-1', refreshToken: 'refresh-rotated' })
+  assert.deepEqual(await store.readSession(), { ...signedIn, refreshToken: 'refresh-rotated' })
   assert.equal(service.summary().state.kind, 'active')
 })
 
-test('the ID token is reused until it is close to expiry', async t => {
+test('the access token is reused until it is close to expiry', async t => {
   const { service, store, clock, count } = harness(t)
   await store.writeSession(signedIn)
   await service.start()
   await service.refresh()
   await service.refresh()
-  assert.equal(count('refreshIdToken'), 1)
+  assert.equal(count('refreshAuthSession'), 1)
   clock.now += 56 * 60_000
   await service.refresh()
-  assert.equal(count('refreshIdToken'), 2)
+  assert.equal(count('refreshAuthSession'), 2)
 })
 
 test('a license the build cannot verify is rejected and never stored', async t => {
@@ -270,7 +285,7 @@ test('sign-out removes the session and license and abandons a pending sign-in', 
   assert.equal(await store.readSession(), null)
   assert.equal(await store.readLicense(), null)
   await new Promise(resolve => setTimeout(resolve, 10))
-  assert.equal(count('exchangeCustomToken'), 0)
+  assert.equal(count('exchangeDeviceToken'), 0)
 })
 
 test('Checkout opens only Stripe and marks the purchase as awaited; focus checks are rate limited', async t => {
@@ -288,7 +303,7 @@ test('Checkout opens only Stripe and marks the purchase as awaited; focus checks
   const summary = await service.openCheckout('pro_monthly')
   assert.deepEqual(opened, [checkoutUrl])
   assert.equal(summary.awaitingPurchase, true)
-  assert.deepEqual(calls.find(entry => entry.name === 'callFunction')!.args, [CONFIG.functionsBase, 'createCheckoutSession', { plan: 'pro_monthly' }, 'id-token-2'])
+  assert.deepEqual(calls.find(entry => entry.name === 'callFunction')!.args, [CONFIG.functionsBase, 'createCheckoutSession', { plan: 'pro_monthly' }, 'id-token-2', CONFIG.publishableKey])
 
   service.onWindowFocus()
   await until(() => count('fetchLicense') === 2, 'the focus check')
@@ -406,4 +421,175 @@ test('every state change is announced to the UI', async t => {
   assert.equal(changes.at(-1)?.state.kind, 'active')
   assert.ok(changes.some(summary => summary.busy))
   assert.equal(changes.at(-1)?.busy, false)
+})
+
+test('cancelling while device-token exchange is pending cannot save a session later', async t => {
+  const exchange = deferred<unknown>()
+  const { service, store, count } = harness(t, { cloud: { exchangeDeviceToken: () => exchange.promise } })
+  await service.start()
+  await service.startSignIn()
+  await until(() => count('exchangeDeviceToken') === 1)
+  service.cancelSignIn()
+  exchange.resolve({ uid: 'user-1', accessToken: 'late-id', refreshToken: 'late-refresh', expiresAt: NOW + 3600_000 })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(service.summary().state.kind, 'signed-out')
+  assert.equal(await store.readSession(), null)
+  assert.equal(count('fetchLicense'), 0)
+})
+
+test('signing out while code creation is pending prevents the late browser and polling', async t => {
+  const start = deferred<unknown>()
+  const { service, store, count, opened } = harness(t, { cloud: { startDeviceSignIn: () => start.promise } })
+  await service.start()
+  const signingIn = service.startSignIn()
+  await until(() => count('startDeviceSignIn') === 1)
+  await service.signOut()
+  start.resolve({ deviceCode: 'late-code', userCode: 'ABCD-EFGH', expiresIn: 600, interval: 5 })
+  await signingIn
+  assert.deepEqual(opened, [])
+  assert.equal(count('waitForDeviceSignIn'), 0)
+  assert.equal(await store.readSession(), null)
+})
+
+test('a configuration error from Supabase keeps the session for recovery', async t => {
+  const { service, store } = harness(t, { cloud: { refreshAuthSession: async () => { throw new CloudError('400', 'API_KEY_INVALID', 400) } } })
+  await store.writeSession(signedIn)
+  await service.start()
+  await service.refresh()
+  assert.deepEqual(await store.readSession(), signedIn)
+  assert.match(service.summary().error!, /Could not reach Faangin/)
+})
+
+test('an existing BYOK license keeps the upgrade pending until the delayed Pro webhook arrives', async t => {
+  const issuer = harness(t)
+  let upgraded = false
+  const { service, store, count } = harness(t, {
+    trust: [issuer.signer.publicKeyBase64], purchaseRefreshMs: 15,
+    cloud: {
+      callFunction: async () => ({ url: checkoutUrl }),
+      fetchLicense: async () => ({ token: issuer.token({ plan: upgraded ? 'pro' : 'byok' }), plan: upgraded ? 'pro' : 'byok', status: 'active', expiresAt: NOW + 30 * DAY, graceUntil: NOW + 44 * DAY })
+    }
+  })
+  await store.writeSession(signedIn)
+  await service.start()
+  await until(() => service.summary().state.kind === 'active')
+  await service.openCheckout('pro_monthly')
+  const previous = count('fetchLicense')
+  service.onWindowFocus()
+  await until(() => count('fetchLicense') > previous)
+  assert.equal(service.summary().awaitingPurchase, true, 'the old BYOK license does not confirm a Pro purchase')
+  upgraded = true
+  await until(() => !service.summary().awaitingPurchase, 'background webhook reconciliation')
+  assert.equal((service.summary().state as { plan?: string }).plan, 'pro')
+})
+
+test('returning from the portal refreshes cancellation even without a new Checkout purchase', async t => {
+  const issuer = harness(t)
+  let cancelled = false
+  const { service, store } = harness(t, {
+    trust: [issuer.signer.publicKeyBase64],
+    cloud: {
+      callFunction: async () => ({ url: portalUrl }),
+      fetchLicense: async () => ({ token: issuer.token({ plan: 'pro', cancelAtPeriodEnd: cancelled }), plan: 'pro', status: 'active', expiresAt: NOW + 30 * DAY, graceUntil: NOW + 44 * DAY })
+    }
+  })
+  await store.writeSession(signedIn)
+  await service.start()
+  await until(() => service.summary().state.kind === 'active')
+  await service.openPortal()
+  cancelled = true
+  service.onWindowFocus()
+  await until(() => (service.summary().state as { cancelAtPeriodEnd?: boolean }).cancelAtPeriodEnd === true)
+})
+
+test('inference requires a verified plan when the backend is configured', async t => {
+  const { service } = harness(t)
+  await service.start()
+  await assert.rejects(service.requireInferenceAccess(), /Sign in/)
+  await service.startSignIn()
+  await until(() => service.summary().state.kind === 'active')
+  assert.deepEqual(await service.requireInferenceAccess(), { kind: 'byok' })
+  assert.equal(await service.proAccess(), null)
+  const unconfigured = harness(t, { config: null })
+  assert.deepEqual(await unconfigured.service.requireInferenceAccess(), { kind: 'unconfigured' })
+})
+
+test('unpaid and expired accounts cannot request inference; BYOK grace remains available offline', async t => {
+  const { service, store, clock, token } = harness(t, { cloud: { fetchLicense: async () => { throw new TypeError('offline') } } })
+  await store.writeSession(signedIn)
+  await service.start()
+  await assert.rejects(service.requireInferenceAccess(), /Choose a plan/)
+  await store.writeLicense(token())
+  await service.start()
+  clock.now = NOW + 31 * DAY
+  assert.deepEqual(await service.requireInferenceAccess(), { kind: 'byok' })
+  clock.now = NOW + 45 * DAY
+  await assert.rejects(service.requireInferenceAccess(), /Check your license/)
+})
+
+test('Pro access uses the environment signing keys and never works without a configured gateway', async t => {
+  const issuer = harness(t)
+  const { service, store, count } = harness(t, {
+    config: { ...CONFIG, gatewayBase: 'https://gateway.example.run.app', licensePublicKeys: [issuer.signer.publicKeyBase64] },
+    cloud: { fetchLicense: async () => ({ token: issuer.token({ plan: 'pro' }), plan: 'pro', status: 'active', expiresAt: NOW + 30 * DAY, graceUntil: NOW + 44 * DAY }) }
+  })
+  await store.writeSession(signedIn)
+  await service.start()
+  await until(() => service.summary().state.kind === 'active')
+  const access = await service.requireInferenceAccess()
+  assert.equal(access.kind, 'pro')
+  assert.ok(access.kind === 'pro' && typeof access.transport.fetch === 'function')
+  assert.equal(count('refreshAuthSession'), 1, 'a fresh Firebase token is used without another refresh')
+  const missing = harness(t, {
+    trust: [issuer.signer.publicKeyBase64],
+    cloud: { fetchLicense: async () => ({ token: issuer.token({ plan: 'pro' }), plan: 'pro', status: 'active', expiresAt: NOW + 30 * DAY, graceUntil: NOW + 44 * DAY }) }
+  })
+  await missing.store.writeSession(signedIn)
+  await missing.service.start()
+  await until(() => missing.service.summary().state.kind === 'active')
+  await assert.rejects(missing.service.proAccess(), /no Pro gateway/)
+})
+
+test('legacy Firebase and other-project refresh credentials are discarded without contacting Supabase', async t => {
+  for (const stored of [
+    { uid: 'old-user', refreshToken: 'legacy-refresh' },
+    { ...signedIn, supabaseUrl: 'https://another-project.supabase.co' }
+  ]) {
+    const { service, store, token, count } = harness(t)
+    await store.writeSession(stored)
+    await store.writeLicense(token())
+    await service.start()
+    assert.equal(service.summary().state.kind, 'signed-out')
+    assert.equal(await store.readSession(), null)
+    assert.equal(await store.readLicense(), null)
+    assert.equal(count('refreshAuthSession'), 0)
+  }
+})
+
+test('desktop sign-out revokes only its own Supabase session after local credentials are cleared', async t => {
+  const { service, store, count, calls } = harness(t)
+  await service.start()
+  await service.startSignIn()
+  await until(() => service.summary().state.kind === 'active')
+  await service.signOut()
+  assert.equal(service.summary().state.kind, 'signed-out')
+  assert.equal(await store.readSession(), null)
+  await until(() => count('revokeAuthSession') === 1)
+  assert.deepEqual(calls.find(call => call.name === 'revokeAuthSession')!.args, [CONFIG.supabaseUrl, CONFIG.publishableKey, 'id-token-1'])
+})
+
+test('a rotated access token is not admitted before its refresh credential is durably saved', async t => {
+  const { service, store, count } = harness(t, { cloud: { refreshAuthSession: async () => ({ uid: 'user-1', accessToken: 'next-access', refreshToken: 'next-refresh', expiresAt: NOW + 3600_000 }) } })
+  await store.writeSession(signedIn)
+  const persist = store.writeSession.bind(store)
+  let fail = true
+  store.writeSession = async session => { if (fail) { fail = false; throw new Error('storage unavailable') }; await persist(session) }
+  await service.start()
+  await until(() => service.summary().error !== null)
+  assert.equal(count('refreshAuthSession'), 1)
+  assert.equal((await store.readSession())?.refreshToken, 'refresh-1')
+  await service.refresh()
+  assert.equal(count('refreshAuthSession'), 2, 'the failed persistence did not publish a memoized access token')
+  assert.equal((await store.readSession())?.refreshToken, 'next-refresh')
+  assert.equal(service.summary().state.kind, 'active')
 })

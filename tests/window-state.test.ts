@@ -138,6 +138,7 @@ test('atomic geometry store survives reopening and recovers a corrupt file witho
     store.write('overlay', state); store.write('workspace', { ...state, bounds: { ...state.bounds, width: 1000 } })
     assert.deepEqual(jsonWindowStateStore(path).read('overlay'), state)
     assert.equal(JSON.parse(readFileSync(path, 'utf8')).workspace.bounds.width, 1000)
-    assert.equal(statSync(path).mode & 0o777, 0o600)
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+    // NTFS has no POSIX mode bits; the per-user profile ACL protects the file there.
+    if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })

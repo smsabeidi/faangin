@@ -22,11 +22,14 @@ export interface ScreenshotDisplay {
   scaleFactor: number
 }
 
+export type ScreenshotSourceType = 'screen' | 'window'
+
 interface ScreenshotPorts<Image> {
   windows(): readonly ScreenshotWindow[]
   watchWindows(listener: (window: ScreenshotWindow) => void): () => void
   displays(): readonly ScreenshotDisplay[]
-  sources(size: { width: number; height: number }): Promise<readonly ScreenshotSource<Image>[]>
+  /** Thumbnails of the listed kinds only: on Windows every window thumbnail is a full capture of that window, so a screen request must not pay for them. */
+  sources(size: { width: number; height: number }, types: readonly ScreenshotSourceType[]): Promise<readonly ScreenshotSource<Image>[]>
   quitting(): boolean
   /** A user's explicit Hide during acquisition overrides temporary restoration. */
   mayRestore?(window: ScreenshotWindow): boolean
@@ -190,7 +193,7 @@ export class ScreenshotCapture<Image> {
         exclusion.start()
         await (this.ports.settle?.() ?? new Promise<void>(resolve => setTimeout(resolve, 120)))
         request.assertCurrent(); exclusion.assertExcluded()
-        const sources = await read({ width: 2560, height: 1600 })
+        const sources = await read({ width: 2560, height: 1600 }, [request.sourceId?.startsWith('window:') ? 'window' : 'screen'])
         request.assertCurrent(); exclusion.assertExcluded()
         return resolveScreenshotSource(sources, request.sourceId, request.primaryDisplayId, exclusion.ownedIds, before, this.ports.displays())
       }, () => exclusion.restore(), abort.signal)
@@ -211,7 +214,7 @@ export class ScreenshotCapture<Image> {
     return this.run(async read => {
       for (const window of this.ports.windows()) remember(window)
       unwatch = this.ports.watchWindows(window => { try { remember(window) } catch { changedError = true } })
-      const sources = await read({ width: 240, height: 150 })
+      const sources = await read({ width: 240, height: 150 }, ['screen', 'window'])
       for (const window of this.ports.windows()) remember(window)
       if (changedError) throw new Error('Faangin windows changed while listing capture sources. Try again.')
       return sources.filter(source => !ownedIds.has(source.id))
@@ -219,7 +222,7 @@ export class ScreenshotCapture<Image> {
   }
 
   private async run<Result>(
-    work: (read: (size: { width: number; height: number }) => Promise<readonly ScreenshotSource<Image>[]>) => Promise<Result>,
+    work: (read: (size: { width: number; height: number }, types: readonly ScreenshotSourceType[]) => Promise<readonly ScreenshotSource<Image>[]>) => Promise<Result>,
     cleanup: () => void,
     signal?: AbortSignal
   ): Promise<Result> {
@@ -234,9 +237,9 @@ export class ScreenshotCapture<Image> {
       if (finished) throw new Error('Screen capture timed out. Try again after the system capture service responds.')
       if (this.ports.quitting()) throw new Error('Faangin is closing. The screenshot was not saved.')
     }
-    const read = (size: { width: number; height: number }) => {
+    const read = (size: { width: number; height: number }, types: readonly ScreenshotSourceType[]) => {
       assertActive()
-      nativeWork = this.ports.sources(size); nativeSettled = false
+      nativeWork = this.ports.sources(size, types); nativeSettled = false
       void nativeWork.then(() => { nativeSettled = true }, () => { nativeSettled = true })
       return nativeWork
     }

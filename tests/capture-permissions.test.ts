@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { capturePermissionCheckAllowed, capturePermissionRequestAllowed, type CapturePermissionScope } from '../src/main/capture-permissions'
+import { capturePermissionCheckAllowed, capturePermissionRequestAllowed, displayMediaResponse, type CapturePermissionScope } from '../src/main/capture-permissions'
 
 const capture: CapturePermissionScope = { trustedCaptureMainFrame: true, activeSystemAudio: true }
 const microphoneOnly: CapturePermissionScope = { trustedCaptureMainFrame: true, activeSystemAudio: false }
@@ -70,4 +70,22 @@ test('stopping, disabling or revoking system capture closes legacy and modern ad
   assert.equal(capturePermissionRequestAllowed(scope, 'media', []), false)
   assert.equal(capturePermissionRequestAllowed(scope, 'display-capture', ['video', 'audio']), false)
   assert.equal(capturePermissionCheckAllowed(scope, 'media', 'unknown'), false)
+})
+
+test('an owned loopback request is answered with the primary screen and loopback audio on both desktop platforms', () => {
+  const primary = { id: 'screen:0:0', display_id: '2528732444' }, secondary = { id: 'screen:1:0', display_id: '1234567890' }
+  for (const platform of ['darwin', 'win32'] as const) {
+    assert.deepEqual(displayMediaResponse([secondary, primary], '2528732444', platform, true), { video: primary, audio: 'loopback' })
+    assert.deepEqual(displayMediaResponse([secondary, primary], '2528732444', platform, false), {}, 'a lapsed lease or generation declines without a source')
+    assert.deepEqual(displayMediaResponse([], '2528732444', platform, true), {})
+  }
+})
+
+test('only Windows admits a loopback request through a screen whose display_id cannot be matched', () => {
+  // Duplicated and remote displays report an empty display_id on Windows; loopback audio is device-wide so any screen admits it there.
+  const duplicated = { id: 'screen:0:0', display_id: '' }
+  assert.deepEqual(displayMediaResponse([duplicated], '2528732444', 'win32', true), { video: duplicated, audio: 'loopback' })
+  assert.deepEqual(displayMediaResponse([duplicated], '2528732444', 'darwin', true), {})
+  assert.deepEqual(displayMediaResponse([duplicated], '2528732444', 'linux', true), {})
+  assert.deepEqual(displayMediaResponse([duplicated], '2528732444', 'win32', false), {})
 })

@@ -1,6 +1,8 @@
 /** Explicit metadata export. Never serialize AppState, session objects, or logs. */
 const issues = ['settings-corrupt', 'answer-corrupt', 'interview-corrupt', 'configuration-corrupt', 'deletion-checkpoint-pending'] as const
 export const DIAGNOSTIC_ERROR_CODES = ['provider-auth', 'provider-quota', 'provider-rate-limit', 'provider-unavailable', 'provider-timeout', 'capture-permission', 'capture-device', 'capture-disconnect', 'storage-busy', 'storage-full', 'save-failed', 'storage-corrupt', 'unsupported-schema', 'credential-unavailable', 'unknown'] as const
+// Electron's media statuses plus 'not-required', which the platform contract reports where the OS has no such permission (Windows screen capture).
+const PERMISSION_STATES = ['not-determined', 'granted', 'denied', 'restricted', 'not-required', 'unknown'] as const
 type Data = Record<string, unknown>
 function object(value: unknown): Data {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return {}
@@ -59,7 +61,7 @@ export function buildDiagnosticBundle(input: unknown, exportedAt = Date.now()) {
     arch: choice(field(input, 'arch'), ['arm64', 'x64', 'ia32', 'unknown'], 'unknown'),
     versions: { app: version(field(versions, 'app')), electron: version(field(versions, 'electron')), node: version(field(versions, 'node')), chrome: version(field(versions, 'chrome')), os: version(field(versions, 'os')) },
     chatProvider: choice(field(settings, 'chatProvider'), ['openai', 'compatible', 'unknown'], 'unknown'),
-    permissions: { microphone: choice(field(permissions, 'microphone'), ['not-determined', 'granted', 'denied', 'restricted', 'unknown'], 'unknown'), screen: choice(field(permissions, 'screen'), ['not-determined', 'granted', 'denied', 'restricted', 'unknown'], 'unknown') },
+    permissions: { microphone: choice(field(permissions, 'microphone'), PERMISSION_STATES, 'unknown'), screen: choice(field(permissions, 'screen'), PERMISSION_STATES, 'unknown') },
     preferences: {
       theme: choice(field(settings, 'theme'), ['dark', 'light', 'system', 'unknown'], 'unknown'), opacity: number(field(settings, 'opacity'), 1), fontSize: number(field(settings, 'fontSize'), 24),
       microphone: flag(field(settings, 'microphone')), systemAudio: flag(field(settings, 'systemAudio')), privacyMode: flag(field(settings, 'privacyMode')), historyEnabled: flag(field(settings, 'historyEnabled')), includeHistory: flag(field(settings, 'includeHistory')), launchAtLogin: flag(field(settings, 'launchAtLogin')), smartMode: flag(field(settings, 'smartMode')),

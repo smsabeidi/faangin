@@ -1,6 +1,14 @@
 # Build verification record
 
-Updated: October 25, 2026 · Latest 0.4.2 permission-first setup; historical records preserved
+Updated: November 2, 2026 · Latest 0.4.3 Windows port (code, tests and CI workflow; not executed on Windows); 0.4.2 permission-first setup and historical records preserved
+
+## Windows port 0.4.3
+
+November 2, 2026. The Windows port lives in the shared codebase: `src/main/platform/types.ts` (the `DesktopPlatform` contract), `darwin.ts`, `win32.ts`, `linux.ts` and the selecting `index.ts`; win32 rules in `src/main/shortcut-manager.ts` (`Control+Alt+Escape` stop default, rejection of Windows-reserved chords, Ctrl/Alt/Win labels); `resources/icon.ico` from `scripts/icons.mjs` and `scripts/lib/ico.mjs`; the `win` and `nsis` blocks of `electron-builder.yml`; `electron-builder.release-win.yml` with `scripts/release-win.mjs`; the `package:win`, `dist:win`, `release:win` and `test:win32` scripts; and `.github/workflows/desktop-ci.yml` with a `macos-14` and `windows-latest` matrix. The [Windows engineering record](windows.md) describes each decision.
+
+Checks recorded for this entry were performed on the macOS development machine only. Unit coverage for the win32 branches is in `tests/platform.test.ts`, `tests/shortcut-manager.test.ts`, `tests/settings-shortcut.test.ts`, `tests/overlay-header.test.ts`, `tests/overlay-interaction.test.ts`, `tests/native-policy.test.ts`, `tests/licensing-store.test.ts`, `tests/release-config.test.ts`, `tests/release-win.test.ts` and `tests/ico.test.ts`, each passing an explicit `win32` platform id or reading the configuration files. `npm run test:win32` runs the same suite through `scripts/simulate-platform.mjs`, which redefines `process.platform` as `win32`, pins `TEMP`/`TMP` to the real temp directory and sets `FAANGIN_SIMULATED_PLATFORM=win32`; under that variable `tests/release-config.test.ts` skips its electron-builder schema-validation test, whose jiti loader rewrites paths to backslashes while the host's `path` stays posix, and every other test takes its Windows branch on the Mac. The full suite, typecheck, production build and smoke results for the integrated tree are recorded by the verification pass that follows this port, not here. `npm run package:win` and `npm run dist:win` were not run: electron-builder would produce `dist/win-unpacked/Faangin.exe` and `dist/Faangin-0.4.3-Windows-x64-setup.exe`, unsigned, on a Windows host; no such artifact exists and no hash is recorded. The CI workflow is in the tree and no run of it is recorded.
+
+Limits: no Windows machine executed the application; nothing about microphone switch handling, WASAPI loopback, overlay ordering, content protection, shortcut registration, tray or installer behaviour has been observed on Windows; the Windows installer is unsigned and `release:win` has only passed fixture checks. macOS behaviour and artifacts are unchanged by the port.
 
 ## Permission-first setup 0.4.2
 
@@ -43,6 +51,7 @@ The following records and exact hashes describe preserved 0.2.0, [0.2.1 latency]
 - Electron 44.7.0 with bundled Node.js 24.21.0
 - React 19.3.0, TypeScript 7.0.2, Vite 7.3.7, electron-vite 5.0.0
 - OpenAI Responses and Realtime transcription; separately configured compatible Chat Completions
+- Windows: not executed. The CI target is GitHub-hosted `windows-latest` with Node.js 22; no run is recorded
 
 ## Verification checkpoint
 
@@ -51,6 +60,7 @@ The following records and exact hashes describe preserved 0.2.0, [0.2.1 latency]
 | Regression suite | 313 passed; 0 failed; 0 skipped | Final integrated `npm test`, including nested CommonMark definitions, region consent/leases/pixel mapping, draft snapshots and text-only routing, plus SQLite recovery/data controls, imports, capture lifecycle, prompts, presets, memory, filters, diagnostics, streaming and release tooling |
 | Strict TypeScript and production build | Passed | Final `npm run build` includes `npm run typecheck`; main, sandboxed preload, workspace, capture, and document surfaces |
 | macOS acceptance packaging | Passed, exit 0 | Final app reports version 0.2.0; DMG and ZIP in `dist/candidate`; Apple Silicon artifacts, separate from the previous running build. Executable is ad hoc/linker-signed with no Developer ID team or sealed-resource signature; this is not a signed/notarized release |
+| Windows packaging (NSIS) | Not executed; configuration and fixture checks only | `npm run dist:win` on a Windows host produces `dist/win-unpacked/` and the unsigned `dist/Faangin-<version>-Windows-x64-setup.exe`; `tests/release-config.test.ts`, `tests/release-win.test.ts` and `tests/ico.test.ts` pin the configuration, release rules and committed ICO. See [Windows port 0.4.3](#windows-port-043) |
 | Packaged integration smoke | Passed, exit 0 | `/private/tmp/faangin-final-candidate-smoke.log`; final packaged preload/IPC, sandbox/context isolation, SQLite, imports, brief, opacity, capture cleanup, presets, reset/Trash/permanent delete, private history and restart |
 | Provider transport | Final packaged fixture smoke passed | Five controlled localhost requests including source-linked Draft and persisted source snapshots across restart; earlier packaged Fast/Smart routing, selected-memory, cancellation and safe quota checks also passed. No commercial-provider request |
 | Region image/pixel behavior | Generated Retina canonical-pixel fixture passed | Native image normalization and crop use the same encoded pixel grid; source consent, sender/session/epoch/topology, expiry and one-shot commit have fixtures. No physical screen/Retina/mixed-DPI capture is certified |
@@ -91,7 +101,7 @@ Historical native evidence is stored in [interview context](../assets/interview-
 
 The [PRD](../prd.md) remains the scope contract. The [requirement ledger](feature-status.md) distinguishes implemented flows from acceptance gaps. Region capture and source-linked drafts have passed final integrated tests, build and packaged fixture smoke. Final D0 acceptance still requires physical capture, resolved native screenshot/click evidence, the finite device/provider/language matrix, fresh-install demonstration, representative model/audio evaluation, resource benchmarks and accessibility checks.
 
-D1 remains in scope: Windows certification, bundled local speech, expanded provider coverage, explicit research/citations, slide tracking, local integrations, managed inference, accounts/device sessions, hosted sharing/sync, calendar preparation, billing/entitlements, mobile, original preparation/web utilities, referral operations and safe updates/version surfaces. A local compatible chat server does not establish bundled offline transcription or completion of this backlog.
+D1 remains in scope: Windows physical acceptance (see [Windows port 0.4.3](#windows-port-043)), bundled local speech, expanded provider coverage, explicit research/citations, slide tracking, local integrations, managed inference, accounts/device sessions, hosted sharing/sync, calendar preparation, billing/entitlements, mobile, original preparation/web utilities, referral operations and safe updates/version surfaces. A local compatible chat server does not establish bundled offline transcription or completion of this backlog.
 
 Exact commercial-product parity requires versioned native reference observations and feature-specific measurements. Public research and Faangin’s own fixtures do not establish private routing, complete operational equivalence or absolute invisibility.
 

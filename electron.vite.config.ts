@@ -1,9 +1,14 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
+// @ts-expect-error Node build helper is intentionally plain JavaScript.
+import { readCloudBuildConfig } from './scripts/cloud-build-config.mjs'
+
+const cloudConfig = readCloudBuildConfig(process.env.FAANGIN_CLOUD_CONFIG_FILE || resolve('config/cloud.supabase.json'), { required: true })
 
 export default defineConfig({
   main: {
+    define: { __FAANGIN_CLOUD_CONFIG__: JSON.stringify(cloudConfig ?? { supabaseUrl: '', publishableKey: '' }) },
     plugins: [externalizeDepsPlugin()],
     build: { rollupOptions: { input: resolve('src/main/index.ts') } }
   },

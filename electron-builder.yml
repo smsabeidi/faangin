@@ -5,6 +5,9 @@ directories:
   buildResources: resources
 files:
   - out/**
+  # electron-vite treats resources/ as the main-process public directory, so the tray icon's ?asset import resolves to this
+  # path at runtime instead of a copy under out/; buildResources is otherwise excluded from the asar.
+  - resources/icon.png
   - package.json
   - '!node_modules/**/test/**'
   - '!node_modules/**/tests/**'
@@ -27,10 +30,25 @@ mac:
     NSHighResolutionCapable: true
     LSMinimumSystemVersion: '14.4'
 win:
-  icon: resources/icon.png
-  target: nsis
-  artifactName: Faangin-${version}-setup.${ext}
+  # Committed ICO (scripts/icons.mjs) so builds need no icon conversion toolset download.
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Faangin-${version}-Windows-${arch}-setup.${ext}
+  # Per-user install under %LOCALAPPDATA%; the app never needs elevation.
+  requestedExecutionLevel: asInvoker
+  # Unsigned locally: no CSC_LINK means electron-builder skips signing. When it signs, this is the publisher it records for
+  # signature verification (defaulting to the certificate's common name); installer metadata (CompanyName) comes from package.json author.
+  signtoolOptions:
+    publisherName: Muhammed Salim
 nsis:
   oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Faangin
+  # Reinstalls keep the offline licence, account store and safeStorage-encrypted keys.
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
 publish: null

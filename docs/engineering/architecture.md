@@ -1,16 +1,18 @@
 # Technical design
 
-Status: proposed architecture for implementation review · October 11, 2026  
-Scope: [PRD](../prd.md), macOS first  
-Implementation status: no application code exists yet
+Status: original proposal of October 11, 2026; platform layer added November 2, 2026  
+Scope: [PRD](../prd.md), macOS and Windows from one codebase  
+Implementation status: implemented; the [build verification record](build-status.md) states what each version verified and the [Windows engineering record](windows.md) covers the Windows port
 
 ## Architectural decision
 
 Use a supported Electron release with TypeScript, a React renderer, a narrow validated preload bridge, and a local transactional session store. Keep capture, inference, and durable data independent of window presentation. Revalidate library versions and bundled Node capabilities when implementation starts; do not inherit Cue's old Electron or model defaults.
 
-Electron is a pragmatic fit for the requested overlay and later Windows support. A browser-only application cannot establish global shortcuts or desktop capture-exclusion behavior. A native-only Swift application would improve access to platform APIs but duplicate more UI and domain code for Windows. Tauri reduces runtime footprint but introduces a Rust/native-plugin dependency for the highest-risk capture paths. The Electron choice is provisional on the macOS capture spike and measured resource budgets.
+Electron is a pragmatic fit for the requested overlay and the shared Windows build. A browser-only application cannot establish global shortcuts or desktop capture-exclusion behavior. A native-only Swift application would improve access to platform APIs but duplicate more UI and domain code for Windows. Tauri reduces runtime footprint but introduces a Rust/native-plugin dependency for the highest-risk capture paths. The Electron choice is provisional on the macOS capture spike and measured resource budgets.
 
 Current official documentation changes the audio assumptions in the reference code: newer Electron uses a CoreAudio Tap path on modern macOS, with required app metadata and possible silent stream failure. Prove this path in a packaged app before committing to a native helper. Add a narrowly scoped signed Swift helper only if measured capability gaps require one. [Electron desktopCapturer](https://www.electronjs.org/docs/latest/api/desktop-capturer).
+
+On Windows the same display-media request handler responds with `audio: 'loopback'`, which Electron documents as capturing system audio and as supported only on Windows (Chromium WASAPI loopback; `loopbackWithMute` would also silence local playback and is not used). There is no OS permission for it and no screen-recording gate, so the Windows platform object reports `screenAccessGatesSystemAudio: false` and the application's one-time consent notice is the only gate. [Electron display media request handler](https://www.electronjs.org/docs/latest/api/session#sessetdisplaymediarequesthandlerhandler-opts).
 
 ## Process and trust boundaries
 
@@ -36,6 +38,10 @@ These are responsibility boundaries, not a mandate to create a process for every
 The overlay and library load only packaged application content. Use sandboxing, context isolation, no renderer Node integration, restrictive CSP, explicit navigation/new-window denial, and a limited external-link policy. Validate origin, frame, window identity, schema, size, and current operation on privileged messages. This follows Electron's documented renderer/IPC security model. [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security).
 
 Screen content, audio transcripts, imported documents, and model output are untrusted data. A screenshot instruction cannot grant filesystem or account access. Generated code is text only; there is no automatic shell execution or editor injection in the core assistant. Markdown renders through a constrained sanitizer and safe link handling.
+
+## Platform layer
+
+`src/main/platform/types.ts` defines `DesktopPlatform`: every operating-system difference the main process cares about, as read-only facts (app presence, permission model, window material, credential store name, AppUserModelID, default device name) and decisions (permission status and settings deep links, microphone access, window options and background, overlay level, accessibility-change subscription, tray icon, credential availability and copy). `darwin.ts`, `win32.ts` and `linux.ts` implement it and `src/main/platform/index.ts` selects one from `process.platform`. `src/main/index.ts` imports that `platform` object and never branches on `process.platform` for behaviour; the string travels only as data in the permissions payload and the diagnostic export. Methods take narrow port interfaces rather than Electron classes, so `tests/platform.test.ts` asserts each platform's exact calls without Electron. User-facing copy that names an OS or its settings app lives on the platform object. A new capability is declared in `types.ts` first and implemented for all three platforms, with a no-op as a valid answer. The Windows decisions and their limits are recorded in [windows.md](windows.md).
 
 ## Module ownership
 
@@ -116,7 +122,7 @@ Source attribution is microphone versus system audio. Calling these sources "You
 
 On-demand screen capture identifies the chosen display/window/region and scale. Keep original resolution long enough to assess readability before creating a provider-specific representation. Apply count/byte caps, verify MIME, and avoid disk persistence by default. Imported screenshots are a user-visible attachment path. A failed/ambiguous capture produces no paid model request.
 
-Privacy mode is a requested capture policy plus a compatibility record, not proof of invisibility. macOS content protection has documented ScreenCaptureKit limitations. Windows affinity depends on the compositor and supported APIs and has no absolute security guarantee. Validate the exact sharing/capture application and mode. [Electron window protection](https://www.electronjs.org/docs/latest/api/browser-window#winsetcontentprotectionenable), [Microsoft display-affinity documentation](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowdisplayaffinity).
+Privacy mode is a requested capture policy plus a compatibility record, not proof of invisibility. macOS content protection has documented ScreenCaptureKit limitations. On Windows, `setContentProtection(true)` calls `SetWindowDisplayAffinity` with `WDA_EXCLUDEFROMCAPTURE`, which removes the window from capture on Windows 10 version 2004 and later; older builds behave as `WDA_MONITOR` and show a black rectangle. The change takes effect at the next desktop composition, depends on the compositor and the capture API in use, and has no absolute security guarantee. Validate the exact sharing/capture application and mode. [Electron window protection](https://www.electronjs.org/docs/latest/api/browser-window#winsetcontentprotectionenable), [Microsoft display-affinity documentation](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowdisplayaffinity).
 
 Keep accurate application and process identity. Dock/taskbar presentation and an optional tray/menu entry are normal UI choices; hiding a visible window does not make the process absent from system tools. Always retain a reliable stop/quit path.
 
@@ -138,9 +144,9 @@ Errors are normalized into invalid_credentials, permission_denied, unsupported_c
 
 Use SQLite transactions for sessions, final transcript segments, requests, notes, and settings metadata; include a migration table and tested forward migration/backup restoration. Validate the selected SQLite binding against Electron's bundled runtime and both package architectures. A worker owns database access; UI threads do not perform synchronous large writes.
 
-Store app data in a private directory with restrictive file permissions/appropriate Windows ACLs. D0 transcripts and notes are local plaintext data unless an explicit encryption design is adopted. OS credential encryption does not encrypt the transcript database. Disclose this distinction in settings and documentation. Retention, trash, backups, and search indices have a shared deletion policy.
+Store app data in a private directory with restrictive file permissions. The `0o700`/`0o600` modes applied on POSIX are ignored on Windows; there `app.getPath('userData')` resolves under `%APPDATA%`, which carries the profile's user-only ACL that new files inherit, and tests that assert owner-only bits are platform-conditional. D0 transcripts and notes are local plaintext data unless an explicit encryption design is adopted. OS credential encryption does not encrypt the transcript database. Disclose this distinction in settings and documentation. Retention, trash, backups, and search indices have a shared deletion policy.
 
-Secrets use OS-backed safe storage, with no plaintext fallback. Prefer supported asynchronous APIs where available; locked/unavailable secret storage yields a recoverable error. Stable macOS signing identity matters for Keychain behavior. The Windows threat model differs: DPAPI protects against other users, not every process under the same user. Neither platform's vault protects the whole application against a compromised desktop session or every privileged/same-user threat. [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage).
+Secrets use OS-backed safe storage, with no plaintext fallback. Prefer supported asynchronous APIs where available; locked/unavailable secret storage yields a recoverable error. Availability is decided per platform by `credentialEncryptionAvailable`: `safeStorage.isEncryptionAvailable()` on macOS and Windows, and on Linux additionally a `getSelectedStorageBackend()` other than `basic_text` (that accessor is Linux-only). User-facing copy comes from the platform object's `credentialStoreName` and `credentialUnavailableMessage`, so Windows reads "Windows credential protection (DPAPI)" where macOS reads "Keychain". Stable macOS signing identity matters for Keychain behavior. The Windows threat model differs: DPAPI protects against other users, not every process under the same user. Neither platform's vault protects the whole application against a compromised desktop session or every privileged/same-user threat. [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage).
 
 A successful save means the transaction completed under the documented durability configuration. On failure, retain dirty content in memory, show the error, and offer export. Final-turn acknowledgements distinguish durable from merely received text. Power-loss guarantees must match the SQLite synchronous/WAL settings, not just a successful JavaScript callback.
 
@@ -150,7 +156,7 @@ Document import runs in a constrained process with file/type/size/decompression 
 
 ## Native delivery and diagnostics
 
-Package the application with a stable bundle ID, explicit microphone/screen/audio usage metadata, validated resource paths, and versioned artifacts. Developer builds and signed releases have separate permission/signing expectations. The installable artifact is tested outside the dev directory on a fresh user profile. macOS arm64 and x64 are independent gates.
+Package the application with a stable bundle ID, explicit microphone/screen/audio usage metadata, validated resource paths, and versioned artifacts. Developer builds and signed releases have separate permission/signing expectations. The installable artifact is tested outside the dev directory on a fresh user profile. macOS arm64 and x64 are independent gates. Windows x64 is a further independent gate: the NSIS installer on a fresh Windows user profile, `app.setAppUserModelId('com.faangin.desktop')` equal to the electron-builder `appId` so taskbar grouping and notifications attribute correctly, and SmartScreen behaviour for unsigned and signed builds. Any future Windows arm64 build would be its own gate.
 
 Optional sidecars use pinned immutable artifacts, checksums, licenses, architecture-specific paths, loopback binding, ephemeral scoped credentials, limited concurrency, cancellation, and hard shutdown. Model download/import/remove operations belong to a visible model-management flow. No downloaded runtime is treated as available until verified and launched successfully.
 

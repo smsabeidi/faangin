@@ -27,14 +27,36 @@ app.setPath('userData', path.join(runtime, 'profile'))
 
 const errorCode = error => typeof error?.code === 'string' && /^[a-z_]{1,60}$/i.test(error.code) ? error.code : 'evaluation_error'
 
+// File output only on both platforms; nothing is played. Windows PowerShell 5.1 carries .NET Framework's
+// System.Speech (pwsh does not); the question and output path travel as environment variables so no quoting
+// of the text reaches the command line.
+function synthesizeQuestion(directory) {
+  const wavePath = path.join(directory, 'question.wav')
+  if (process.platform === 'win32') {
+    const script = [
+      'Add-Type -AssemblyName System.Speech',
+      '$synthesizer = New-Object System.Speech.Synthesis.SpeechSynthesizer',
+      '$format = [System.Speech.AudioFormat.SpeechAudioFormatInfo]::new(24000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)',
+      '$synthesizer.SetOutputToWaveFile($env:FAANGIN_SPEECH_OUTPUT, $format)',
+      'try { $synthesizer.Speak($env:FAANGIN_SPEECH_TEXT) } finally { $synthesizer.Dispose() }'
+    ].join('; ')
+    execFileSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: 'ignore', timeout: 60_000, windowsHide: true, env: { ...process.env, FAANGIN_SPEECH_TEXT: QUESTION, FAANGIN_SPEECH_OUTPUT: wavePath } })
+    return { wavePath, voice: 'Windows configured default System.Speech voice at its default rate; no playback', wordsPerMinute: null }
+  }
+  const aiffPath = path.join(directory, 'question.aiff')
+  execFileSync('/usr/bin/say', ['-r', '165', '-o', aiffPath, QUESTION], { stdio: 'ignore', timeout: 20_000 })
+  execFileSync('/usr/bin/afconvert', ['-f', 'WAVE', '-d', 'LEI16@24000', '-c', '1', aiffPath, wavePath], { stdio: 'ignore', timeout: 20_000 })
+  return { wavePath, voice: 'macOS configured default voice; no playback', wordsPerMinute: 165 }
+}
+
 async function run() {
   if (process.env.FAANGIN_AUDIO_EVAL !== '1') throw new Error('Explicit FAANGIN_AUDIO_EVAL=1 opt-in is required.')
   if (!supportsStructuredInterviewReply(MODEL)) throw new Error('Synthetic audio evaluation model must support structured interview replies.')
-  if (process.platform !== 'darwin') throw new Error('This synthetic speech harness requires macOS say and afconvert.')
+  if (process.platform !== 'darwin' && process.platform !== 'win32') throw new Error('This synthetic speech harness needs an OS speech synthesizer: macOS say and afconvert, or Windows System.Speech through PowerShell. Linux is not supported.')
   const mode = process.env.FAANGIN_AUDIO_EVAL_MODE || 'natural'
   if (!['natural', 'continuous-transport'].includes(mode)) throw new Error('Synthetic speech mode must be natural or continuous-transport.')
   const maxProviderCalls = mode === 'natural' ? 6 : 2
-  const reportPath = process.env.FAANGIN_AUDIO_EVAL_REPORT || '/private/tmp/faangin-conversation-audio.json'
+  const reportPath = process.env.FAANGIN_AUDIO_EVAL_REPORT || path.join(os.tmpdir(), 'faangin-conversation-audio.json')
   const report = { kind: 'synthetic_speech_pipeline_acceptance', mode, syntheticOnly: true, physicalAudioCapture: false, audioPlayed: false, privateSessionLoaded: false, savedSettingsModified: false, model: MODEL, responseProtocol: 'json', measuredAt: new Date().toISOString(), question: QUESTION, source: 'system', frameMs: FRAME_MS, vad: SOURCE_VAD_OPTIONS.system, maxProviderCalls, providerCallCount: 0, transcript: [], commits: [], finals: [], partials: [], coordinator: [], generations: [], guards: {}, limitations: ['A single system-generated voice is not evidence for accents, noise, overlapping people, microphone or conferencing capture.', 'Input is public synthesized speech replayed as PCM; timings exclude hardware capture, IPC and physical paint.', 'Observed silence endpoints are reported individually and are not assumed to establish semantic completion.', 'Continuous-transport mode deliberately shortens synthetic frames below the VAD release threshold, potentially including low-level speech; it is not natural human pacing.', 'Phrase indicators support engineering review; they do not establish semantic accuracy or naturalness.'] }
   const persist = () => { report.dispatchAttemptCount = report.generations.length; fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 }) }
   const cancellation = new AbortController(), deadline = setTimeout(() => cancellation.abort(), 90_000)
@@ -48,15 +70,14 @@ async function run() {
   session.answers.push({ id: 'synthetic-bfs-baseline', requestId: 'synthetic-bfs-request', sessionId: session.id, action: 'solve', prompt: session.interview.problem, text: 'Use BFS with a FIFO queue. Mark a vertex visited when enqueuing and store parent pointers. BFS visits vertices in distance order. Time is O(V + E), auxiliary space is O(V).', model: 'synthetic-reference-not-spoken-evidence', status: 'complete', createdAt: 0, context: { transcriptIds: [], attachmentIds: [], priorAnswerIds: [], memorySourceIds: [], truncated: false, interviewSnapshot: { round: session.interview.round, problem: session.interview.problem, constraints: session.interview.constraints } } })
   const settings = { ...DEFAULT_SETTINGS, fastModel: MODEL, profile: '', jobDescription: '', instructions: '', liveSuggestions: true }
   try {
-    const aiffPath = path.join(runtime, 'question.aiff'), wavePath = path.join(runtime, 'question.wav')
-    execFileSync('/usr/bin/say', ['-r', '165', '-o', aiffPath, QUESTION], { stdio: 'ignore', timeout: 20_000 })
-    execFileSync('/usr/bin/afconvert', ['-f', 'WAVE', '-d', 'LEI16@24000', '-c', '1', aiffPath, wavePath], { stdio: 'ignore', timeout: 20_000 })
+    const { wavePath, voice, wordsPerMinute } = synthesizeQuestion(runtime)
     const wav = fs.readFileSync(wavePath), { format, pcm: originalPcm } = pcmWave(wav), originalDurationMs = originalPcm.length / 48
     if (originalDurationMs < 8_000 || originalDurationMs > 35_000) throw new Error('Synthetic question must last 8 to 35 seconds.')
     const derived = mode === 'continuous-transport' ? compressQuietGaps(originalPcm) : null
     const pcm = derived?.pcm ?? originalPcm
-    report.audio = { ...format, pcmBytes: pcm.length, durationMs: pcm.length / 48, originalDurationMs, wavSha256: createHash('sha256').update(wav).digest('hex'), voice: 'macOS configured default voice; no playback', wordsPerMinute: 165, transformation: derived?.metadata ?? { kind: 'none', originalPcmBytes: originalPcm.length, transformedPcmBytes: originalPcm.length } }
-    const keyPath = path.join(os.homedir(), 'Library/Application Support/Faangin/openai.key.enc')
+    report.audio = { ...format, pcmBytes: pcm.length, durationMs: pcm.length / 48, originalDurationMs, wavSha256: createHash('sha256').update(wav).digest('hex'), voice, wordsPerMinute, transformation: derived?.metadata ?? { kind: 'none', originalPcmBytes: originalPcm.length, transformedPcmBytes: originalPcm.length } }
+    // The saved connection lives in the real Faangin profile; userData above was moved into the disposable runtime.
+    const keyPath = path.join(app.getPath('appData'), 'Faangin', 'openai.key.enc')
     if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(keyPath)) throw new Error('The saved encrypted OpenAI connection is unavailable.')
     const apiKey = safeStorage.decryptString(fs.readFileSync(keyPath))
     phase = 'transcription_connection'

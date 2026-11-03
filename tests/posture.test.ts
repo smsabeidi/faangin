@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from '../src/shared/types'
 
 function databaseFixture(run: (file: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), 'faangin-posture-'))
-  try { run(join(directory, 'workspace.sqlite')) } finally { rmSync(directory, { recursive: true, force: true }) }
+  try { run(join(directory, 'workspace.sqlite')) } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 }
 
 test('screen-capture exclusion stays off by default', () => {

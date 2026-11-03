@@ -1,3 +1,5 @@
+import type { PlatformId } from './platform'
+
 export interface CapturePermissionScope {
   /** The owned capture WebContents, its local capture URL, and its requesting main frame. */
   trustedCaptureMainFrame: boolean
@@ -30,4 +32,20 @@ export function capturePermissionCheckAllowed(scope: CapturePermissionScope, per
   if (permission !== 'media') return false
   if (mediaType === 'audio') return true
   return (mediaType === 'unknown' || mediaType === undefined) && scope.activeSystemAudio
+}
+
+export interface DisplayMediaSource { display_id: string }
+export type DisplayMediaAnswer<Source> = { video: Source; audio: 'loopback' } | Record<string, never>
+
+/**
+ * The owned loopback request's answer. The 0×0 screen source only admits the request; `audio: 'loopback'`
+ * is what captures computer audio (CoreAudio tap on macOS, WASAPI loopback on Windows), so both platforms
+ * answer identically and an empty answer declines. Stopgap until the contract says whether loopback is
+ * tied to a display: Windows duplicated or remote displays report an empty display_id, so any screen
+ * serves there, while macOS keeps today's strict primary match.
+ */
+export function displayMediaResponse<Source extends DisplayMediaSource>(sources: readonly Source[], primaryDisplayId: string, platform: PlatformId, current: boolean): DisplayMediaAnswer<Source> {
+  if (!current) return {}
+  const source = sources.find(item => item.display_id === primaryDisplayId) ?? (platform === 'win32' ? sources[0] : undefined)
+  return source ? { video: source, audio: 'loopback' } : {}
 }

@@ -3,20 +3,17 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { createRequire } from 'node:module'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import WebSocket from 'ws'
+import { appAsarPath, appProcessKill, resolveAppExecutable } from './lib/app-executable.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const require = createRequire(import.meta.url)
 const configuredApp = process.env.FAANGIN_APP_PATH
-const executable = configuredApp
-  ? configuredApp.endsWith('.app') ? join(configuredApp, 'Contents', 'MacOS', 'Faangin') : configuredApp
-  : require('electron')
+const executable = resolveAppExecutable(configuredApp)
 const fixture = await mkdtemp(join(tmpdir(), 'faangin-native-layout-qa-'))
 const output = process.env.FAANGIN_LAYOUT_QA_OUTPUT || join(root, 'output', 'qa', 'overlay-layout')
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -87,11 +84,10 @@ async function ready(running) {
 
 async function stop(running) {
   if (!running?.child.pid || running.exitCode !== undefined) return
-  const signal = value => { try { process.kill(process.platform === 'win32' ? running.child.pid : -running.child.pid, value) } catch { running.child.kill(value) } }
-  signal('SIGTERM')
+  appProcessKill(running.child, 'SIGTERM')
   await Promise.race([new Promise(resolve => running.child.once('exit', resolve)), delay(2500)])
   if (running.exitCode === undefined) {
-    signal('SIGKILL')
+    appProcessKill(running.child, 'SIGKILL')
     await Promise.race([new Promise(resolve => running.child.once('exit', resolve)), delay(1000)])
   }
 }
@@ -252,9 +248,9 @@ async function close() {
 }
 
 try {
-  if (configuredApp?.endsWith('.app')) {
+  if (configuredApp) {
     const hash = createHash('sha256')
-    for await (const chunk of createReadStream(join(configuredApp, 'Contents', 'Resources', 'app.asar'))) hash.update(chunk)
+    for await (const chunk of createReadStream(appAsarPath(executable))) hash.update(chunk)
     report.appAsarSha256 = hash.digest('hex')
   }
   seedSettings({ overlayExpandedHeight: 9999, overlayCollapsed: false, theme: 'light', opacity: .94 })

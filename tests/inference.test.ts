@@ -6,6 +6,7 @@ import WebSocket, { WebSocketServer } from 'ws'
 import { generateAnswer, generateCompiledAnswer, verifyKey, createLiveTranscriber, InferenceError, type InferenceTransport } from '../src/main/inference'
 import { compilePrompt } from '../src/main/prompts'
 import { DEFAULT_SETTINGS, type Session } from '../src/shared/types'
+import { createManagedTranscriber } from '../src/main/managed-transcriber'
 
 const FAKE_KEY = 'fixture-key-never-a-real-secret'
 const current: Session = { id: 'session-1', title: 'Fixture', mode: 'meeting', status: 'idle', createdAt: 1, updatedAt: 2, notes: '', transcript: [], answers: [], attachments: [], contextEpoch: 0 }
@@ -49,6 +50,75 @@ function liveOptions(transport: InferenceTransport, changes: Partial<Parameters<
   return { apiKey: FAKE_KEY, model: 'gpt-live-transcribe', language: 'en', channel: 'microphone' as const, onPartial() {}, onFinal() {}, onError() {}, transport, deadlines: { connectMs: 1_000, finalizeMs: 100, closeMs: 100 }, ...changes }
 }
 const nextTick = () => new Promise<void>(resolve => setTimeout(resolve, 15))
+
+test('managed requests send the gateway mode while retaining selected-model capability checks', async () => {
+  const compiled = compilePrompt(input)
+  const seen: string[] = []
+  const options = {
+    apiKey: FAKE_KEY, signal: new AbortController().signal, onDelta() {},
+    transport: { fetch: (async (_url: unknown, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body)).model)
+      return mockStream([Buffer.from(event(completed('OK')))])
+    }) as typeof fetch }
+  }
+  for (const managedMode of ['fast', 'smart', 'handsfree'] as const) assert.equal((await generateCompiledAnswer(compiled, DEFAULT_SETTINGS.fastModel, { ...options, managedMode })).text, 'OK')
+  assert.deepEqual(seen, ['fast', 'smart', 'handsfree'])
+  await assert.rejects(generateCompiledAnswer({ ...compiled, sources: { ...compiled.sources, attachmentIds: ['image'] } }, 'text-only-fixture', { ...options, managedMode: 'fast' }), (error: unknown) => error instanceof InferenceError && error.code === 'unsupported_capability')
+  assert.equal(seen.length, 3)
+})
+
+test('only a managed handsfree skip completes without answer text', async () => {
+  const response = { type: 'response.completed', response: { id: 'resp_faangin_skipped', status: 'completed', output: [], usage: { input_tokens: 0, output_tokens: 0 } } }
+  const options = { apiKey: FAKE_KEY, signal: new AbortController().signal, onDelta() {}, transport: { fetch: (async () => mockStream([Buffer.from(event(response))])) as typeof fetch } }
+  assert.deepEqual(await generateAnswer(input, { ...options, managedMode: 'handsfree' }), { text: '', model: DEFAULT_SETTINGS.fastModel, inputTokens: 0, outputTokens: 0, skipped: true })
+  for (const managedMode of [undefined, 'fast', 'smart'] as const) await assert.rejects(generateAnswer(input, { ...options, managedMode }), (error: unknown) => error instanceof InferenceError && error.code === 'malformed_response')
+})
+
+test('gateway failures explain account and allowance recovery without provider or private text', async () => {
+  const cases = [
+    [402, 'no_pro', 'permission_denied', /Account & billing/],
+    [403, 'blocked', 'permission_denied', /Contact support/],
+    [429, 'allowance_exhausted', 'quota_exhausted', /answer allowance/],
+    [429, 'backstop', 'quota_exhausted', /usage limit/],
+    [429, 'concurrency', 'rate_limited', /already running/],
+    [503, 'pro_paused', 'offline', /temporarily paused/]
+  ] as const
+  for (const [status, code, expected, message] of cases) await assert.rejects(generateAnswer(input, {
+    apiKey: FAKE_KEY, managedMode: 'fast', signal: new AbortController().signal, onDelta() {},
+    transport: { fetch: (async () => Response.json({ error: { code, message: `${FAKE_KEY} PRIVATE_ACCOUNT` } }, { status })) as typeof fetch }
+  }), (error: unknown) => error instanceof InferenceError && error.code === expected && message.test(error.message) && !error.message.includes(FAKE_KEY) && !error.message.includes('PRIVATE_ACCOUNT'))
+})
+
+test('managed muted transcription acknowledgements retire pending turns and flush cleanly', async () => {
+  let commits = 0
+  const fixture = await socketFixture((value, socket) => {
+    if (value.type === 'input_audio_buffer.commit') socket.send(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: `faangin_muted_${++commits}` }))
+  })
+  const finals: string[] = [], errors: string[] = []
+  try {
+    const transcriber = await createLiveTranscriber(liveOptions(fixture.transport, { managedTranscription: true, onFinal: (_id, text) => finals.push(text), onError: error => errors.push(error) }))
+    transcriber.write(new Uint8Array(4_800)); transcriber.commit()
+    await transcriber.flush()
+    transcriber.write(new Uint8Array(4_800)); transcriber.commit()
+    await transcriber.flush()
+    await transcriber.stop()
+    assert.deepEqual(finals, ['', '']); assert.deepEqual(errors, [])
+  } finally { await fixture.close() }
+})
+
+test('only managed transcription admits the gateway planned-rotation control event', async () => {
+  for (const managedTranscription of [false, true]) {
+    const fixture = await socketFixture(); let rotations = 0
+    try {
+      const transcriber = await createLiveTranscriber(liveOptions(fixture.transport, { managedTranscription, onSessionExpiring: () => { rotations++ } }))
+      const socket = await fixture.connected
+      socket.send(JSON.stringify({ type: 'faangin.session.expiring' }))
+      await nextTick()
+      assert.equal(rotations, managedTranscription ? 1 : 0)
+      await transcriber.stop()
+    } finally { await fixture.close() }
+  }
+})
 
 test('small connection probe caps output before dispatch and invalid caps make no request', async () => {
   let calls = 0
@@ -141,6 +211,49 @@ test('manual reply flush waits for the current question and keeps listening for 
     await transcriber.stop()
     assert.equal(fixture.events.filter(value => value.type === 'input_audio_buffer.commit').length, 2)
   } finally { await fixture.close() }
+})
+
+test('managed worker rotation preserves a spoken question until its real endpoint, including silent and audible tails', async () => {
+  for (const audibleTail of [false, true]) {
+    const sockets: WebSocket[] = []
+    let committed = 0
+    const fixture = await socketFixture((value, socket) => {
+      if (value.type === 'session.update') sockets.push(socket)
+      if (value.type === 'input_audio_buffer.commit') {
+        const item_id = `rotation-${++committed}`
+        socket.send(JSON.stringify({ type: 'input_audio_buffer.committed', item_id }))
+        socket.send(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id, transcript: `Question part ${committed}` }))
+      }
+    })
+    const finals: Array<{ id: string; complete: boolean }> = [], endpoints: string[] = []
+    const frame = Buffer.from(new Int16Array(2_400).fill(2_000).buffer)
+    let live: Awaited<ReturnType<typeof createManagedTranscriber>> | undefined
+    try {
+      live = await createManagedTranscriber({ ...liveOptions(fixture.transport, {
+        onFinal: (id, _text, _at, complete) => finals.push({ id, complete }),
+        onUtteranceComplete: id => endpoints.push(id)
+      }), rotationMs: 60_000 })
+      live.write(frame)
+      sockets[0].send(JSON.stringify({ type: 'faangin.session.expiring' }))
+      const deadline = Date.now() + 1_500
+      while (sockets.length < 2) { if (Date.now() > deadline) throw new Error('Managed rotation fixture timed out'); await nextTick() }
+      assert.deepEqual(finals.map(value => value.complete), [false], 'connection retirement must not finish a spoken question')
+      assert.deepEqual(endpoints, [])
+      if (audibleTail) live.write(frame.subarray(0, 960))
+      live.commit(true)
+      await nextTick()
+      if (audibleTail) {
+        assert.deepEqual(endpoints, [], 'a short audible correction must keep the old question held')
+        live.write(frame); live.commit(true)
+        await live.flush()
+        assert.deepEqual(finals.map(value => value.complete), [false, true])
+      } else {
+        assert.deepEqual(endpoints, [finals[0].id], 'an empty endpoint on the replacement socket must release the carried question')
+        live.commit(true)
+        assert.equal(endpoints.length, 1)
+      }
+    } finally { await live?.stop(); await fixture.close() }
+  }
 })
 
 test('manual reply flush has a bounded timeout and stop cancels a pending preparation', async () => {

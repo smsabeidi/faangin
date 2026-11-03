@@ -36,7 +36,7 @@ function sourceData(prompt: CompiledPrompt): {
 
 function withDatabaseFile(run: (file: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), 'faangin-interview-test-'))
-  try { run(join(directory, 'sessions.sqlite')) } finally { rmSync(directory, { recursive: true, force: true }) }
+  try { run(join(directory, 'sessions.sqlite')) } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 }
 
 test('interview brief validation preserves complete fields and accepts every supported round and stage', () => {

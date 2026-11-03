@@ -3,6 +3,7 @@ export interface OverlayWindowPort {
   isFocused(): boolean
   setIgnoreMouseEvents(ignore: boolean): void
   setFocusable(focusable: boolean): void
+  setSkipTaskbar(skip: boolean): void
   blur(): void
   showInactive(): void
   show(): void
@@ -36,6 +37,8 @@ export class OverlayInteractionPolicy {
     // Forwarded mouse moves let Chromium hover/cursors affect the underlying app.
     window.setIgnoreMouseEvents(this.passiveMode)
     window.setFocusable(!this.passiveMode)
+    // Windows couples SetFocusable to SetSkipTaskbar(!focusable), which would hand the transparent overlay a taskbar button; macOS ignores the call.
+    window.setSkipTaskbar(true)
     // Electron explicitly does not relinquish existing focus on macOS here.
     if (this.passiveMode && window.isFocused()) window.blur()
   }

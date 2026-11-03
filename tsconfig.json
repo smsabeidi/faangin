@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "electron-vite/node"],
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "electron.vite.config.ts"]
