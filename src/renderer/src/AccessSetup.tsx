@@ -168,7 +168,10 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
     if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) { event.preventDefault(); last.focus() }
     else if (!event.shiftKey && (document.activeElement === last || !dialog.current?.contains(document.activeElement))) { event.preventDefault(); first.focus() }
   }
-  const helpKind = help && (permissionNeedsSettings(report, help) || help === 'screen' && !pending && !permissionReady(report, 'screen')) ? help : ACCESS_PERMISSION_ORDER.find(kind => permissionNeedsSettings(report, kind))
+  // Where the OS has no consent to deny, the usual failed computer-audio check is a playback-device problem ('unavailable', never 'denied'),
+  // and the Sound page with a retry is what fixes it, so that help must not wait for a denial.
+  const audioDeviceHelp = (kind: AccessPermission) => kind === 'system-audio' && !os.screenPermissionRequired && os.canOpenSettings(kind) && permissionBlocked(report, kind)
+  const helpKind = help && (permissionNeedsSettings(report, help) || audioDeviceHelp(help) || help === 'screen' && !pending && !permissionReady(report, 'screen')) ? help : ACCESS_PERMISSION_ORDER.find(kind => permissionNeedsSettings(report, kind) || audioDeviceHelp(kind))
   // Computer audio has no settings page of its own anywhere; where screen consent gates it, that pane is the one to open.
   const helpPath = helpKind === 'microphone' ? os.microphonePath : os.screenPath
 

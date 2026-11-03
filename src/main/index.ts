@@ -43,6 +43,9 @@ import { AccessSetupCoordinator, ACCESS_SETUP_MESSAGE, checkSystemAudioReadiness
 import { assertSystemAudioConsent, systemAudioConsented, systemAudioConsentReceipt } from './system-audio-consent'
 import { probeNativeSystemAudio } from './native-audio-probe'
 import { diagnosticJSON } from './diagnostics'
+import { sourceLossEffects } from './capture-loss'
+import { decodeProfileText } from './profile-text'
+import { endSessionAtShutdown } from './session-end'
 import { normalizeCompatibleChatEndpoint, validateCompatibleChatConfiguration, generateCompatibleAnswer, type CompatibleChatCredential } from './compatible-chat'
 import { release, tmpdir } from 'node:os'
 import type { AccessPermissionKind, AccessSetupState, Action, Answer, AppEvent, AppState, Attachment, AudioChannel, CaptureCommand, MicrophoneDevice, Session, Settings, TranscriptTurn, WindowKind } from '../shared/types'
@@ -96,7 +99,7 @@ const dockPolicy = new MacDockPolicy({
   show: () => app.dock!.show(),
   onError: error => emit({ type: 'error', message: `Dock visibility could not be changed: ${safeError(error)}. The Faangin ${platform.recoveryMenuName.toLowerCase()} menu remains available.` })
 })
-const shortcutManager = new ShortcutManager(smoke ? { register: () => true, unregister() {} } : globalShortcut, shortcutAction)
+const shortcutManager = new ShortcutManager(smoke ? { register: () => true, unregister() {} } : globalShortcut, shortcutAction, platform.id, { repeatGuardMs: platform.globalShortcutRepeatGuardMs })
 const capturePolicy = new CapturePolicy({ idleTimeoutMs: 0 })
 let capturePolicyTimer: ReturnType<typeof setInterval> | null = null
 let deviceChangeTimer: ReturnType<typeof setTimeout> | null = null
@@ -478,6 +481,8 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
       if (!window.isResizable()) windowState?.reflow('overlay')
       // Double-clicking an app-region drag area toggles maximize on Windows, which would push the overlay past its layout limits.
       window.setMaximizable(false); window.setFullScreenable(false)
+      // Right-clicking the drag region would raise the native window menu (Move, Size, Close) on Windows and Linux; the frameless overlay has no title bar to own one.
+      window.on('system-context-menu', event => event.preventDefault())
       window.on('maximize', () => { window.unmaximize(); applyOverlayLayout() })
       window.on('enter-full-screen', () => { window.setFullScreen(false) })
       window.on('leave-full-screen', () => applyOverlayLayout())
@@ -494,7 +499,10 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
       if (quitting) return
       quitting = true
       for (const ui of uiWindows()) ui.webContents.session.flushStorageData()
-      dockPolicy.dispose(); disposeAppearance(); disposeCapturePolicy(); windowState?.dispose(); cancelRequests(); liveReplies.reset(); licensing?.dispose(); shortcutManager.dispose(); tray?.destroy(); repo?.close()
+      const liveSession = captureState.sessionId ?? capturePolicy.state().sessionId
+      dockPolicy.dispose(); disposeAppearance(); disposeCapturePolicy(); windowState?.dispose(); cancelRequests(); liveReplies.reset(); licensing?.dispose(); shortcutManager.dispose(); tray?.destroy()
+      if (repo) endSessionAtShutdown(repo, liveSession, !!liveSession && [...partialTranscripts.values()].some(turn => turn.sessionId === liveSession))
+      repo?.close()
     })
   }
   void window.loadURL(rendererURL(surface, kind))
@@ -978,7 +986,7 @@ function releaseChannel(token: number, channel: AudioChannel): void {
     resources.draining.add(draining); void draining.then(() => resources.draining.delete(draining))
   }
   captureState.active = resources.listening.size > 0; refreshLiveSuggestions(); emitCapture()
-  if (resources.pipelines.size && channel === 'microphone' && captureState[channel] === 'Audio device disconnected.' && capturePolicy.state().phase === 'running') scheduleDeviceReconnect()
+  if (resources.pipelines.size && sourceLossEffects(platform, channel, captureState[channel]).reconnectSurvivors && capturePolicy.state().phase === 'running') scheduleDeviceReconnect()
   if (!resources.pipelines.size && resources.activated) {
     resources.readyReject(new Error('All audio sources disconnected. Check permissions and start again.'))
     if (capturePolicy.state().phase === 'running') {
@@ -1330,7 +1338,7 @@ function setupIPC(): void {
     refreshAppearance()
     // Only a packaged app may enroll itself at login; a dev run would register the bare Electron binary. Re-asserted on every save so a
     // login item removed outside the app follows the saved preference again.
-    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
+    if (app.isPackaged) platform.applyLoginItem(app, settings.launchAtLogin, 'save')
     for (const window of uiWindows()) window.setContentProtection(settings.privacyMode)
     emitState(); return settings
   })
@@ -1495,7 +1503,7 @@ function setupIPC(): void {
     const selected = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender)!, { properties: ['openFile'], filters: [{ name: 'Profile documents', extensions: ['txt', 'md', 'pdf', 'docx'] }] })
     if (selected.canceled) return null
     const path = selected.filePaths[0], bytes = await readBounded(path, 10 * 1024 * 1024), extension = extname(path).toLowerCase()
-    if (extension === '.txt' || extension === '.md') return validate.text(new TextDecoder('utf-8', { fatal: true }).decode(bytes), 100_000)
+    if (extension === '.txt' || extension === '.md') return validate.text(decodeProfileText(bytes, platform.legacyTextEncoding), 100_000)
     if (extension === '.pdf' && bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('This file is not a PDF.')
     if (extension === '.docx') validateDocxArchive(bytes)
     return parseDocument(bytes, validate.oneOf(extension.slice(1), ['pdf', 'docx']))
@@ -1586,7 +1594,8 @@ function setupIPC(): void {
     if (!failed && captureState[channel] === 'Listening') reportCaptureReady(channel)
     emitCapture()
     if (failed) {
-      if (channel === 'system') accessSetup.finishAudioCheck(false, 'Computer audio access needs to be checked again after the audio source stopped.')
+      // A lost source only means a revoked consent where screen access gates computer audio; a Windows loopback that ended lost its device, not its access.
+      if (sourceLossEffects(platform, channel, captureState[channel]).clearVerification) accessSetup.finishAudioCheck(false, 'Computer audio access needs to be checked again after the audio source stopped.')
       emit({ type: 'error', message: `${channel === 'system' ? 'System audio' : 'Microphone'}: ${captureState[channel]}`, code: 'capture_failed' }); releaseChannel(captureGeneration, channel)
       refreshAccessReadiness()
     }
@@ -1646,7 +1655,7 @@ function refreshMenu(): void {
     { type: 'separator' },
     { label: 'Show workspace', accelerator: active.find(binding => binding.action === 'show-workspace')?.accelerator, click: () => showWindow('workspace') },
     { label: 'Show overlay', click: () => makeOverlayInteractive() },
-    { id: 'overlay-reset-layout', label: 'Reset overlay size & position', click: () => { try { resetOverlayLayout(); makeOverlayInteractive() } catch (error) { emit({ type: 'error', message: `Overlay layout could not be reset: ${safeError(error)}` }) } } },
+    { id: 'overlay-reset-layout', label: platform.menuLabel('Reset overlay size & position'), click: () => { try { resetOverlayLayout(); makeOverlayInteractive() } catch (error) { emit({ type: 'error', message: `Overlay layout could not be reset: ${safeError(error)}` }) } } },
     { label: 'Make overlay interactive', click: () => makeOverlayInteractive() },
     { label: 'Click-through overlay', type: 'checkbox', checked: overlayInteraction.passive, accelerator: active.find(binding => binding.action === 'toggle-interaction')?.accelerator, click: () => shortcutAction('toggle-interaction') },
     ...(platform.supportsHiddenAppIcon ? [{ label: 'Show in Dock', type: 'checkbox' as const, checked: !settings.hideDockIcon, click: () => {
@@ -1654,7 +1663,7 @@ function refreshMenu(): void {
       catch (error) { emit({ type: 'error', message: `Dock preference could not be saved: ${safeError(error)}` }); refreshMenu() }
     } }] : []),
     { type: 'separator' },
-    ...actions.map(item => ({ label: item.label, accelerator: active.find(binding => binding.action === item.action)?.accelerator, click: () => shortcutAction(item.action) })),
+    ...actions.map(item => ({ label: platform.menuLabel(item.label), accelerator: active.find(binding => binding.action === item.action)?.accelerator, click: () => shortcutAction(item.action) })),
     { type: 'separator' }, { label: 'Settings', click: () => { showWindow('workspace'); emit({ type: 'navigate', view: 'settings' }) } }, { role: 'quit' }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Faangin', submenu: recovery }, { role: 'editMenu' }, { role: 'windowMenu' }]))
@@ -1677,6 +1686,8 @@ else {
     // POSIX hardening: Windows ignores these modes and %APPDATA% already carries the profile's user-only ACL.
     const data = app.getPath('userData'); mkdirSync(data, { recursive: true, mode: 0o700 }); chmodSync(data, 0o700)
     repo = new Repository(userDataFile('faangin.sqlite')); settings = repo.settings()
+    // The Run entry is only written when a setting is saved, so a reinstall elsewhere or a retained profile would leave it stale or missing.
+    if (app.isPackaged) { try { platform.applyLoginItem(app, settings.launchAtLogin, 'launch') } catch { /* A blocked registry write must not stop the app opening. */ } }
     let savedAccessSetup: unknown
     try { savedAccessSetup = repo.configuration('access-setup') } catch { /* Preserve an unreadable receipt and require setup again. */ }
     if (accessFixtureMode === 'ready') savedAccessSetup = { version: 1, completed: true, systemAudioVerifiedAt: Date.now() }

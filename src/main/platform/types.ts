@@ -70,6 +70,12 @@ export interface SafeStoragePorts {
   getSelectedStorageBackend(): string
 }
 
+/** Subset of Electron's `app` used to register the app as a login item. */
+export interface LoginItemPorts {
+  getLoginItemSettings(): { launchItems?: ReadonlyArray<{ name: string; enabled: boolean }> }
+  setLoginItemSettings(settings: { openAtLogin: boolean; enabled?: boolean }): void
+}
+
 export interface WindowBackgroundInput {
   isOverlay: boolean
   reduceTransparency: boolean
@@ -105,6 +111,8 @@ export interface DesktopPlatform {
   readonly appUserModelId: string | null
   /** Default device label when the hostname is empty (e.g. "Mac", "Windows PC"). */
   readonly defaultDeviceName: string
+  /** Encoding of plain-text files the OS itself writes outside UTF-8 (the Windows ANSI code page), or `null` where text files are UTF-8. */
+  readonly legacyTextEncoding: string | null
 
   /** Reads one permission without prompting. Never throws; unreadable statuses are `unknown`. */
   permissionStatus(kind: MediaPermissionKind, ports: MediaAccessPorts): MediaAccessState
@@ -125,6 +133,12 @@ export interface DesktopPlatform {
   /** Copy shown when the OS prompt has not been answered within the capture start timeout. */
   pendingMicrophoneMessage(): string
 
+  /**
+   * How long after a global-shortcut callback another callback for the same chord is still keyboard auto-repeat of that press rather than a new
+   * one, in milliseconds; 0 where the OS delivers one callback per press. It must exceed the longest keyboard repeat delay (one second on Windows).
+   */
+  readonly globalShortcutRepeatGuardMs: number
+
   /** Extra `BrowserWindow` options for the floating overlay (transparent, frameless, always on top). */
   overlayWindowOptions(): BrowserWindowConstructorOptions
   /** Extra `BrowserWindow` options for framed workspace windows. */
@@ -143,4 +157,11 @@ export interface DesktopPlatform {
   credentialEncryptionAvailable(ports: SafeStoragePorts): boolean
   /** Error copy for an unavailable credential store, phrased for this OS. */
   credentialUnavailableMessage(action: 'read' | 'save'): string
+  /**
+   * Registers or removes the app as a login item. `save` follows a settings change; `launch` follows startup, where Windows must repair
+   * a Run entry that still points at a previous install location but must not enrol a user who never asked for it.
+   */
+  applyLoginItem(ports: LoginItemPorts, openAtLogin: boolean, trigger: 'launch' | 'save'): void
+  /** Escapes a native menu label so it is drawn as written (Windows and Linux treat a single `&` as a mnemonic marker). */
+  menuLabel(label: string): string
 }

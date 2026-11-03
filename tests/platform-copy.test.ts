@@ -44,9 +44,10 @@ test('only macOS has a screen-recording permission, a native consent prompt and 
 
 test('Windows guidance names both global microphone switches and the Sound page its two deep links open; Linux has no deep link', () => {
   assert.equal(windows.canOpenSettings('microphone'), true)
-  assert.equal(windows.microphonePath, 'Settings → Privacy & security → Microphone')
-  assert.equal(windows.permissionAction('microphone'), 'turn on both Microphone access and Let desktop apps access your microphone')
-  assert.equal(windows.permissionHelp('microphone'), 'Open Settings → Privacy & security → Microphone and turn on both Microphone access and Let desktop apps access your microphone.')
+  // Windows 10 calls the section Privacy and labels the toggles differently, so the path and the action are true on both supported versions.
+  assert.equal(windows.microphonePath, 'Settings → Privacy & security (Privacy on Windows 10) → Microphone')
+  assert.equal(windows.permissionAction('microphone'), 'turn on microphone access for this device and for desktop apps')
+  assert.equal(windows.permissionHelp('microphone'), 'Open Settings → Privacy & security (Privacy on Windows 10) → Microphone and turn on microphone access for this device and for desktop apps.')
   // Mirrors win32Platform.permissionSettingsUrl('system-audio'), which opens ms-settings:sound.
   assert.equal(windows.canOpenSettings('system-audio'), true)
   assert.equal(windows.permissionAction('system-audio'), 'choose the speakers or headset you listen on as the output device')

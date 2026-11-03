@@ -1,0 +1,17 @@
+/*
+ * Windows contrast themes put Chromium into forced-colors mode, which discards author backgrounds, gradients and box-shadows. These controls
+ * carry their state in exactly those properties, so the toggles, meter and status dots would look identical on and off. System colours are kept
+ * in forced-colors mode (so forced-color-adjust is not needed), and so are outlines, which replace the selected-state shadows.
+ * Imported last: the dot rules need !important because the overlay brand-line selectors are more specific.
+ */
+@media (forced-colors: active) {
+  .toggle-track { background: Canvas; border-color: CanvasText; }
+  .toggle-track::after { background: CanvasText; }
+  .toggle-input:checked + .toggle-track { background: Highlight; border-color: Highlight; }
+  .toggle-input:checked + .toggle-track::after { background: HighlightText; }
+  .meter-bars span { background: GrayText; }
+  .meter-bars span.lit { background: Highlight; }
+  .status-dot, .overlay-app .overlay-brand-line .status-dot { background: GrayText !important; }
+  .status-dot.live, .provider-status.connected .status-dot, .connection-badge.connected .status-dot, .overlay-app .overlay-brand-line .status-dot.live { background: Highlight !important; }
+  .nav-button.selected, .mode-switch button.active, .segmented button.active, .settings-nav > button.selected, .source-option.selected, .theme-option.selected { outline: 2px solid Highlight; outline-offset: -2px; }
+}

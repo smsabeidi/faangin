@@ -16,6 +16,9 @@ export const linuxPlatform: DesktopPlatform = {
   credentialStoreName: 'Keyring',
   appUserModelId: null,
   defaultDeviceName: 'Linux PC',
+  legacyTextEncoding: null,
+  // Not verified on Linux; the behaviour stays exactly as it was.
+  globalShortcutRepeatGuardMs: 0,
   permissionStatus: () => 'unknown',
   permissionSettingsUrl: () => null,
   systemAudioUnavailableMessage: () => 'Computer audio could not be verified. Make sure a playback device is set as default in your system sound settings, then retry the access check.',
@@ -36,5 +39,8 @@ export const linuxPlatform: DesktopPlatform = {
   trayIcon: (iconPath, ports) => ports.createFromPath(iconPath).resize({ width: 22, height: 22 }),
   // basic_text is Electron's plaintext fallback when no Secret Service or KWallet is available, so it is not credential encryption.
   credentialEncryptionAvailable: ports => ports.isEncryptionAvailable() && ports.getSelectedStorageBackend() !== 'basic_text',
-  credentialUnavailableMessage: action => action === 'read' ? 'OS credential encryption is unavailable. Unlock your keychain and restart Faangin.' : 'OS credential encryption is unavailable. No key was saved.'
+  credentialUnavailableMessage: action => action === 'read' ? 'OS credential encryption is unavailable. Unlock your keychain and restart Faangin.' : 'OS credential encryption is unavailable. No key was saved.',
+  applyLoginItem: (ports, openAtLogin, trigger) => { if (trigger === 'save') ports.setLoginItemSettings({ openAtLogin }) },
+  // Chromium menus on Linux read a single '&' as a mnemonic marker, and '&&' as a literal ampersand.
+  menuLabel: label => label.replace(/&/g, '&&')
 }

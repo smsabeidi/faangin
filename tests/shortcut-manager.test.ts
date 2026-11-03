@@ -237,3 +237,75 @@ test('returned snapshots cannot mutate the live callback map', () => {
   manager.apply([binding('assist', 'Cmd+Enter')]); manager.bindings()[0].action = 'solve'
   registrar.callbacks.get('Command+Enter')!(); assert.deepEqual(actions, ['assist']); manager.dispose()
 })
+
+function guarded(repeatGuardMs: number) {
+  let clock = 0
+  const registrar = new Registrar(), actions: ShortcutAction[] = []
+  const manager = new ShortcutManager(registrar, action => actions.push(action), 'win32', { repeatGuardMs, now: () => clock })
+  const fire = (accelerator: string, at: number) => { clock = at; registrar.callbacks.get(accelerator)!() }
+  return { actions, fire, manager }
+}
+
+test('a held chord is one press where the OS repeats global hot-key callbacks, however long it is held', () => {
+  const { actions, fire, manager } = guarded(1100)
+  assert.equal(manager.apply([binding('hide', 'Control+Shift+Space'), binding('toggle-capture', 'Control+Alt+I'), binding('screenshot', 'Control+Shift+S')]).ok, true)
+  // Windows posts the first repeat after the keyboard delay (up to 1 s), then every 33 ms until the key is released.
+  fire('Control+Shift+Space', 0)
+  for (let at = 1000; at <= 5000; at += 33) fire('Control+Shift+Space', at)
+  assert.deepEqual(actions, ['hide'])
+  // A fresh press after the chord has been quiet for longer than the guard is a new press.
+  fire('Control+Shift+Space', 6200); assert.deepEqual(actions, ['hide', 'hide'])
+  // Chords are independent: holding one never swallows another.
+  fire('Control+Alt+I', 6300); fire('Control+Shift+S', 6310); assert.deepEqual(actions, ['hide', 'hide', 'toggle-capture', 'screenshot'])
+  fire('Control+Alt+I', 6400); fire('Control+Shift+S', 6410); assert.equal(actions.length, 4)
+})
+
+test('even the slowest keyboard repeat delay stays swallowed, and a swallowed callback extends the window', () => {
+  const { actions, fire, manager } = guarded(1100)
+  manager.apply([binding('hide', 'Control+Shift+Space')])
+  fire('Control+Shift+Space', 0); fire('Control+Shift+Space', 1000); fire('Control+Shift+Space', 1499); fire('Control+Shift+Space', 1998)
+  assert.deepEqual(actions, ['hide'])
+  fire('Control+Shift+Space', 3097); assert.deepEqual(actions, ['hide'], 'the previous callback was 1099 ms ago, which is still inside the window')
+  fire('Control+Shift+Space', 4197); assert.deepEqual(actions, ['hide', 'hide'], '1100 ms of silence is a new press')
+})
+
+test('the guard accepts a press exactly when the chord has been quiet for the whole window', () => {
+  const { actions, fire, manager } = guarded(1100)
+  manager.apply([binding('stop', 'Control+Alt+Escape')])
+  fire('Control+Alt+Escape', 0); fire('Control+Alt+Escape', 1099); assert.equal(actions.length, 1)
+  fire('Control+Alt+Escape', 2198); assert.equal(actions.length, 1, 'each swallowed callback restarts the window')
+  fire('Control+Alt+Escape', 3298); assert.equal(actions.length, 2)
+})
+
+test('nudge and scroll chords keep repeating while held, which is how the overlay is moved a long way', () => {
+  const { actions, fire, manager } = guarded(1100)
+  manager.apply([binding('move-left', 'Control+Left'), binding('scroll-down', 'Control+Alt+Down'), binding('reply', 'Control+Enter')])
+  for (let at = 0; at < 165; at += 33) { fire('Control+Left', at); fire('Control+Alt+Down', at); fire('Control+Enter', at) }
+  assert.equal(actions.filter(action => action === 'move-left').length, 5)
+  assert.equal(actions.filter(action => action === 'scroll-down').length, 5)
+  assert.equal(actions.filter(action => action === 'reply').length, 1)
+})
+
+test('without a guard every native callback is reported, which keeps macOS and the default manager unchanged', () => {
+  for (const options of [{ repeatGuardMs: 0 }, {}]) {
+    let clock = 0
+    const registrar = new Registrar(), actions: ShortcutAction[] = [], manager = new ShortcutManager(registrar, action => actions.push(action), 'darwin', { ...options, now: () => clock })
+    manager.apply([binding('hide', 'Command+Shift+Space')])
+    for (clock = 0; clock < 100; clock += 33) registrar.callbacks.get('Command+Shift+Space')!()
+    assert.equal(actions.length, 4)
+  }
+  const registrar = new Registrar(), actions: ShortcutAction[] = [], manager = new ShortcutManager(registrar, action => actions.push(action), 'darwin')
+  manager.apply([binding('hide', 'Command+Shift+Space')]); registrar.callbacks.get('Command+Shift+Space')!(); registrar.callbacks.get('Command+Shift+Space')!()
+  assert.equal(actions.length, 2)
+})
+
+test('a swapped binding keeps its native callback and its repeat window, and a released chord starts clean', () => {
+  const { actions, fire, manager } = guarded(1100)
+  manager.apply([binding('hide', 'Control+Shift+Space')])
+  fire('Control+Shift+Space', 0)
+  manager.apply([binding('toggle-interaction', 'Control+Shift+Space')])
+  fire('Control+Shift+Space', 500); assert.deepEqual(actions, ['hide'], 'the same physical press cannot trigger the new action')
+  manager.apply([binding('reply', 'Control+Enter')]) // The old chord is released.
+  manager.apply([binding('hide', 'Control+Shift+Space')])
+  fire('Control+Shift+Space', 700); assert.deepEqual(actions, ['hide', 'hide'])
+})

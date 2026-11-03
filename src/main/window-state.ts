@@ -88,8 +88,15 @@ export function snapshotWindowState(bounds: WindowBounds, displays: WindowDispla
   return { version: 1, bounds: { ...bounds }, displayId: String(display.id), workArea: { ...display.workArea } }
 }
 
+/** Windows refuses to replace a file another process holds open without FILE_SHARE_DELETE (antivirus, the search indexer); POSIX rename never reports these for this call. */
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES'])
+const RENAME_ATTEMPTS = 5
+/** The file operations the store retries around, injectable so the retry is testable without a locked file. */
+export interface WindowStateFiles { rename(from: string, to: string): void; pause(milliseconds: number): void }
+const nodeFiles: WindowStateFiles = { rename: renameSync, pause: milliseconds => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds) } }
+
 /** Saves only geometry, outside transcript/settings storage. A malformed file falls back to defaults. */
-export function jsonWindowStateStore(path: string): WindowStateStore {
+export function jsonWindowStateStore(path: string, files: WindowStateFiles = nodeFiles): WindowStateStore {
   let values: Record<string, unknown> = {}
   try {
     const input: unknown = JSON.parse(readFileSync(path, 'utf8'))
@@ -102,7 +109,15 @@ export function jsonWindowStateStore(path: string): WindowStateStore {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
       try {
         writeFileSync(temporary, JSON.stringify(next), { mode: 0o600 })
-        renameSync(temporary, path)
+        // Saves must stay synchronous (detach, dispose and session-end cannot await), so a brief sharing violation is waited out in place:
+        // at most 250 ms, and only while another program holds the file. Every other failure is reported at once.
+        for (let attempt = 1; ; attempt++) {
+          try { files.rename(temporary, path); break }
+          catch (error) {
+            if (attempt === RENAME_ATTEMPTS || !TRANSIENT_RENAME_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error
+            files.pause(25 * attempt)
+          }
+        }
         values = next
       } catch (error) {
         try { unlinkSync(temporary) } catch {}

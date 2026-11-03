@@ -75,7 +75,7 @@ test('Windows setup never presents screen recording as a permission and keeps co
   assert.match(html, /aria-label="Allow access to computer audio"/)
   assert.doesNotMatch(html, /Allow access to screen|Open settings for screen|System Settings|Screen &amp; System Audio Recording|macOS|Quit &amp; Reopen/)
   const microphoneDenied = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'denied' } }, 'win32'))
-  assert.match(microphoneDenied, /Open <strong>Settings → Privacy &amp; security → Microphone<\/strong> and turn on both Microphone access and Let desktop apps access your microphone\. Return here when you’re done; we’ll check automatically\./)
+  assert.match(microphoneDenied, /Open <strong>Settings → Privacy &amp; security \(Privacy on Windows 10\) → Microphone<\/strong> and turn on microphone access for this device and for desktop apps\. Return here when you’re done; we’ll check automatically\./)
   assert.match(microphoneDenied, /aria-label="Open settings for microphone"/)
   assert.match(microphoneDenied, /Open Windows Settings</)
   assert.doesNotMatch(microphoneDenied, /System Settings|macOS|Quit &amp; Reopen|privacy settings|restart/)
@@ -88,4 +88,23 @@ test('Windows setup never presents screen recording as a permission and keeps co
   const audioUnavailable = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'granted', systemAudio: 'unavailable' } }, 'win32'))
   assert.match(audioUnavailable, /aria-label="Retry access to computer audio"/)
   assert.doesNotMatch(audioUnavailable, /Open settings for computer audio/)
+  // The usual Windows failure (no usable playback device) is 'unavailable', not 'denied'; its help is the Sound page and a retry.
+  assert.match(audioUnavailable, /Computer audio is captured from your default playback device\. Open Settings → System → Sound and choose the speakers or headset you listen on as the output device, and make sure it is not in exclusive mode\. Then choose Retry audio check below/)
+  assert.equal(audioUnavailable.match(/Open Windows Settings</g)?.length, 1)
+  assert.equal(audioUnavailable.match(/Retry audio check</g)?.length, 1)
+  // A blocked microphone still takes the help slot first, and a check that has not failed shows no device help.
+  assert.match(render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'denied', systemAudio: 'unavailable' } }, 'win32')), /Privacy &amp; security \(Privacy on Windows 10\) → Microphone<\/strong>/)
+  for (const systemAudio of ['not-requested', 'checking', 'verified'] as const) {
+    const quiet = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'granted', systemAudio } }, 'win32'))
+    assert.doesNotMatch(quiet, /access-setup-help|Retry audio check</, systemAudio)
+  }
+})
+
+test('on macOS and Linux an unavailable computer-audio check keeps its row retry and gains no Windows device help', () => {
+  for (const platform of ['darwin', 'linux']) {
+    const report: AccessSetupState = { ...missing, permissions: { screen: platform === 'darwin' ? 'granted' : 'not-required', microphone: 'granted', systemAudio: 'unavailable' } }
+    const html = render(state(report, platform))
+    assert.match(html, /aria-label="Retry access to computer audio"/, platform)
+    assert.doesNotMatch(html, /access-setup-help|Retry audio check<|Open Windows Settings|Sound/, platform)
+  }
 })

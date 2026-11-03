@@ -43,9 +43,10 @@ export interface PlatformCopy {
 const DARWIN_MICROPHONE = 'System Settings → Privacy & Security → Microphone'
 // Computer audio has no pane of its own on macOS; screen-recording consent covers it.
 const DARWIN_SCREEN = 'System Settings → Privacy & Security → Screen & System Audio Recording'
-const WIN32_MICROPHONE = 'Settings → Privacy & security → Microphone'
-// Desktop apps cannot be toggled individually on Windows; the two global switches are the whole permission.
-const WIN32_MICROPHONE_ACTION = 'turn on both Microphone access and Let desktop apps access your microphone'
+// Windows 11 calls the section Privacy & security and Windows 10 calls it Privacy, and the toggle labels differ between them too, so the action says what each switch does.
+const WIN32_MICROPHONE = 'Settings → Privacy & security (Privacy on Windows 10) → Microphone'
+// Desktop apps cannot be toggled individually on Windows; the two global switches (this device, and desktop apps) are the whole permission.
+const WIN32_MICROPHONE_ACTION = 'turn on microphone access for this device and for desktop apps'
 // Computer audio has no permission on Windows; the main process deep-links to Sound (ms-settings:sound), where the captured output device is chosen.
 const WIN32_SOUND = 'Settings → System → Sound'
 // Loopback follows the Default Device, which Settings calls the output device; a headset set only as the communications device stays silent.

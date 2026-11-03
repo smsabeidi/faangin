@@ -1,7 +1,10 @@
 import type { DesktopPlatform, MediaAccessPorts, MediaAccessState } from './types'
 
 const ELECTRON_STATES: ReadonlySet<string> = new Set(['granted', 'denied', 'restricted', 'not-determined'])
-const MICROPHONE_OFF_MESSAGE = 'Microphone access is turned off for apps. Turn it on in Windows Settings → Privacy & security → Microphone, then try again.'
+// Windows 11 names the page Privacy & security and Windows 10 names it Privacy. "denied" is deliberate: the renderer's audio status
+// classifiers (meter, guidance and question-source health) key on it, as they do on the macOS message.
+const MICROPHONE_PAGE = 'Windows Settings → Privacy & security (Privacy on Windows 10) → Microphone'
+const MICROPHONE_OFF_MESSAGE = `Microphone access was denied: Windows has it turned off for apps. Turn it on in ${MICROPHONE_PAGE}, then try again.`
 // WASAPI loopback follows the default render device and never asks for consent, so only the device choice can fail the check.
 const SYSTEM_AUDIO_UNAVAILABLE_MESSAGE = 'Computer audio could not be verified. Make sure a playback device is set as default in Windows Sound settings, then retry the access check.'
 
@@ -26,6 +29,11 @@ export const win32Platform: DesktopPlatform = {
   // Must equal the electron-builder appId so taskbar grouping and notifications attribute to the installed app.
   appUserModelId: 'com.faangin.desktop',
   defaultDeviceName: 'Windows PC',
+  // Notepad "ANSI" and Word's plain-text export use the Windows ANSI code page; Western locales are Windows-1252.
+  legacyTextEncoding: 'windows-1252',
+  // Chromium registers global hot keys with RegisterHotKey and no MOD_NOREPEAT, so Windows posts WM_HOTKEY for every auto-repeat of a held chord
+  // (after the 250 ms to 1 s repeat delay, then every 33 to 400 ms). 1100 ms clears the longest delay, and the guard slides with every callback.
+  globalShortcutRepeatGuardMs: 1100,
   // Screen capture needs no consent on Windows; getMediaAccessStatus('screen') is always 'granted' there.
   permissionStatus: (kind, ports) => kind === 'screen' ? 'not-required' : microphoneStatus(ports),
   // Screen capture has no settings page; computer audio points at Sound, where the captured default playback device is chosen.
@@ -37,11 +45,12 @@ export const win32Platform: DesktopPlatform = {
     const status = microphoneStatus(ports)
     return status === 'denied' || status === 'restricted' ? { allowed: false, message: MICROPHONE_OFF_MESSAGE } : { allowed: true }
   },
-  pendingMicrophoneMessage: () => 'Microphone access could not be confirmed. Check Windows Settings → Privacy & security → Microphone, then try again.',
+  pendingMicrophoneMessage: () => `Microphone access could not be confirmed. Check ${MICROPHONE_PAGE}, then try again.`,
   // Electron drops WS_THICKFRAME for transparent windows anyway; declaring it keeps the trade-off visible: no rectangular DWM shadow
   // or animation around the transparent card, and no edge-drag resizing (the renderer's 'overlay-resize' IPC remains the resize path).
-  // skipTaskbar and maximizable are not repeated here: index.ts sets both for the overlay on every platform.
-  overlayWindowOptions: () => ({ thickFrame: false }),
+  // minimizable is false because a minimized overlay has no taskbar button (skipTaskbar) to restore it from, and Win+Down or Alt+Space can minimize
+  // an active frameless window; index.ts also suppresses the system menu. skipTaskbar and maximizable are not repeated here: index.ts sets both for the overlay on every platform.
+  overlayWindowOptions: () => ({ thickFrame: false, minimizable: false }),
   // The application menu would otherwise paint a menu bar on every framed window; the tray menu is the recovery path here.
   workspaceWindowOptions: () => ({ autoHideMenuBar: true }),
   // No native material on Windows: the workspace is always solid and only the overlay's renderer tint is transparent.
@@ -62,5 +71,16 @@ export const win32Platform: DesktopPlatform = {
   credentialEncryptionAvailable: ports => ports.isEncryptionAvailable(),
   credentialUnavailableMessage: action => action === 'read'
     ? 'Windows credential protection (DPAPI) is unavailable. Sign in to your Windows account and restart Faangin.'
-    : 'Windows credential protection (DPAPI) is unavailable, so no key was saved. Sign in to your Windows account and try again.'
+    : 'Windows credential protection (DPAPI) is unavailable, so no key was saved. Sign in to your Windows account and try again.',
+  // The Run value is rewritten on every call, so a reinstall into another directory or a retained profile with no Run value starts working again.
+  // `enabled` defaults to true and rewrites the StartupApproved value, which would silently undo a Disable in Task Manager or Windows Settings,
+  // so the current state is carried through. A launch never creates the entry for a user who has the preference off.
+  applyLoginItem(ports, openAtLogin, trigger) {
+    if (!openAtLogin && trigger === 'launch') return
+    const name = win32Platform.appUserModelId?.toLowerCase()
+    const enabled = ports.getLoginItemSettings().launchItems?.find(item => item.name.toLowerCase() === name)?.enabled ?? true
+    ports.setLoginItemSettings({ openAtLogin, enabled })
+  },
+  // Chromium views menus read a single '&' as a mnemonic marker and drop it from the text; '&&' draws a literal ampersand.
+  menuLabel: label => label.replace(/&/g, '&&')
 }

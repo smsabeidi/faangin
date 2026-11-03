@@ -63,14 +63,20 @@ export function resolveScreenshotSource<Image>(
   ownedIds: ReadonlySet<string>, before: readonly ScreenshotDisplay[], after: readonly ScreenshotDisplay[]
 ): CapturedScreenshot<Image> {
   if (requestedId && ownedIds.has(requestedId)) throw new Error('Faangin windows cannot be selected as screenshot sources.')
-  const candidates = requestedId ? sources.filter(source => source.id === requestedId)
-    : sources.filter(source => source.id.startsWith('screen:') && source.display_id === primaryDisplayId)
+  // Windows reports an empty display_id for a duplicated or remote display, which leaves nothing to pair the source with. That
+  // is only unambiguous when exactly one display exists, and it is the same one before and after the capture.
+  const only = before.length === 1 && after.length === 1 && before[0].id === after[0].id ? { previous: before[0], current: after[0] } : undefined
+  const screens = sources.filter(source => source.id.startsWith('screen:'))
+  let candidates = requestedId ? sources.filter(source => source.id === requestedId) : screens.filter(source => source.display_id === primaryDisplayId)
+  if (!requestedId && !candidates.length && only && screens.length === 1 && !screens[0].display_id) candidates = screens
   if (candidates.length !== 1) throw new Error('The selected display or window is unavailable. Choose a capture source in Settings.')
   const source = candidates[0]
   if (ownedIds.has(source.id)) throw new Error('Faangin windows cannot be selected as screenshot sources.')
   if (source.id.startsWith('window:')) return { source }
-  if (!source.id.startsWith('screen:') || !source.display_id) throw new Error('The selected display cannot be verified. Choose a capture source in Settings.')
-  const previous = before.find(display => display.id === source.display_id), current = after.find(display => display.id === source.display_id)
+  if (!source.id.startsWith('screen:')) throw new Error('The selected display cannot be verified. Choose a capture source in Settings.')
+  const pair = source.display_id ? { previous: before.find(display => display.id === source.display_id), current: after.find(display => display.id === source.display_id) } : only
+  if (!pair) throw new Error('The selected display cannot be verified. Choose a capture source in Settings.')
+  const { previous, current } = pair
   if (!previous || !current) throw new Error('The selected display was disconnected during capture. Choose a current display in Settings.')
   if (previous.width !== current.width || previous.height !== current.height || previous.scaleFactor !== current.scaleFactor) {
     throw new Error('The selected display changed during capture. Choose it again in Settings.')

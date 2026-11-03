@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { NativeImage } from 'electron'
-import { darwinPlatform, desktopPlatform, linuxPlatform, platformId, win32Platform, type AppearancePorts, type DesktopPlatform, type MediaAccessPorts, type OverlayLevelPorts, type PlatformId, type SafeStoragePorts, type TrayImagePorts, type WindowMaterialPorts } from '../src/main/platform'
+import { darwinPlatform, desktopPlatform, linuxPlatform, platformId, win32Platform, type AppearancePorts, type DesktopPlatform, type LoginItemPorts, type MediaAccessPorts, type OverlayLevelPorts, type PlatformId, type SafeStoragePorts, type TrayImagePorts, type WindowMaterialPorts } from '../src/main/platform'
 
 const platforms: Record<PlatformId, DesktopPlatform> = { darwin: darwinPlatform, win32: win32Platform, linux: linuxPlatform }
 
@@ -72,6 +72,10 @@ test('platform facts describe each OS once and the selector maps Node platform n
   assert.deepEqual([darwinPlatform.appUserModelId, win32Platform.appUserModelId, linuxPlatform.appUserModelId], [null, 'com.faangin.desktop', null])
   assert.deepEqual([darwinPlatform.defaultDeviceName, win32Platform.defaultDeviceName, linuxPlatform.defaultDeviceName], ['Mac', 'Windows PC', 'Linux PC'])
   assert.deepEqual([darwinPlatform.credentialStoreName, win32Platform.credentialStoreName], ['Keychain', 'Windows credential protection (DPAPI)'])
+  assert.deepEqual([darwinPlatform.legacyTextEncoding, win32Platform.legacyTextEncoding, linuxPlatform.legacyTextEncoding], [null, 'windows-1252', null])
+  // Windows posts a hot-key callback for every keyboard auto-repeat (the longest repeat delay is one second); macOS and the unverified Linux do not need a guard.
+  assert.deepEqual([darwinPlatform.globalShortcutRepeatGuardMs, win32Platform.globalShortcutRepeatGuardMs, linuxPlatform.globalShortcutRepeatGuardMs], [0, 1100, 0])
+  assert.ok(win32Platform.globalShortcutRepeatGuardMs > 1000)
 })
 
 test('permission statuses pass Electron values through, mark unreadable ones unknown and skip permissions the OS lacks', () => {
@@ -125,7 +129,7 @@ test('Windows reads the global microphone switch without prompting and both swit
   // Electron reports the per-user switch as 'denied' and the device-wide switch (or group policy) as 'restricted'.
   for (const state of ['denied', 'restricted']) {
     const blocked = mediaPorts({ microphone: state })
-    assert.deepEqual(await win32Platform.microphoneAccess(blocked.ports), { allowed: false, message: 'Microphone access is turned off for apps. Turn it on in Windows Settings → Privacy & security → Microphone, then try again.' }, state)
+    assert.deepEqual(await win32Platform.microphoneAccess(blocked.ports), { allowed: false, message: 'Microphone access was denied: Windows has it turned off for apps. Turn it on in Windows Settings → Privacy & security (Privacy on Windows 10) → Microphone, then try again.' }, state)
     assert.deepEqual(blocked.calls, ['status:microphone'])
   }
   for (const state of ['granted', 'not-determined', 'unknown', 'throw']) {
@@ -133,7 +137,7 @@ test('Windows reads the global microphone switch without prompting and both swit
     assert.deepEqual(await win32Platform.microphoneAccess(ports.ports), { allowed: true }, state)
     assert.ok(!ports.calls.includes('ask:microphone'), 'askForMediaAccess is macOS-only')
   }
-  assert.match(win32Platform.pendingMicrophoneMessage(), /Windows Settings/)
+  assert.match(win32Platform.pendingMicrophoneMessage(), /Windows Settings → Privacy & security \(Privacy on Windows 10\) → Microphone/)
   const linux = mediaPorts({ microphone: 'denied' })
   assert.deepEqual(await linuxPlatform.microphoneAccess(linux.ports), { allowed: true })
   assert.deepEqual(linux.calls, [])
@@ -144,7 +148,7 @@ test('window options give macOS vibrancy, hide the Windows menu bar and keep the
   assert.deepEqual(darwinPlatform.overlayWindowOptions(), {})
   assert.deepEqual(darwinPlatform.workspaceWindowOptions({ reduceTransparency: false }), { vibrancy: 'window', visualEffectState: 'followWindow' })
   assert.deepEqual(darwinPlatform.workspaceWindowOptions({ reduceTransparency: true }), {})
-  assert.deepEqual(win32Platform.overlayWindowOptions(), { thickFrame: false }, 'skipTaskbar and maximizable are set for every overlay by index.ts')
+  assert.deepEqual(win32Platform.overlayWindowOptions(), { thickFrame: false, minimizable: false }, 'skipTaskbar and maximizable are set for every overlay by index.ts; a minimized overlay has no taskbar button to restore it')
   for (const reduceTransparency of [false, true]) assert.deepEqual(win32Platform.workspaceWindowOptions({ reduceTransparency }), { autoHideMenuBar: true })
   assert.deepEqual(linuxPlatform.overlayWindowOptions(), {})
   assert.deepEqual(linuxPlatform.workspaceWindowOptions({ reduceTransparency: false }), {})
@@ -243,4 +247,58 @@ test('credential encryption follows safeStorage, rejects the Linux plaintext bac
     assert.match(message, /Windows account/)
   }
   assert.match(win32Platform.credentialUnavailableMessage('save'), /no key was saved/)
+})
+
+function loginPorts(items: Array<{ name: string; enabled: boolean }> | undefined = []) {
+  const writes: Array<{ openAtLogin: boolean; enabled?: boolean }> = []
+  const ports: LoginItemPorts = { getLoginItemSettings: () => ({ launchItems: items }), setLoginItemSettings: settings => { writes.push({ ...settings }) } }
+  return { ports, writes }
+}
+
+test('macOS and Linux register the login item only when a setting is saved, exactly as before', () => {
+  for (const platform of [darwinPlatform, linuxPlatform]) {
+    for (const openAtLogin of [true, false]) {
+      const save = loginPorts(); platform.applyLoginItem(save.ports, openAtLogin, 'save')
+      assert.deepEqual(save.writes, [{ openAtLogin }], platform.id)
+      const launch = loginPorts(); platform.applyLoginItem(launch.ports, openAtLogin, 'launch')
+      assert.deepEqual(launch.writes, [], platform.id)
+    }
+  }
+})
+
+test('Windows rewrites the Run entry on save and on launch while preserving a Task Manager disable', () => {
+  const name = win32Platform.appUserModelId!
+  const fresh = loginPorts(); win32Platform.applyLoginItem(fresh.ports, true, 'save')
+  assert.deepEqual(fresh.writes, [{ openAtLogin: true, enabled: true }], 'with no entry yet the item is enabled')
+  const approved = loginPorts([{ name, enabled: true }]); win32Platform.applyLoginItem(approved.ports, true, 'save')
+  assert.deepEqual(approved.writes, [{ openAtLogin: true, enabled: true }])
+  // Turning Faangin off in Task Manager > Startup apps must survive an unrelated settings save and the next launch.
+  const disabled = loginPorts([{ name, enabled: false }])
+  win32Platform.applyLoginItem(disabled.ports, true, 'save'); win32Platform.applyLoginItem(disabled.ports, true, 'launch')
+  assert.deepEqual(disabled.writes, [{ openAtLogin: true, enabled: false }, { openAtLogin: true, enabled: false }])
+  // Only this app's entry counts, matched the way the registry matches value names.
+  const other = loginPorts([{ name: 'Other app', enabled: false }, { name: name.toUpperCase(), enabled: false }]); win32Platform.applyLoginItem(other.ports, true, 'save')
+  assert.deepEqual(other.writes, [{ openAtLogin: true, enabled: false }])
+  const unrelated = loginPorts([{ name: 'Other app', enabled: false }]); win32Platform.applyLoginItem(unrelated.ports, true, 'save')
+  assert.deepEqual(unrelated.writes, [{ openAtLogin: true, enabled: true }])
+  const unreadable = loginPorts(undefined); win32Platform.applyLoginItem(unreadable.ports, true, 'launch')
+  assert.deepEqual(unreadable.writes, [{ openAtLogin: true, enabled: true }])
+})
+
+test('Windows launch repairs a stale Run entry for a user who opted in and never enrols one who did not, while an explicit off removes the entry', () => {
+  const optedOut = loginPorts(); win32Platform.applyLoginItem(optedOut.ports, false, 'launch')
+  assert.deepEqual(optedOut.writes, [])
+  const optedIn = loginPorts(); win32Platform.applyLoginItem(optedIn.ports, true, 'launch')
+  assert.deepEqual(optedIn.writes, [{ openAtLogin: true, enabled: true }])
+  const removal = loginPorts([{ name: win32Platform.appUserModelId!, enabled: false }]); win32Platform.applyLoginItem(removal.ports, false, 'save')
+  assert.deepEqual(removal.writes, [{ openAtLogin: false, enabled: false }])
+})
+
+test('Windows and Linux escape ampersands in native menu labels so they are drawn, and macOS leaves its labels byte-identical', () => {
+  for (const label of ['Capture & solve', 'Reset overlay size & position', 'Show workspace', '']) assert.equal(darwinPlatform.menuLabel(label), label)
+  assert.equal(win32Platform.menuLabel('Capture & solve'), 'Capture && solve')
+  assert.equal(win32Platform.menuLabel('Reset overlay size & position'), 'Reset overlay size && position')
+  assert.equal(linuxPlatform.menuLabel('Capture & solve'), 'Capture && solve')
+  assert.equal(win32Platform.menuLabel('Show workspace'), 'Show workspace')
+  assert.equal(win32Platform.menuLabel('A & B & C'), 'A && B && C')
 })

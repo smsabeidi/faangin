@@ -23,6 +23,9 @@ export const darwinPlatform: DesktopPlatform = {
   credentialStoreName: 'Keychain',
   appUserModelId: null,
   defaultDeviceName: 'Mac',
+  legacyTextEncoding: null,
+  // Carbon hot keys fire once per press.
+  globalShortcutRepeatGuardMs: 0,
   permissionStatus: readStatus,
   // Screen & System Audio Recording is one pane: computer audio is governed by the same consent as screen capture.
   permissionSettingsUrl: kind => `x-apple.systempreferences:com.apple.preference.security?${kind === 'microphone' ? 'Privacy_Microphone' : 'Privacy_ScreenCapture'}`,
@@ -58,5 +61,9 @@ export const darwinPlatform: DesktopPlatform = {
     return image
   },
   credentialEncryptionAvailable: ports => ports.isEncryptionAvailable(),
-  credentialUnavailableMessage: action => action === 'read' ? 'OS credential encryption is unavailable. Unlock your keychain and restart Faangin.' : 'OS credential encryption is unavailable. No key was saved.'
+  credentialUnavailableMessage: action => action === 'read' ? 'OS credential encryption is unavailable. Unlock your keychain and restart Faangin.' : 'OS credential encryption is unavailable. No key was saved.',
+  // macOS owns the Login Items decision; re-registering on every save is the only call it needs.
+  applyLoginItem: (ports, openAtLogin, trigger) => { if (trigger === 'save') ports.setLoginItemSettings({ openAtLogin }) },
+  // The macOS menu draws an ampersand literally.
+  menuLabel: label => label
 }

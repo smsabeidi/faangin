@@ -99,11 +99,31 @@ export function applyStartupShortcutBindings(manager: ShortcutManager, preset: S
   return result
 }
 
+/** Holding these chords is how a user keeps nudging or scrolling, so keyboard auto-repeat must reach them. */
+const REPEATABLE: ReadonlySet<ShortcutAction> = new Set(['move-left', 'move-right', 'move-up', 'move-down', 'scroll-up', 'scroll-down'])
+export interface ShortcutManagerOptions {
+  /** Native callbacks for one chord closer together than this are keyboard auto-repeat of one press; 0 reports every callback. */
+  repeatGuardMs?: number
+  now?: () => number
+}
+
 /** Newly registered callbacks stay dormant until every binding succeeds; existing callbacks read the committed map. */
 export class ShortcutManager {
   private active = new Map<string, ShortcutBinding>()
   private owned = new Set<string>()
-  constructor(private registrar: ShortcutRegistrar, private dispatch: (action: ShortcutAction) => void, private platform = process.platform) {}
+  // The last native callback per chord, including the ones that were swallowed, so a held chord stays swallowed however long it is held.
+  private lastNative = new Map<string, number>()
+  constructor(private registrar: ShortcutRegistrar, private dispatch: (action: ShortcutAction) => void, private platform = process.platform, private options: ShortcutManagerOptions = {}) {}
+  private callback(accelerator: string): () => void {
+    return () => {
+      const at = (this.options.now ?? (() => performance.now()))(), last = this.lastNative.get(accelerator)
+      this.lastNative.set(accelerator, at)
+      const current = this.active.get(accelerator)
+      if (!current) return
+      if (last !== undefined && at - last < (this.options.repeatGuardMs ?? 0) && !REPEATABLE.has(current.action)) return
+      this.dispatch(current.action)
+    }
+  }
   bindings(): ShortcutBinding[] { return [...this.active.values()].map(binding => ({ ...binding })) }
   apply(bindings: ShortcutBinding[]): ShortcutApplyResult {
     const desired = new Map<string, ShortcutBinding>(), actions = new Set<string>()
@@ -120,7 +140,7 @@ export class ShortcutManager {
     for (const [accelerator, binding] of desired) {
       if (this.owned.has(accelerator)) continue
       let registered = false
-      try { registered = this.registrar.register(accelerator, () => { const current = this.active.get(accelerator); if (current) this.dispatch(current.action) }) } catch {}
+      try { registered = this.registrar.register(accelerator, this.callback(accelerator)) } catch {}
       if (!registered) { failures.push({ action: binding.action, accelerator, message: 'Another app or the operating system owns this shortcut. Choose a different key combination.' }); break }
       this.owned.add(accelerator); staged.push(accelerator)
     }
@@ -134,7 +154,7 @@ export class ShortcutManager {
     return { ok: true, bindings: this.bindings() }
   }
   private release(accelerator: string): void {
-    try { this.registrar.unregister(accelerator); this.owned.delete(accelerator) } catch { /* An orphan callback is dormant; retain ownership so dispose can retry. */ }
+    try { this.registrar.unregister(accelerator); this.owned.delete(accelerator); this.lastNative.delete(accelerator) } catch { /* An orphan callback is dormant; retain ownership so dispose can retry. */ }
   }
   dispose(): void { this.active.clear(); for (const accelerator of [...this.owned]) this.release(accelerator) }
 }

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { audioHealthMessages, AUDIO_HEALTH_MESSAGES } from '../src/capture/audio-health'
+import { audioTrackMissing } from '../src/capture/media'
+import { win32Platform } from '../src/main/platform'
 import { audioInputGuidance, hasReplyContext, interviewFollowupRequest, questionSourceHealth, questionSourcePatch } from '../src/renderer/src/interview-workflow'
 import { DEFAULT_SETTINGS, type AppState, type Session } from '../src/shared/types'
 
@@ -60,6 +63,35 @@ test('Windows points a failed computer-audio source at the default playback devi
   assert.equal(audioInputGuidance('microphone', true, 'Permission denied', 'win32'), audioInputGuidance('microphone', true, 'Permission denied', 'darwin'))
   for (const status of ['Silent · 15s', 'Disconnected', 'Listening']) assert.equal(audioInputGuidance('system', true, status, 'win32'), audioInputGuidance('system', true, status, 'darwin'))
   for (const status of ['Permission denied', 'System audio is unavailable']) assert.equal(audioInputGuidance('system', true, status, 'linux'), audioInputGuidance('system', true, status, 'darwin'))
+})
+
+test('Windows shows the Default Device hints in full, because the meter clips them and the shared sentence names no setting to change', () => {
+  const messages = audioHealthMessages('win32', 'system')
+  assert.match(messages.silent, /Default Communications Device/); assert.match(messages['low-level'], /Windows output volume/)
+  assert.equal(audioInputGuidance('system', true, messages.silent, 'win32'), messages.silent)
+  assert.equal(audioInputGuidance('system', true, messages['low-level'], 'win32'), messages['low-level'])
+  assert.equal(audioInputGuidance('system', true, messages.silent, 'win32').length > 100, true, 'the full instruction, not a one-line label')
+  // The microphone, macOS and Linux keep the shared copy for the very same statuses.
+  for (const platform of ['darwin', 'linux']) {
+    assert.match(audioInputGuidance('system', true, messages.silent, platform), /Play the interviewer.s voice through your computer/)
+    assert.match(audioInputGuidance('system', true, messages['low-level'], platform), /Play the interviewer.s voice through your computer/)
+  }
+  assert.match(audioInputGuidance('microphone', true, messages.silent, 'win32'), /Speak near the microphone/)
+  assert.match(audioInputGuidance('system', true, AUDIO_HEALTH_MESSAGES.silent, 'win32'), /Play the interviewer.s voice through your computer/)
+  assert.equal(audioInputGuidance('system', false, messages.silent, 'win32'), audioInputGuidance('system', false, messages.silent, 'darwin'))
+})
+
+test('Windows classifies its own capture strings: a missing playback device and a switched-off microphone both read as unavailable', async () => {
+  const noDevice = audioTrackMissing('system', 'win32'), pending = win32Platform.pendingMicrophoneMessage()
+  const denied = (await win32Platform.microphoneAccess({ getMediaAccessStatus: () => 'denied', askForMediaAccess: async () => false })).message!
+  assert.match(denied, /Privacy & security \(Privacy on Windows 10\) → Microphone/)
+  assert.match(audioInputGuidance('system', true, noDevice, 'win32'), /default playback device in Windows Sound settings/)
+  assert.match(audioInputGuidance('system', true, noDevice, 'darwin'), /Check audio permissions/, 'only Windows produces this status; elsewhere the shared unavailable copy applies')
+  const settings = { ...DEFAULT_SETTINGS, microphone: true, systemAudio: true, liveSuggestionSource: 'system' as const }
+  assert.deepEqual(questionSourceHealth(settings, { ...capture, microphone: 'Listening', system: noDevice }), { listening: false, unavailable: true, headline: 'Computer audio unavailable · microphone only' })
+  assert.match(audioInputGuidance('microphone', true, denied, 'win32', 'denied'), /Check microphone access in system settings/)
+  assert.deepEqual(questionSourceHealth({ ...settings, liveSuggestionSource: 'microphone' }, { ...capture, microphone: denied, system: 'Listening' }), { listening: false, unavailable: true, headline: 'Microphone unavailable · computer audio only' })
+  assert.deepEqual(questionSourceHealth({ ...settings, liveSuggestionSource: 'microphone' }, { ...capture, microphone: pending, system: 'Listening' }), { listening: false, unavailable: true, headline: 'Microphone unavailable · computer audio only' })
 })
 
 
