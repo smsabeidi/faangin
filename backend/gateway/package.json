@@ -3,22 +3,33 @@
   "private": true,
   "type": "module",
   "main": "dist/server.js",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run typecheck && npm run build:supabase",
+    "build:supabase": "node scripts/bundle-supabase.mjs",
+    "check:supabase": "npm run build:supabase && deno check --no-config --no-lock --node-modules-dir=none ../../supabase/functions/faangin-gateway/index.ts",
+    "smoke:supabase": "npm run build:supabase && node scripts/supabase-runtime-smoke.mjs",
+    "test:supabase-store": "node --import tsx --test test/sql-supabase.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/server.js",
-    "dev": "node --import tsx src/server.ts",
-    "test": "node --import tsx --test test/*.test.ts"
+    "start": "deno run --no-config --no-lock --node-modules-dir=none --allow-env --allow-net ../../supabase/functions/faangin-gateway/index.ts",
+    "dev": "npm run build:supabase && npm start",
+    "test": "node --import tsx --test test/*.test.ts",
+    "build:node": "tsc -p tsconfig.json",
+    "start:node": "node dist/server.js",
+    "test:sql": "node scripts/test-local-postgres.mjs",
+    "test:legacy:firebase": "../scripts/with-emulator-lock.sh ../node_modules/.bin/firebase emulators:exec --project demo-faangin --only firestore \"node --import tsx --test test/legacy/store-emulated.test.ts\""
   },
   "dependencies": {
-    "firebase-admin": "14.5.0",
     "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "22.15.0",
     "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
     "tsx": "4.23.15",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "firebase-admin": "14.5.0"
   }
 }

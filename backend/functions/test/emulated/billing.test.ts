@@ -1,8 +1,10 @@
 // Runs under `npm run test:emulated` (auth, firestore, functions emulators + STRIPE_API_BASE=http://127.0.0.1:4242).
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import * as fake from '../fake-stripe.js'
-import { call, db, http, signInTestUser, signInVerifiedTestUser } from './harness.js'
+import { call, db, http, signInTestUser, signInVerifiedTestUser, signInWithCustomToken } from './harness.js'
+import { verifyLicense } from '../../src/license/sign.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -42,7 +44,65 @@ const expectCode = async (promise: Promise<unknown>, code: string) => {
   })
 }
 
+describe('signup through paid desktop access', () => {
+  it('keeps one account/device through signup, approval, auth exchange, BYOK purchase, Pro and cancellation', async () => {
+    const deviceId = `mac-journey-${Math.random().toString(36).slice(2, 12)}`
+    const start = await http('deviceCodeStart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ deviceId, deviceName: 'Launch journey Mac' }) })
+    assert.equal(start.status, 200)
+    const started = await start.json() as { userCode: string; deviceCode: string }
+    const user = await signInTestUser()
+    await call('deviceCodeApprove', { userCode: started.userCode }, user.idToken)
+    const poll = await http('deviceCodePoll', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ deviceCode: started.deviceCode }) })
+    const approval = await poll.json() as { status: string; customToken: string; uid: string }
+    assert.equal(approval.status, 'approved')
+    const desktop = await signInWithCustomToken(approval.customToken)
+    assert.equal(desktop.uid, user.uid)
+    const publicKey = readFileSync(new URL('../../.secret.local', import.meta.url), 'utf8').match(/^LICENSE_PUBLIC_KEY=(.+)$/m)![1].trim()
+    const license = async () => {
+      const result = await call<{ token: string }>('issueLicense', { deviceId, deviceName: 'Launch journey Mac' }, desktop.idToken)
+      const payload = verifyLicense(result.token, publicKey)
+      assert.ok(payload)
+      assert.equal(payload.uid, user.uid)
+      assert.equal(payload.deviceId, deviceId)
+      return payload
+    }
+    await expectCode(license(), 'FAILED_PRECONDITION')
+    await call('createCheckoutSession', { plan: 'byok' }, desktop.idToken)
+    const customer = (await db.collection('customers').doc(user.uid).get()).data()!.stripeCustomerId as string
+    assert.equal((await postWebhook(fake.fakeEvent('checkout.session.completed', byokSession(user.uid, customer)))).status, 200)
+    assert.equal((await license()).plan, 'byok')
+    await openFlags()
+    await call('createCheckoutSession', { plan: 'pro_monthly' }, desktop.idToken)
+    const subscription = fake.fakeSubscription({ id: `sub_journey_${user.uid}`, customer, uid: user.uid })
+    assert.equal((await postSubscriptionEvent('customer.subscription.created', subscription)).status, 200)
+    assert.equal((await license()).plan, 'pro')
+    assert.equal((await postSubscriptionEvent('customer.subscription.deleted', { ...subscription, status: 'canceled' })).status, 200)
+    assert.equal((await license()).plan, 'byok', 'the original one-time purchase survives Pro cancellation')
+    assert.equal((await db.collection('devices').doc(user.uid).collection('items').get()).size, 1)
+  })
+})
+
 describe('createCheckoutSession', () => {
+  it('blocks a second BYOK charge while a paid Checkout is waiting for fulfillment', async () => {
+    const user = await signInTestUser()
+    const customer = `cus_paid_${user.uid}`
+    await db.collection('customers').doc(user.uid).set({ stripeCustomerId: customer })
+    fake.sessions.set('cs_paid', { id: 'cs_paid', customer, status: 'complete', mode: 'payment', payment_status: 'paid', metadata: { plan: 'byok' }, created: Math.floor(Date.now() / 1000) })
+    await expectCode(call('createCheckoutSession', { plan: 'byok' }, user.idToken), 'FAILED_PRECONDITION')
+    assert.equal(fake.requests.some((request) => request.method === 'POST' && request.path === '/v1/checkout/sessions'), false)
+  })
+
+  it('a live checkout lease blocks Stripe calls; an expired lease is reclaimed and released', async () => {
+    const user = await signInTestUser()
+    const lock = db.collection('checkoutLocks').doc(user.uid)
+    await lock.set({ owner: 'another-instance', expiresAt: Date.now() + 60_000 })
+    await expectCode(call('createCheckoutSession', { plan: 'byok' }, user.idToken), 'RESOURCE_EXHAUSTED')
+    assert.equal(fake.requests.length, 0)
+    await lock.update({ expiresAt: Date.now() - 1 })
+    assert.ok((await call<{ url: string }>('createCheckoutSession', { plan: 'byok' }, user.idToken)).url)
+    assert.equal((await lock.get()).exists, false)
+  })
+
   it('byok: returns the fake checkout url and sends the right session', async () => {
     const user = await signInTestUser()
     const { url } = await call<{ url: string }>('createCheckoutSession', { plan: 'byok' }, user.idToken)
@@ -146,16 +206,19 @@ describe('createCheckoutSession', () => {
     assert.equal(fake.requests.filter((r) => r.path === '/v1/customers').length, 1)
   })
 
-  it('two concurrent first checkouts share one Stripe customer (idempotent creation)', async () => {
+  it('concurrent first checkouts share one customer and leave only one payable session', async () => {
     const user = await signInTestUser()
-    await Promise.all([call('createCheckoutSession', { plan: 'byok' }, user.idToken), call('createCheckoutSession', { plan: 'byok' }, user.idToken)])
+    const results = await Promise.allSettled([call('createCheckoutSession', { plan: 'byok' }, user.idToken), call('createCheckoutSession', { plan: 'byok' }, user.idToken)])
+    assert.ok(results.some((result) => result.status === 'fulfilled'))
+    for (const result of results) if (result.status === 'rejected') assert.equal(result.reason.code, 'RESOURCE_EXHAUSTED')
     assert.equal(fake.createdCustomers.length, 1, 'the second create was an idempotent replay')
+    assert.equal([...fake.sessions.values()].filter((session) => session.status === 'open').length, 1)
     const mapped = (await db.collection('customers').doc(user.uid).get()).data()?.stripeCustomerId
     assert.equal(mapped, fake.createdCustomers[0])
     assert.deepEqual((await db.collection('customersByStripe').doc(mapped).get()).data(), { uid: user.uid })
   })
 
-  it('expiring is per buyer and per open session: another buyer\'s session is untouched, and an expire that Stripe refuses does not block checkout', async () => {
+  it('expiring is per buyer, and failure to expire blocks a second payable checkout', async () => {
     const a = await signInTestUser()
     const b = await signInTestUser()
     await call('createCheckoutSession', { plan: 'pro_monthly' }, b.idToken)
@@ -169,11 +232,12 @@ describe('createCheckoutSession', () => {
     const list = fake.requests.find((r) => r.method === 'GET' && r.path === '/v1/checkout/sessions')!
     assert.equal(list.query.get('status'), 'open')
     assert.equal(list.query.get('customer'), (await db.collection('customers').doc(a.uid).get()).data()?.stripeCustomerId)
-    // Stripe refuses to expire a session the buyer paid a moment ago: the failure is logged and checkout still works
+    // The earlier session may still be payable, or paid with fulfillment still pending. Do not charge again.
     const stillOpen = [...fake.sessions.values()].find((s) => s.status === 'open' && s.id !== bSession.id)!
     fake.refuseExpire.add(stillOpen.id)
-    const { url } = await call<{ url: string }>('createCheckoutSession', { plan: 'pro_monthly' }, a.idToken)
-    assert.match(url, /^https:\/\/checkout\.stripe\.test\//)
+    const count = fake.sessions.size
+    await expectCode(call('createCheckoutSession', { plan: 'pro_monthly' }, a.idToken), 'UNAVAILABLE')
+    assert.equal(fake.sessions.size, count, 'no second session created after failed expiry')
     assert.equal(fake.sessions.get(stillOpen.id)?.status, 'open', 'the refused session is left alone')
   })
 
@@ -223,7 +287,7 @@ describe('createCheckoutSession', () => {
     assert.ok(url, 'an ended subscription does not block')
   })
 
-  it('a subscription on hold (unpaid or paused) gets a truthful message, not "Pro is already active"', async () => {
+  it('a subscription on hold (unpaid, paused or incomplete) blocks duplicate billing with a truthful message', async () => {
     const user = await signInTestUser()
     await call('createCheckoutSession', { plan: 'byok' }, user.idToken)
     const customerId = (await db.collection('customers').doc(user.uid).get()).data()?.stripeCustomerId
@@ -233,6 +297,8 @@ describe('createCheckoutSession', () => {
       assert.match(err.message, /on hold/)
       return true
     })
+    fake.subscriptions.set('sub_hold', fake.fakeSubscription({ id: 'sub_hold', customer: customerId, status: 'incomplete' }))
+    await assert.rejects(call('createCheckoutSession', { plan: 'pro_monthly' }, user.idToken), /on hold/)
     fake.subscriptions.set('sub_hold', fake.fakeSubscription({ id: 'sub_hold', customer: customerId, status: 'active' }))
     await assert.rejects(call('createCheckoutSession', { plan: 'pro_monthly' }, user.idToken), /already active/)
   })
@@ -254,6 +320,9 @@ describe('createCheckoutSession', () => {
     const user = await signInTestUser()
     await expectCode(call('createCheckoutSession', { plan: 'byok' }), 'UNAUTHENTICATED')
     await expectCode(call('createCheckoutSession', { plan: 'enterprise' }, user.idToken), 'INVALID_ARGUMENT')
+    for (const plan of ['__proto__', 'constructor', 'toString']) {
+      await expectCode(call('createCheckoutSession', { plan }, user.idToken), 'INVALID_ARGUMENT')
+    }
   })
 })
 

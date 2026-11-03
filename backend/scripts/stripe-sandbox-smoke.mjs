@@ -1,18 +1,22 @@
 #!/usr/bin/env node
-// Exercises the real Stripe sandbox with exactly the parameters the functions send (checkout-params.ts), then cleans up.
+// Exercises the real Stripe sandbox with exactly the parameters the Supabase service sends (checkout-params.ts), then cleans up.
 //
-//   npm --prefix functions run build && node scripts/stripe-sandbox-smoke.mjs --sandbox [--keep] [--terms]
+//   node --experimental-strip-types scripts/stripe-sandbox-smoke.mjs --sandbox [--terms]
 //
-// Creates one throwaway customer, one Checkout Session per plan and one Customer Portal session, prints their URLs,
-// then expires the sessions and deletes the customer (--keep leaves them so a test card can be used on the URLs).
+// Creates one throwaway customer, one Checkout Session per plan and one Customer Portal session,
+// then expires the sessions and deletes the customer. Complete payments through a real desktop account instead.
 // --terms adds the terms-of-service checkbox, which needs the ToS URL set in the Dashboard first.
 // Sandbox-only: live keys are refused.
-import { Stripe, fail, resolveKey } from './lib/stripe-env.mjs'
-import { checkoutSessionParams, pickPortalConfiguration } from '../functions/lib/billing/checkout-params.js'
-import { PRICE_LOOKUP, hostingOrigin } from '../functions/lib/config.js'
+import { createStripeClient, fail } from './lib/stripe-env.mjs'
+import { checkoutSessionParams, pickPortalConfiguration } from '../supabase/checkout-params.ts'
+import { PRICE_LOOKUP } from '../supabase/config.ts'
 
 const args = process.argv.slice(2)
-const stripe = new Stripe(resolveKey(args, { allowLive: false }), { maxNetworkRetries: 2, timeout: 20_000 })
+if (args.includes('--keep')) fail('--keep is no longer supported; use the desktop account flow for completed payments')
+const hostingOrigin = process.env.FAANGIN_HOSTING_ORIGIN || 'https://uxgphdpcgcpgwbwfibkx.supabase.co/functions/v1/billing-return'
+const origin = new URL(hostingOrigin)
+if (origin.protocol !== 'https:' || origin.username || origin.password || origin.search || origin.hash) fail('FAANGIN_HOSTING_ORIGIN must be an HTTPS billing-return base URL')
+const { stripe } = await createStripeClient(args, { allowLive: false })
 const uid = `smoke_${Date.now().toString(36)}`
 
 // The restricted checkout key has no Tax access (it must not); only a permission error is tolerated here, anything else is a real failure.
@@ -27,7 +31,7 @@ try {
 }
 const automaticTax = tax.status === 'active' && registrations.length > 0
 const termsConsent = args.includes('--terms')
-console.log(`Stripe Tax ${tax.status}, ${registrations.length} active registration(s) → automatic_tax ${automaticTax ? 'ON' : 'off'} for this run (mirrors flags/global.automaticTax)`)
+console.log(`Stripe Tax ${tax.status}, ${registrations.length} active registration(s) → automatic_tax ${automaticTax ? 'ON' : 'off'} for this run (mirrors the global automaticTax flag)`)
 
 const customer = await stripe.customers.create({ email: `${uid}@example.com`, name: 'Smoke Test', metadata: { uid, faangin_smoke: '1' } })
 const rows = []
@@ -36,9 +40,9 @@ let failed = false
 try {
   for (const plan of Object.keys(PRICE_LOOKUP)) {
     const price = (await stripe.prices.list({ lookup_keys: [PRICE_LOOKUP[plan]], active: true, limit: 1 })).data[0]
-    if (!price) fail(`no active price for ${plan}; run: node scripts/stripe-setup.mjs catalog --sandbox`)
+    if (!price) throw new Error(`no active price for ${plan}; run: node scripts/stripe-setup.mjs catalog --sandbox`)
     try {
-      const session = await stripe.checkout.sessions.create(checkoutSessionParams({ plan, uid, customer: customer.id, priceId: price.id, automaticTax, termsConsent }))
+      const session = await stripe.checkout.sessions.create(checkoutSessionParams({ plan, uid, customer: customer.id, priceId: price.id, hostingOrigin, automaticTax, termsConsent }))
       sessions.push(session.id)
       rows.push({
         plan, session: session.id, mode: session.mode, status: session.status,
@@ -53,22 +57,24 @@ try {
     }
   }
   console.table(rows.map(({ url, ...r }) => r))
-  for (const r of rows) console.log(`${r.plan}: ${r.url}`)
   const configuration = pickPortalConfiguration((await stripe.billingPortal.configurations.list({ active: true, limit: 100 })).data)
   try {
-    const portal = await stripe.billingPortal.sessions.create({ customer: customer.id, return_url: `${hostingOrigin()}/activate`, ...(configuration ? { configuration } : {}) })
-    console.log(`portal (${configuration ?? 'Dashboard default'}): ${portal.url}`)
+    if (!configuration) throw new Error('No active portal configuration tagged faangin=v1; run the portal setup command')
+    const portal = await stripe.billingPortal.sessions.create({ customer: customer.id, return_url: `${hostingOrigin}/activate`, configuration })
+    console.log(`portal (${configuration}): session created (temporary URL withheld)`)
   } catch (err) {
     failed = true
     console.log(`portal: FAILED ${err.message}`)
   }
 } finally {
-  if (args.includes('--keep')) {
-    console.log(`kept customer ${customer.id} and ${sessions.length} open session(s) (--keep); expire them from the Dashboard when done`)
-  } else {
-    for (const id of sessions) await stripe.checkout.sessions.expire(id).catch(() => undefined)
-    await stripe.customers.del(customer.id).catch(() => undefined)
-    console.log(`cleaned up: ${sessions.length} session(s) expired, customer ${customer.id} deleted`)
+  let cleanupFailed = false
+  for (const id of sessions) {
+    try { await stripe.checkout.sessions.expire(id) }
+    catch { cleanupFailed = true; console.error(`cleanup failed for Checkout ${id}; expire it in the sandbox Dashboard`) }
   }
+  try { await stripe.customers.del(customer.id) }
+  catch { cleanupFailed = true; console.error(`cleanup failed for customer ${customer.id}; delete it in the sandbox Dashboard`) }
+  if (cleanupFailed) failed = true
+  else console.log(`cleaned up: ${sessions.length} session(s) expired, customer ${customer.id} deleted`)
 }
 if (failed) process.exit(1)

@@ -35,6 +35,14 @@ type SubscriptionLike = Stripe.Subscription & { current_period_start?: number; c
 export function normalizeSubscription(sub: Stripe.Subscription): Extract<NormalizedEvent, { kind: 'subscription' }> {
   const s = sub as SubscriptionLike
   const item = s.items?.data?.[0]
+  const periodStart = item?.current_period_start ?? s.current_period_start ?? 0
+  const periodEnd = item?.current_period_end ?? s.current_period_end ?? 0
+  // The portal can set cancel_at without the legacy flag. A cancellation within this
+  // period shortens its effective end; a later-period cancellation still renews this one.
+  const cancelAt = s.cancel_at
+  const cancelsThisPeriod = typeof cancelAt === 'number' && Number.isSafeInteger(cancelAt) && cancelAt > 0
+    && Number.isSafeInteger(periodEnd) && periodEnd > 0 && cancelAt <= periodEnd
+    && (cancelAt === periodEnd || (Number.isSafeInteger(periodStart) && periodStart > 0 && cancelAt > periodStart))
   return {
     kind: 'subscription',
     uid: s.metadata?.uid || undefined,
@@ -42,9 +50,9 @@ export function normalizeSubscription(sub: Stripe.Subscription): Extract<Normali
     subscriptionId: s.id,
     status: s.status,
     priceLookupKey: item?.price?.lookup_key ?? '',
-    currentPeriodStart: (item?.current_period_start ?? s.current_period_start ?? 0) * 1000,
-    currentPeriodEnd: (item?.current_period_end ?? s.current_period_end ?? 0) * 1000,
-    cancelAtPeriodEnd: Boolean(s.cancel_at_period_end)
+    currentPeriodStart: periodStart * 1000,
+    currentPeriodEnd: (cancelsThisPeriod ? cancelAt : periodEnd) * 1000,
+    cancelAtPeriodEnd: Boolean(s.cancel_at_period_end) || cancelsThisPeriod
   }
 }
 
@@ -162,6 +170,9 @@ export function applyStripeEvent(current: Entitlement, event: NormalizedEvent, n
 
   switch (event.kind) {
     case 'byok_purchase':
+      // A different event id may deliver this same Checkout Session after a refund/dispute. Never revive it,
+      // or let an older purchase replace the current purchase's payment intent (used to route later refunds).
+      if (current.byok && (current.byok.checkoutSessionId === event.checkoutSessionId || event.purchasedAt < current.byok.purchasedAt)) return current
       return withEffectivePlan({
         ...base,
         byok: { status: 'active', purchasedAt: event.purchasedAt, paymentIntentId: event.paymentIntentId, checkoutSessionId: event.checkoutSessionId }

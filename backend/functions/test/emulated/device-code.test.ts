@@ -55,6 +55,16 @@ test('unknown code -> not-found on approve, expired on poll', async () => {
   assert.deepEqual(await poll('A'.repeat(43)), { status: 'expired' })
 })
 
+test('concurrent polls return exactly one sign-in token', async () => {
+  const started = await start()
+  const user = await signInTestUser()
+  await call('deviceCodeApprove', { userCode: started.userCode }, user.idToken)
+  const results = await Promise.all(Array.from({ length: 8 }, () => poll(started.deviceCode)))
+  assert.equal(results.filter((result) => result.status === 'approved').length, 1)
+  assert.equal(results.filter((result) => result.customToken).length, 1)
+  assert.equal(results.filter((result) => result.status === 'expired').length, 7)
+})
+
 test('approving twice -> failed-precondition', async () => {
   const started = await start()
   const user = await signInTestUser()

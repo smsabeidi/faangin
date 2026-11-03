@@ -1,9 +1,12 @@
 /** POST /v1/responses: allowlisted body, metered, upstream SSE piped through verbatim. */
 import type { ServerResponse } from 'node:http'
+import { once } from 'node:events'
+import { randomUUID } from 'node:crypto'
 import type { AuthOk } from './auth.js'
 import { CAPS, MODELS, type Mode } from './config.js'
-import { capEstimateUsd, dayKey, decideAnswer, estimateCostUsd, isRamped, periodKey, type TokenUsage } from './meter.js'
+import { dayKey, estimateCostUsd, isRamped, periodKey, type TokenUsage } from './meter.js'
 import type { Store } from './store.js'
+import { missingUsageInputEstimate, validateInput, type InputBudget } from './input-validation.js'
 
 export interface ResponsesDeps {
   store: Store
@@ -11,6 +14,9 @@ export interface ResponsesDeps {
   openaiKey: string
   now: () => number
   log: (event: string, fields?: Record<string, unknown>) => void
+  /** Bounds provider connection and streaming even when a client leaves a request open. */
+  responseTimeoutMs?: number
+  workerDeadlineAt?: number
 }
 
 /** The only client fields that reach OpenAI. */
@@ -73,18 +79,19 @@ export function makeUsageScanner() {
 }
 
 export function createResponses(deps: ResponsesDeps) {
-  const inFlight = new Map<string, number>()
-
   async function handle(auth: AuthOk, raw: unknown, res: ServerResponse): Promise<void> {
     const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null
     const requested = body ? pickMode(body.model) : null
     if (!body || !requested) return sendJson(res, 400, { error: { code: 'invalid_mode', message: 'model must be fast, smart or handsfree' } })
+    if (body.max_output_tokens !== undefined && (!Number.isSafeInteger(body.max_output_tokens) || (body.max_output_tokens as number) < 1)) return sendJson(res, 400, { error: { code: 'invalid_input', message: 'max_output_tokens must be a positive integer' } })
+    const input = validateInput(body)
+    if (!input.ok) return sendJson(res, 400, { error: { code: 'invalid_input', message: input.message } })
 
     const { uid, entitlement, flags } = auth
     const now = deps.now()
     const period = periodKey(entitlement, now)
-    const usage = await deps.store.read(uid, period)
-    const decision = decideAnswer({ mode: requested, usage, day: dayKey(now), ramped: isRamped(entitlement, now), inFlight: inFlight.get(uid) ?? 0, flags })
+    const leaseId = randomUUID()
+    const decision = await deps.store.admitAnswer(uid, period, { mode: requested, day: dayKey(now), ramped: isRamped(entitlement, now), flags, leaseId, now, expiresAt: now + (deps.responseTimeoutMs ?? 120_000) + 15_000 })
     switch (decision.kind) {
       case 'concurrency': return sendJson(res, 429, { error: { code: 'concurrency', message: 'Too many answers in flight' } })
       case 'exhausted': return sendJson(res, 429, { error: { code: 'allowance_exhausted', allowance: decision.allowance, message: 'Allowance exhausted for this period' } })
@@ -96,61 +103,73 @@ export function createResponses(deps: ResponsesDeps) {
     }
 
     const { mode, downgraded } = decision
-    inFlight.set(uid, (inFlight.get(uid) ?? 0) + 1)
     try {
-      await deps.store.increment(uid, period, dayKey(now), { [mode]: 1 })
-      await forward(uid, period, mode, downgraded, buildUpstreamBody(body, mode), res)
+      await forward(uid, period, mode, downgraded, buildUpstreamBody(body, mode), input.budget, res)
     } finally {
-      inFlight.set(uid, (inFlight.get(uid) ?? 1) - 1)
+      await deps.store.releaseLease(uid, 'answers', leaseId)
     }
   }
 
-  async function forward(uid: string, period: string, mode: Mode, downgraded: boolean, upstreamBody: Record<string, unknown>, res: ServerResponse): Promise<void> {
+  async function forward(uid: string, period: string, mode: Mode, downgraded: boolean, upstreamBody: Record<string, unknown>, inputBudget: InputBudget, res: ServerResponse): Promise<void> {
     const abort = new AbortController()
-    res.on('close', () => { if (!res.writableEnded) abort.abort() })
+    const onClose = () => { if (!res.writableEnded) abort.abort() }
+    res.on('close', onClose)
+    if (res.destroyed) abort.abort()
+    const timeoutMs = Math.min(deps.responseTimeoutMs ?? 120_000, deps.workerDeadlineAt === undefined ? 120_000 : Math.max(1, deps.workerDeadlineAt - deps.now()))
+    const deadline = setTimeout(() => abort.abort(new Error('provider_timeout')), timeoutMs)
+    deadline.unref?.()
 
-    let upstream: Response
     try {
-      upstream = await fetch(`${deps.openaiBase}/v1/responses`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${deps.openaiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify(upstreamBody),
-        signal: abort.signal
-      })
-    } catch (error) {
-      if (abort.signal.aborted) return
-      deps.log('upstream_unreachable', { uid, mode, error: String(error) })
-      return sendJson(res, 502, { error: { code: 'upstream_unavailable', message: 'Could not reach the model provider' } })
-    }
-
-    if (!upstream.ok) {
-      const text = await upstream.text()
-      deps.log('upstream_error', { uid, mode, status: upstream.status })
-      res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/json' })
-      res.end(text)
-      return
-    }
-
-    res.writeHead(200, downgraded ? { ...SSE_HEADERS, 'x-faangin-mode': mode } : SSE_HEADERS)
-    const scanner = makeUsageScanner()
-    const decoder = new TextDecoder()
-    let tokenUsage: TokenUsage | undefined
-    try {
-      if (upstream.body) {
-        for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
-          scanner.push(decoder.decode(chunk, { stream: true }))
-          res.write(chunk)
+      let upstream: Response
+      try {
+        upstream = await fetch(`${deps.openaiBase}/v1/responses`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${deps.openaiKey}`, 'content-type': 'application/json' },
+          body: JSON.stringify(upstreamBody),
+          signal: abort.signal
+        })
+      } catch (error) {
+        if (abort.signal.aborted) {
+          if (!res.destroyed) sendJson(res, 504, { error: { code: 'upstream_timeout', message: 'The model provider timed out' } })
+          return
         }
+        deps.log('upstream_unreachable', { uid, mode, error: String(error) })
+        return sendJson(res, 502, { error: { code: 'upstream_unavailable', message: 'Could not reach the model provider' } })
       }
-      tokenUsage = scanner.end(decoder.decode())
-    } catch (error) {
-      if (!abort.signal.aborted) deps.log('upstream_stream_failed', { uid, mode, error: String(error) })
-    } finally {
-      res.end()
-    }
 
-    const cost = tokenUsage ? estimateCostUsd(mode, tokenUsage) : capEstimateUsd(mode)
-    await deps.store.increment(uid, period, dayKey(deps.now()), { spendUsd: cost })
+      if (!upstream.ok) {
+        const text = await upstream.text()
+        deps.log('upstream_error', { uid, mode, status: upstream.status })
+        res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/json' })
+        res.end(text)
+        return
+      }
+
+      res.writeHead(200, downgraded ? { ...SSE_HEADERS, 'x-faangin-mode': mode } : SSE_HEADERS)
+      const scanner = makeUsageScanner()
+      const decoder = new TextDecoder()
+      let tokenUsage: TokenUsage | undefined
+      try {
+        if (upstream.body) {
+          for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
+            scanner.push(decoder.decode(chunk, { stream: true }))
+            if (!res.write(chunk)) await once(res, 'drain', { signal: abort.signal })
+          }
+        }
+        tokenUsage = scanner.end(decoder.decode())
+      } catch (error) {
+        if (!abort.signal.aborted) deps.log('upstream_stream_failed', { uid, mode, error: String(error) })
+      } finally {
+        res.end()
+      }
+
+      const cost = tokenUsage ? estimateCostUsd(mode, tokenUsage) : estimateCostUsd(mode, { input_tokens: missingUsageInputEstimate(inputBudget, CAPS[mode].input), output_tokens: CAPS[mode].output })
+      await deps.store.increment(uid, period, dayKey(deps.now()), { spendUsd: cost })
+    } finally {
+      clearTimeout(deadline)
+      res.removeListener('close', onClose)
+      abort.abort()
+    }
   }
 
   return { handle }

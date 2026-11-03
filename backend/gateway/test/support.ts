@@ -170,8 +170,8 @@ export interface Gateway {
 }
 
 /** Tokens are `tok-<uid>`; entitlements and flags are plain objects the test mutates. */
-export async function startGateway(fake: FakeOpenAI): Promise<Gateway> {
-  const store = new MemoryStore()
+export async function startGateway(fake: FakeOpenAI, options: { responseTimeoutMs?: number; audioFlushMs?: number; sessionExpiresAt?: number; providerReady?: boolean; store?: MemoryStore } = {}): Promise<Gateway> {
+  const store = options.store ?? new MemoryStore()
   const flags: Flags = { ...DEFAULT_FLAGS, blockedUids: [] }
   const entitlements = new Map<string, Entitlement>()
   const clock = { now: NOW }
@@ -187,6 +187,10 @@ export async function startGateway(fake: FakeOpenAI): Promise<Gateway> {
     openaiBase: fake.httpBase,
     openaiWsBase: fake.wsBase,
     openaiKey: OPENAI_KEY,
+    responseTimeoutMs: options.responseTimeoutMs,
+    audioFlushMs: options.audioFlushMs,
+    sessionExpiresAt: options.sessionExpiresAt,
+    providerReady: options.providerReady,
     now: () => clock.now,
     log: (event, fields) => logs.push({ event, fields })
   }

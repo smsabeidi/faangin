@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  audioSecondsFromBase64, cap, capEstimateUsd, dayKey, decideAnswer, estimateCostUsd, isRamped, monthlyAnniversary, nextAudioState, overAudioLimit, periodKey
+  audioSecondsFromBase64, cap, capEstimateUsd, dayKey, decideAnswer, estimateCostUsd, isRamped, monthlyAnniversary, nextAllowanceBoundary, nextAudioState, overAudioLimit, periodKey
 } from '../src/meter.js'
 import { emptyUsage, type Usage } from '../src/store.js'
 import { NOW, PERIOD_KEY, proEntitlement, TODAY } from './support.js'
@@ -12,6 +12,13 @@ const decide = (mode: 'fast' | 'smart' | 'handsfree', usage: Usage, extra: Parti
   decideAnswer({ mode, usage, day: TODAY, ramped: false, inFlight: 0, flags, ...extra })
 
 describe('keys and caps', () => {
+  it('audio reconnects at the next allowance boundary, including clamped annual anniversaries', () => {
+    assert.equal(nextAllowanceBoundary(proEntitlement(), NOW), Date.UTC(2026, 10, 1))
+    const annual = proEntitlement({ currentPeriodStart: Date.UTC(2026, 0, 31, 12), currentPeriodEnd: Date.UTC(2027, 0, 31, 12) })
+    assert.equal(nextAllowanceBoundary(annual, Date.UTC(2026, 1, 1)), Date.UTC(2026, 1, 28, 12))
+    assert.equal(nextAllowanceBoundary(annual, Date.UTC(2026, 1, 28, 12)), Date.UTC(2026, 2, 31, 12))
+    assert.equal(nextAllowanceBoundary(annual, Date.UTC(2027, 0, 30)), Date.UTC(2027, 0, 31, 12))
+  })
   it('pro periods follow the Stripe period, others the UTC month', () => {
     assert.equal(periodKey(proEntitlement(), NOW), PERIOD_KEY)
     assert.equal(periodKey({ plan: 'none', status: 'active', updatedAt: 0 }, NOW), '2026-10')
@@ -144,6 +151,12 @@ describe('audio state', () => {
     // a socket that hits the limit inside a window another socket started shares that window
     assert.deepEqual(nextAudioState(open, true, NOW, NOW + 1000), { kind: 'grace', until: NOW + GRACE_MS })
     assert.deepEqual(nextAudioState(open, true, NOW, NOW + GRACE_MS), { kind: 'muted' })
-    assert.deepEqual(nextAudioState({ kind: 'muted' }, false, undefined, NOW), { kind: 'muted' })
+    assert.deepEqual(nextAudioState({ kind: 'muted' }, false, undefined, NOW), { kind: 'open' })
+  })
+  it('tightens an existing grace deadline to the earliest persisted shared window', () => {
+    const grace = { kind: 'grace', until: NOW + 30 * 60_000 } as const
+    assert.deepEqual(nextAudioState(grace, true, NOW - 10 * 60_000, NOW), { kind: 'grace', until: NOW + 20 * 60_000 })
+    assert.deepEqual(nextAudioState(grace, true, NOW - 30 * 60_000, NOW), { kind: 'muted' })
+    assert.deepEqual(nextAudioState(grace, true, NOW + 10 * 60_000, NOW), grace, 'a later claim cannot extend an already-running window')
   })
 })

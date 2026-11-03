@@ -1,73 +1,42 @@
-# Dropping `faangin-cloud.ts` into the desktop app
+# Desktop Supabase account client
 
-This file is copied to `src/main/faangin-cloud.ts` in the app, where `src/main/licensing/` builds sign-in, the license and the account panel on it (see [docs/engineering/account-licensing.md](../../docs/engineering/account-licensing.md)). It needs only Node (`node:crypto`, global `fetch`) and `ws`, which the app already has. Nothing in it runs in the renderer. Edit it here first, then copy it over, keeping the app's own `LICENSE_PUBLIC_KEYS`; `tests/cloud-client-sync.test.ts` fails when the two copies drift apart anywhere else.
+`faangin-cloud.ts` is copied into `src/main/faangin-cloud.ts`. The synchronization test allows only the shipped license public keys to differ. It runs in Electron's main process and depends on Node crypto, fetch, and `ws`; no Supabase SDK, private backend key, or account token runs in the renderer.
 
-## Three constants
+Release metadata defaults to `config/cloud.supabase.json`; set `FAANGIN_CLOUD_CONFIG_FILE` to another public JSON file to override it:
 
-```ts
-const FUNCTIONS_BASE = 'https://us-central1-faangin-staging.cloudfunctions.net'   // per environment
-const WEB_API_KEY = '<Firebase web API key>'      // public; Project settings → General → Web API key
-const GATEWAY_BASE = 'https://faangin-gateway-xxxx-uc.a.run.app'                 // printed by scripts/deploy-gateway.sh
+```json
+{
+  "supabaseUrl": "https://your-project.supabase.co",
+  "publishableKey": "sb_publishable_...",
+  "gatewayBase": "https://your-project.supabase.co/functions/v1/faangin-gateway",
+  "licensePublicKeys": ["base64 SPKI Ed25519 public key"]
+}
 ```
 
-In the app, `FUNCTIONS_BASE` and `WEB_API_KEY` are the `functionsBase` and `webApiKey` fields of `BUILD_CLOUD_CONFIG` in `src/main/licensing/config.ts` (the hosting origin is derived from the functions host; set `hostingOrigin` there for a custom domain). Unpackaged runs also read `FAANGIN_FUNCTIONS_BASE`, `FAANGIN_WEB_API_KEY` and `FAANGIN_HOSTING_ORIGIN`; packaged builds ignore them. `GATEWAY_BASE` is not used yet: Pro mode is not wired into the app.
+The accounts base is derived as `${supabaseUrl}/functions/v1/faangin-api`. Packaged builds ignore runtime endpoint overrides. Development runs accept `FAANGIN_SUPABASE_URL`, `FAANGIN_SUPABASE_PUBLISHABLE_KEY`, `FAANGIN_GATEWAY_BASE`, and comma-separated `FAANGIN_LICENSE_PUBLIC_KEYS`.
 
-Emulator: `FUNCTIONS_BASE = 'http://127.0.0.1:5001/demo-faangin/us-central1'`, `WEB_API_KEY = 'fake-api-key'`, and pass `EMULATOR_IDENTITY_TOOLKIT_BASE` / `EMULATOR_SECURE_TOKEN_BASE` as the `base` argument of `exchangeCustomToken` / `refreshIdToken`. The app does this itself when the functions base is on localhost in an unpackaged run.
+## Browser approval and separate desktop sessions
 
-## Sign in (device code)
+1. Main calls `deviceCodeStart` with this installation's device ID and name.
+2. Main serves one temporary activation page bound to `127.0.0.1` on an ephemeral port and opens it in the system browser. The URL carries a random page lease and the display code. A strict Host check, nonce CSP, no-store headers, and the lease expiry protect the page.
+3. The page sends password/signup/recovery requests directly to Supabase. Browser access tokens stay in memory; browser refresh tokens are neither stored nor handed to desktop. Google sign-in is offered only when enabled in the project.
+4. A verified browser user approves the code through `deviceCodeApprove`. The browser then revokes its own session with `scope=local`.
+5. Main polls with the independent high-entropy device code. Approval returns `{status:'approved',tokenHash,uid}`. The server has already claimed the one-use approval and generated an email token for that exact verified user.
+6. Main calls `/auth/v1/verify` with `{token_hash,type:'email'}`, then `/auth/v1/user` and checks the user ID against the approval. This creates an independent desktop session.
+7. Main encrypts the desktop refresh token using OS-backed storage. Stored sessions include `provider:'supabase'` and the Supabase origin; legacy or other-project credentials are discarded locally.
 
-```ts
-const device = { deviceId, deviceName }                       // deviceId: stable per install, /^[A-Za-z0-9_-]{8,64}$/
-const start = await startDeviceSignIn(FUNCTIONS_BASE, device)
-shell.openExternal(start.verificationUrl)                     // shows the same userCode in the browser
-showCode(start.userCode)                                      // display as ABCD-EFGH
-const result = await waitForDeviceSignIn(FUNCTIONS_BASE, start, { signal })
-if (result.status !== 'approved') return                      // 'expired' or 'aborted': offer to try again
-const session = await exchangeCustomToken(WEB_API_KEY, result.customToken)
-```
+Allow the temporary callback pattern `http://127.0.0.1:*/activate*` in the project's Auth redirect allowlist for confirmation, password recovery, and optional Google callbacks. The app must remain open while that activation lease is used. Public signup also requires working confirmation email delivery.
 
-Store `session.refreshToken` (and `uid`) the way the app already stores the OpenAI key: `safeStorage.encryptString(JSON.stringify({ uid, refreshToken }))` written to a `0600` file under `app.getPath('userData')` (see the key-file helpers in `src/main/index.ts`). Never store the ID token; it lasts an hour and is re-minted from the refresh token:
+## Authenticated API and refresh
 
-```ts
-const tokens = idTokenSource(WEB_API_KEY, session, { onRefresh: persistRefreshToken })
-await tokens.ensureFresh()                                    // before any call; refreshes 5 min before expiry
-```
+Public requests carry `apikey: <publishableKey>`. Authenticated account and gateway calls also carry the user's `Authorization: Bearer <access token>`. New publishable keys are not bearer tokens. Edge endpoints verify users explicitly; the private service key stays in the backend.
 
-Sign out = delete the file. An `UNAUTHENTICATED` / `TOKEN_EXPIRED` CloudError from `refreshIdToken` means the account was disabled or the token revoked: sign the user out.
+Account operations preserve `{data}` requests and `{result}` responses. Stable error codes include `UNAUTHENTICATED`, `FAILED_PRECONDITION`, and `RESOURCE_EXHAUSTED`.
 
-## License
+Refresh calls `/auth/v1/token?grant_type=refresh_token` with a JSON refresh token. Main serializes refreshes and atomically persists a rotated refresh token before admitting another request. Revoked sessions clear local credentials; transient errors preserve them. Sign-out clears local credentials immediately and attempts to revoke only that desktop session.
 
-```ts
-const license = await fetchLicense(FUNCTIONS_BASE, await tokens.ensureFresh(), device)   // on launch and once a day
-saveLicenseToken(license.token)                               // plain file; the token is signed, not secret
-```
+The offline Ed25519 license format is unchanged. `LicenseService.requireInferenceAccess()` allows verified BYOK/Pro active and grace states; paid Pro obtains the managed gateway transport without a personal model key. The transport replaces provider authorization, adds the public apikey, and refuses reuse after local sign-out.
 
-Offline check on every launch, no network:
+## Verification
 
-```ts
-const verified = verifyLicenseWithKeys(readLicenseToken())    // null → locked (buy or sign in)
-if (verified?.inGrace) showRenewBanner()                      // past 30 days, within the 14-day grace: still works
-```
-
-`verified.plan` is `'byok'` or `'pro'`; `verified.status` can be `past_due` (Stripe is retrying a card) which still entitles.
-CloudError codes from `fetchLicense`: `FAILED_PRECONDITION` nothing bought, `RESOURCE_EXHAUSTED` fourth active device.
-
-**Public key**: put the value that `node scripts/gen-license-key.mjs` prints on stderr into `LICENSE_PUBLIC_KEYS` at the top of the file, in the app's copy (current key first; add the next key before rotating). Staging and production builds use different keys. Until a real key is there, the app cannot verify a license and says so.
-
-## Pro mode (gateway instead of the customer's key)
-
-The app's `inference.ts` hardcodes `RESPONSES_URL` / `TRANSCRIPTION_URL` and takes an `InferenceTransport { fetch?, createWebSocket? }`. Pro mode changes nothing in that file:
-
-```ts
-const transport = proTransport(tokens.get, GATEWAY_BASE)      // sync getter; call tokens.ensureFresh() first
-generateAnswer(input, { apiKey: 'pro', transport, ... })      // apiKey is replaced by the ID token; any non-empty string
-startTranscription({ apiKey: 'pro', transport, model: 'gpt-transcribe', ... })
-```
-
-In Pro mode set the model fields to the **modes**, the server picks the real models: `fastModel: 'fast'`, `smartModel: 'smart'`, hands-free answers `'handsfree'`, `transcriptionModel: 'gpt-transcribe'` (the gateway forces its own transcription model; the app only needs a value it accepts). Keep the BYOK path exactly as it is: no transport, the customer's key.
-
-Gateway errors the app should surface: `402 { error: { code: 'no_pro' } }` (not entitled: refresh the license), `429` with `code: 'allowance_exhausted' | 'concurrency' | 'backstop'`, `503 pro_paused`. A `smart` answer that was downgraded carries the response header `x-faangin-mode: fast`. Skip the "Test connection" / model-visibility check in Pro mode; the gateway has no `/v1/models`.
-
-## Tests
-
-From the repo root: `npm run test:client` (runs `client/faangin-cloud.test.ts` with the gateway's `tsx`; needs no emulator and no network).
+From the repository root run the licensing, activation, and gateway fixture tests. From `backend/`, `npm run test:client` covers actual localhost HTTP/WebSocket transport, Supabase token exchange/user verification, refresh shape, license verification, and cancellation. These fixtures do not certify a deployed signup, Stripe payment, live model, or hardware audio journey.

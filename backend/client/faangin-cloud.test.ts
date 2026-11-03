@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 import { WebSocketServer } from 'ws'
 import {
-  CloudError, callFunction, exchangeCustomToken, proTransport, refreshIdToken, rewriteOpenAiUrl,
+  CloudError, callFunction, exchangeDeviceToken, proTransport, refreshAuthSession, rewriteOpenAiUrl,
   verifyLicense, verifyLicenseWithKeys, waitForDeviceSignIn, type LicensePayload
 } from './faangin-cloud.js'
 
@@ -159,11 +159,11 @@ test('waitForDeviceSignIn: polls until approved, honours the interval, reports e
     assert.equal(r.url, '/deviceCodePoll')
     assert.deepEqual(JSON.parse(r.body), { deviceCode: 'dc-1' })
     polls += 1
-    return { body: polls < 3 ? { status: 'pending' } : { status: 'approved', customToken: 'custom-1', uid: 'user-1' } }
+    return { body: polls < 3 ? { status: 'pending' } : { status: 'approved', tokenHash: 'custom-1', uid: 'user-1' } }
   })
   try {
     const result = await waitForDeviceSignIn(server.base, { deviceCode: 'dc-1', interval: 0, expiresIn: 600 })
-    assert.deepEqual(result, { status: 'approved', customToken: 'custom-1', uid: 'user-1' })
+    assert.deepEqual(result, { status: 'approved', tokenHash: 'custom-1', uid: 'user-1' })
     assert.equal(polls, 3)
 
     polls = 0
@@ -188,43 +188,91 @@ test('waitForDeviceSignIn: a server-side expired answer ends the wait', async ()
   }
 })
 
-test('exchangeCustomToken / refreshIdToken: Identity Toolkit and Secure Token REST shapes', async () => {
-  const idToken = `h.${Buffer.from(JSON.stringify({ user_id: 'user-7', sub: 'user-7' })).toString('base64url')}.s`
+test('device approval gets a separate Supabase session, verifies the user, and refreshes JSON credentials', async () => {
   const server = await localServer(r => {
-    if (r.url === '/v1/accounts:signInWithCustomToken?key=web-key') return { body: { idToken, refreshToken: 'rt-1', expiresIn: '3600' } }
-    if (r.url === '/v1/token?key=web-key') return { body: { id_token: idToken, refresh_token: 'rt-2', expires_in: '3600', user_id: 'user-7' } }
-    return { status: 404, body: { error: { message: 'NOT_FOUND' } } }
+    assert.equal(r.headers.apikey, 'sb_publishable_fixture')
+    if (r.url === '/auth/v1/verify') return { body: { access_token: 'desktop-access', refresh_token: 'desktop-refresh', expires_in: 3600, user: { id: 'user-7' } } }
+    if (r.url === '/auth/v1/user') { assert.equal(r.headers.authorization, 'Bearer desktop-access'); return { body: { id: 'user-7' } } }
+    if (r.url === '/auth/v1/token?grant_type=refresh_token') return { body: { access_token: 'desktop-next', refresh_token: 'refresh-rotated', expires_in: 3600, user: { id: 'user-7' } } }
+    return { status: 404, body: {} }
   })
   try {
     const before = Date.now()
-    const session = await exchangeCustomToken('web-key', 'custom-1', server.base)
+    const session = await exchangeDeviceToken(server.base, 'sb_publishable_fixture', 'single-use-hash', 'user-7')
     assert.equal(session.uid, 'user-7')
-    assert.equal(session.idToken, idToken)
-    assert.equal(session.refreshToken, 'rt-1')
+    assert.equal(session.accessToken, 'desktop-access')
+    assert.equal(session.refreshToken, 'desktop-refresh')
     assert.ok(session.expiresAt >= before + 3_600_000 && session.expiresAt <= Date.now() + 3_600_000)
-    assert.deepEqual(JSON.parse(server.requests[0].body), { token: 'custom-1', returnSecureToken: true })
-
-    const refreshed = await refreshIdToken('web-key', 'rt-1', server.base)
-    assert.equal(refreshed.refreshToken, 'rt-2')
-    assert.equal(refreshed.uid, 'user-7')
-    assert.equal(server.requests[1].headers['content-type'], 'application/x-www-form-urlencoded')
-    assert.equal(server.requests[1].body, 'grant_type=refresh_token&refresh_token=rt-1')
-  } finally {
-    await server.close()
-  }
+    assert.deepEqual(JSON.parse(server.requests[0].body), { token_hash: 'single-use-hash', type: 'email' })
+    const next = await refreshAuthSession(server.base, 'sb_publishable_fixture', session.refreshToken)
+    assert.equal(next.refreshToken, 'refresh-rotated')
+    assert.equal(server.requests[2].headers['content-type'], 'application/json')
+    assert.deepEqual(JSON.parse(server.requests[2].body), { refresh_token: 'desktop-refresh' })
+    await assert.rejects(exchangeDeviceToken(server.base, 'sb_publishable_fixture', 'hash', 'different-user'), (error: unknown) => error instanceof CloudError && error.code === 'UNAUTHENTICATED')
+  } finally { await server.close() }
 })
 
-test('callFunction: sends {data} with the ID token, unwraps result, maps HttpsError to CloudError', async () => {
+test('callFunction: sends {data} with the access token, unwraps result, maps HttpsError to CloudError', async () => {
   const server = await localServer(r => {
     if (r.headers.authorization !== 'Bearer id-1') return { status: 401, body: { error: { message: 'Unauthenticated', status: 'UNAUTHENTICATED' } } }
     if (r.url === '/issueLicense') return { status: 400, body: { error: { message: 'Buy a plan first.', status: 'FAILED_PRECONDITION' } } }
     return { body: { result: { ok: true, echo: JSON.parse(r.body).data } } }
   })
   try {
-    assert.deepEqual(await callFunction(server.base, 'anything', { a: 1 }, 'id-1'), { ok: true, echo: { a: 1 } })
-    await assert.rejects(callFunction(server.base, 'issueLicense', {}, 'id-1'), (error: unknown) => error instanceof CloudError && error.code === 'FAILED_PRECONDITION' && error.message === 'Buy a plan first.' && error.status === 400)
-    await assert.rejects(callFunction(server.base, 'anything', {}, 'wrong'), (error: unknown) => error instanceof CloudError && error.code === 'UNAUTHENTICATED')
+    assert.deepEqual(await callFunction(server.base, 'anything', { a: 1 }, 'id-1', 'sb_publishable_fixture'), { ok: true, echo: { a: 1 } })
+    await assert.rejects(callFunction(server.base, 'issueLicense', {}, 'id-1', 'sb_publishable_fixture'), (error: unknown) => error instanceof CloudError && error.code === 'FAILED_PRECONDITION' && error.message === 'Buy a plan first.' && error.status === 400)
+    await assert.rejects(callFunction(server.base, 'anything', {}, 'wrong', 'sb_publishable_fixture'), (error: unknown) => error instanceof CloudError && error.code === 'UNAUTHENTICATED')
   } finally {
     await server.close()
+  }
+})
+
+test('verifyLicense: signed but malformed, revoked or future-issued payloads do not grant access', () => {
+  const { privateKey, publicKeyBase64 } = keyPair()
+  const invalid = [
+    { plan: 'enterprise' }, { status: 'revoked' }, { uid: '' }, { deviceId: '' },
+    { iat: NOW + DAY }, { exp: NOW - 1 }, { grace: PAYLOAD.exp - 1 },
+    { iat: null }, { exp: 'tomorrow' }, { periodEnd: 'tomorrow' }, { cancelAtPeriodEnd: 'false' }
+  ]
+  for (const fields of invalid) {
+    assert.equal(verifyLicense(makeToken({ ...PAYLOAD, ...fields }, privateKey), publicKeyBase64, NOW), null, JSON.stringify(fields))
+  }
+})
+
+test('proTransport.fetch preserves a Request body, method and signal while replacing provider credentials', async () => {
+  const server = await localServer(r => ({ body: { echoed: r.body } }))
+  try {
+    const abort = new AbortController()
+    const request = new Request('https://api.openai.com/v1/responses', {
+      method: 'POST', headers: { Authorization: 'Bearer sk-provider', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'smart', input: 'hello' }), signal: abort.signal
+    })
+    const response = await proTransport(() => 'supabase-token', server.base).fetch(request)
+    assert.equal(response.status, 200)
+    assert.equal(server.requests[0].method, 'POST')
+    assert.equal(server.requests[0].body, JSON.stringify({ model: 'smart', input: 'hello' }))
+    assert.equal(server.requests[0].headers.authorization, 'Bearer supabase-token')
+    abort.abort()
+    await assert.rejects(proTransport(() => 'supabase-token', server.base).fetch(new Request('https://api.openai.com/v1/responses', { signal: abort.signal })), { name: 'AbortError' })
+  } finally {
+    await server.close()
+  }
+})
+
+test('cancelling a sign-in aborts an in-flight poll request', async () => {
+  let requestStarted!: () => void
+  const started = new Promise<void>(resolve => { requestStarted = resolve })
+  const server = createServer(() => { requestStarted() })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  const abort = new AbortController()
+  try {
+    const result = waitForDeviceSignIn(base, { deviceCode: 'pending-code', expiresIn: 600, interval: 5 }, { signal: abort.signal })
+    await started
+    abort.abort()
+    assert.deepEqual(await result, { status: 'aborted' })
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
   }
 })

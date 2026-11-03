@@ -41,6 +41,16 @@ export function periodKey(entitlement: Entitlement, now: number): string {
   return new Date(now).toISOString().slice(0, 7)
 }
 
+/** Long-lived audio must reconnect here so authorization and the allowance document are renewed together. */
+export function nextAllowanceBoundary(entitlement: Entitlement, now: number): number | undefined {
+  if (entitlement.plan !== 'pro' || !entitlement.pro) return undefined
+  const { currentPeriodStart: start, currentPeriodEnd: end } = entitlement.pro
+  if (end - start <= MONTHLY_PERIOD_MAX_MS) return end
+  const current = new Date(monthlyAnniversary(start, now))
+  const followingMonthEnd = Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 2, 0, 23, 59, 59, 999)
+  return Math.min(end, monthlyAnniversary(start, followingMonthEnd))
+}
+
 /** UTC day, YYYY-MM-DD. */
 export function dayKey(now: number): string {
   return new Date(now).toISOString().slice(0, 10)
@@ -135,9 +145,12 @@ const GRACE_MS = GRACE_SECONDS * 1000
 
 /** The window starts when the first socket hits a limit (graceUsedAt) and is shared by every socket of the uid. */
 export function nextAudioState(state: AudioState, overLimit: boolean, graceUsedAt: number | undefined, now: number): AudioState {
+  if (!overLimit) return { kind: 'open' }
   if (state.kind === 'muted') return state
-  if (state.kind === 'grace') return now >= state.until ? { kind: 'muted' } : state
-  if (!overLimit) return state
+  if (state.kind === 'grace') {
+    const until = Math.min(state.until, graceUsedAt === undefined ? state.until : graceUsedAt + GRACE_MS)
+    return now >= until ? { kind: 'muted' } : { kind: 'grace', until }
+  }
   const until = (graceUsedAt ?? now) + GRACE_MS
   return now >= until ? { kind: 'muted' } : { kind: 'grace', until }
 }

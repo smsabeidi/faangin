@@ -7,6 +7,7 @@ import { readEntitlement } from '../entitlements.js'
 import { checkoutBlocked, customerIdempotencyKey, liveSubscriptionState, parseCheckoutFlags, type CheckoutFlags } from './checkout-logic.js'
 import { checkoutSessionParams, pickPortalConfiguration } from './checkout-params.js'
 import { makeStripe } from './stripe-client.js'
+import { withCheckoutLock } from './checkout-lock.js'
 
 async function readFlagsAndSeats(): Promise<{ flags: CheckoutFlags; activeSeats: number }> {
   const [flags, stats] = await db.getAll(db.collection('flags').doc('global'), db.collection('stats').doc('pro'))
@@ -35,37 +36,55 @@ async function ensureCustomer(stripe: Stripe, uid: string, email: string | undef
   return customer.id
 }
 
-export const createCheckoutSession = onCall({ secrets: [STRIPE_CHECKOUT_KEY], cors: true }, async (request) => {
+export const createCheckoutSession = onCall({ secrets: [STRIPE_CHECKOUT_KEY], cors: true, timeoutSeconds: 120 }, async (request) => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in first')
   const plan = (request.data as { plan?: unknown } | undefined)?.plan
-  if (typeof plan !== 'string' || !(plan in PRICE_LOOKUP)) throw new HttpsError('invalid-argument', 'plan must be byok, pro_monthly or pro_annual')
+  if (typeof plan !== 'string' || !Object.hasOwn(PRICE_LOOKUP, plan)) throw new HttpsError('invalid-argument', 'plan must be byok, pro_monthly or pro_annual')
 
-  const [entitlement, { flags, activeSeats }] = await Promise.all([readEntitlement(uid), readFlagsAndSeats()])
-  const blocked = checkoutBlocked(plan as Plan, entitlement, flags, activeSeats)
-  if (blocked) throw new HttpsError('failed-precondition', blocked)
+  return withCheckoutLock(uid, async () => {
+    const [entitlement, { flags, activeSeats }] = await Promise.all([readEntitlement(uid), readFlagsAndSeats()])
+    const blocked = checkoutBlocked(plan as Plan, entitlement, flags, activeSeats)
+    if (blocked) throw new HttpsError('failed-precondition', blocked)
 
-  const stripe = makeStripe(STRIPE_CHECKOUT_KEY.value())
-  const customer = await ensureCustomer(stripe, uid, request.auth?.token.email, request.auth?.token.email_verified === true)
-  if (plan !== 'byok') {
-    // Stripe is the source of truth here: the entitlement lags behind the webhook, and a second subscription would double-bill.
-    const subscriptions = await stripe.subscriptions.list({ customer, status: 'all', limit: 10 })
-    const live = liveSubscriptionState(subscriptions.data)
-    if (live === 'access') throw new HttpsError('failed-precondition', 'Pro is already active')
-    if (live === 'on_hold') throw new HttpsError('failed-precondition', 'Your Pro subscription is on hold. Use Manage billing to pay the open invoice, or contact support.')
-  }
-  const price = (await stripe.prices.list({ lookup_keys: [PRICE_LOOKUP[plan as Plan]], active: true, limit: 1 })).data[0]
-  if (!price) throw new HttpsError('internal', `No Stripe price for ${plan}`)
+    const stripe = makeStripe(STRIPE_CHECKOUT_KEY.value())
+    const customer = await ensureCustomer(stripe, uid, request.auth?.token.email, request.auth?.token.email_verified === true)
+    if (plan === 'byok') {
+      // A paid Checkout can arrive before fulfillment. Do not sell the license again while its webhook is pending.
+      for await (const completed of stripe.checkout.sessions.list({ customer, status: 'complete', limit: 100 })) {
+        if (completed.mode !== 'payment' || completed.metadata?.plan !== 'byok' || !['paid', 'no_payment_required'].includes(completed.payment_status)) continue
+        const known = entitlement.byok
+        if (known?.status === 'revoked' && (completed.id === known.checkoutSessionId || completed.created * 1000 < known.purchasedAt)) continue
+        throw new HttpsError('failed-precondition', 'Your BYOK purchase is already completed. Refresh your license in Faangin while payment confirmation finishes.')
+      }
+    } else {
+      // Stripe is the source of truth here: the entitlement lags behind the webhook, and a second subscription would double-bill.
+      const subscriptions = []
+      for await (const subscription of stripe.subscriptions.list({ customer, status: 'all', limit: 100 })) subscriptions.push(subscription)
+      const live = liveSubscriptionState(subscriptions)
+      if (live === 'access') throw new HttpsError('failed-precondition', 'Pro is already active')
+      if (live === 'on_hold') throw new HttpsError('failed-precondition', 'Your Pro subscription is on hold. Use Manage billing to pay the open invoice, or contact support.')
+    }
+    const price = (await stripe.prices.list({ lookup_keys: [PRICE_LOOKUP[plan as Plan]], active: true, limit: 1 })).data[0]
+    if (!price) throw new HttpsError('internal', `No Stripe price for ${plan}`)
 
-  // One open checkout per buyer: an earlier tab's session must not be payable alongside this one (two Pro subscriptions, two BYOK charges).
-  const open = await stripe.checkout.sessions.list({ customer, status: 'open', limit: 10 })
-  await Promise.all(open.data.map((session) => stripe.checkout.sessions.expire(session.id).catch((err) => logger.warn('createCheckoutSession: could not expire an older session', { uid, session: session.id, message: (err as Error).message }))))
+    // One open checkout per buyer: an earlier tab's session must not be payable alongside this one (two Pro subscriptions, two BYOK charges).
+    for await (const session of stripe.checkout.sessions.list({ customer, status: 'open', limit: 100 })) {
+      try {
+        await stripe.checkout.sessions.expire(session.id)
+      } catch (err) {
+        logger.warn('createCheckoutSession: could not expire an older session', { uid, session: session.id, message: (err as Error).message })
+        // The earlier session may still be payable, or may have just been paid before its webhook arrived.
+        throw new HttpsError('unavailable', 'Your previous checkout is still resolving. Please wait a moment and try again.')
+      }
+    }
 
-  const session = await stripe.checkout.sessions.create(
-    checkoutSessionParams({ plan: plan as Plan, uid, customer, priceId: price.id, automaticTax: flags.automaticTax, termsConsent: flags.termsConsent })
-  )
-  if (!session.url) throw new HttpsError('internal', 'Stripe returned no checkout url')
-  return { url: session.url }
+    const session = await stripe.checkout.sessions.create(
+      checkoutSessionParams({ plan: plan as Plan, uid, customer, priceId: price.id, automaticTax: flags.automaticTax, termsConsent: flags.termsConsent })
+    )
+    if (!session.url) throw new HttpsError('internal', 'Stripe returned no checkout url')
+    return { url: session.url }
+  })
 })
 
 // Remembered per instance once found; a missing configuration is looked up again on every call (it is a setup-time state).

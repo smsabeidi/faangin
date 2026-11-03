@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM"],"module":"ESNext","moduleResolution":"Bundler","strict":true,"allowImportingTsExtensions":true,"skipLibCheck":true,"noEmit":true,"types":["node"],"paths":{"npm:stripe@23.0.1":["./node_modules/stripe/esm/stripe.esm.node.d.ts"]}},"include":["*.ts","test/**/*.ts"]}

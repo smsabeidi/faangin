@@ -47,7 +47,7 @@
   <div id="error" class="error hidden"></div>
 
   <section id="signin" class="card hidden">
-    <p>Sign in to connect your Mac.</p>
+    <p>Sign in to connect your device.</p>
     <button id="google" class="primary" type="button">Continue with Google</button>
     <p class="muted" style="margin-top:16px">Or use email and password. If there is no account for the email yet, one is created.</p>
     <label for="email">Email</label>
@@ -55,14 +55,16 @@
     <label for="password">Password (6 characters or more)</label>
     <input id="password" type="password" autocomplete="current-password" minlength="6">
     <button id="emailSignIn" type="button">Sign in</button>
+    <button id="resetPassword" type="button">Reset password</button>
+    <div id="resetSent" class="ok hidden" role="status"></div>
   </section>
 
   <section id="code" class="card hidden">
-    <p><strong>Make sure this matches the code on your Mac</strong></p>
+    <p><strong>Make sure this matches the code on your device</strong></p>
     <div id="codeShown" class="code"></div>
     <label for="codeInput">Code</label>
     <input id="codeInput" class="code-input" maxlength="9" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" spellcheck="false">
-    <button id="approve" class="primary" type="button">Approve this Mac</button>
+    <button id="approve" class="primary" type="button">Approve this device</button>
     <div id="approved" class="ok hidden"></div>
   </section>
 
@@ -108,6 +110,7 @@
 
   var urlCode = normalize(new URLSearchParams(location.search).get('code'))
   var approved = false
+  var renderedUid = null
 
   function fail(err) {
     $('error').textContent = (err && err.message) || String(err)
@@ -116,12 +119,24 @@
   // Disables the button while the promise runs; any rejection (HttpsError or Auth error) is shown as its message.
   function busy(button, action) {
     show('error', false)
-    button.disabled = true
-    return Promise.resolve().then(action).catch(fail).then(function () { button.disabled = false })
+    var buttons = Array.prototype.filter.call(document.querySelectorAll('button'), function (item) { return !item.disabled })
+    buttons.forEach(function (item) { item.disabled = true })
+    return Promise.resolve().then(action).catch(fail).then(function () {
+      buttons.forEach(function (item) { item.disabled = false })
+    })
   }
 
   function render(user) {
-    $('who').textContent = user ? 'Signed in as ' + (user.email || user.uid) : 'Sign in to approve your Mac or manage your plan.'
+    var uid = user ? user.uid : null
+    if (uid !== renderedUid) {
+      approved = false
+      show('approved', false)
+      show('approve', true)
+      $('codeInput').disabled = false
+      show('resetSent', false)
+    }
+    renderedUid = uid
+    $('who').textContent = user ? 'Signed in as ' + (user.email || user.uid) : 'Sign in to approve your device or manage your plan.'
     show('signin', !user)
     show('code', !!user)
     show('plans', !!user && (approved || !urlCode))
@@ -149,11 +164,23 @@
     })
   }
   $('password').onkeydown = function (event) { if (event.key === 'Enter') $('emailSignIn').click() }
+  $('resetPassword').onclick = function () {
+    var email = $('email').value.trim()
+    busy(this, function () {
+      if (!email) throw new Error('Enter your email first, then choose Reset password.')
+      return auth.sendPasswordResetEmail(email).catch(function (err) {
+        if (err.code !== 'auth/user-not-found') throw err
+      }).then(function () {
+        $('resetSent').textContent = 'If an account exists for this email, a password reset link is on its way. Check your inbox and spam folder.'
+        show('resetSent', true)
+      })
+    })
+  }
 
   $('approve').onclick = function () {
     var userCode = normalize($('codeInput').value)
     busy(this, function () {
-      if (userCode.length !== 8) throw new Error('Enter the 8-character code shown on your Mac.')
+      if (userCode.length !== 8) throw new Error('Enter the 8-character code shown on your device.')
       return functions.httpsCallable('deviceCodeApprove')({ userCode: userCode }).then(function (result) {
         approved = true
         $('approved').textContent = 'Done. "' + result.data.deviceName + '" is signed in. You can close this tab, or pick a plan below.'

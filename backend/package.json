@@ -2,20 +2,28 @@
   "name": "faangin-backend",
   "private": true,
   "version": "0.1.0",
-  "description": "Faangin accounts, billing, licensing and Pro gateway on Firebase",
+  "description": "Faangin Supabase accounts, Postgres billing, licensing and Edge Pro gateway",
   "scripts": {
-    "build": "npm --prefix functions run build && npm --prefix gateway run build",
-    "typecheck": "npm --prefix functions run typecheck && npm --prefix gateway run typecheck",
-    "test": "bash scripts/check-secrets.sh && npm --prefix functions test && npm --prefix gateway test && npm run test:client",
+    "build": "npm --prefix supabase run typecheck && npm --prefix gateway run build && npm run check:edge",
+    "typecheck": "npm --prefix supabase run typecheck && npm --prefix gateway run typecheck && npm run check:edge",
+    "test": "npm run check:secrets && npm run test:tooling && npm --prefix supabase test && npm --prefix gateway test && npm run test:client && npm run test:edge && npm run test:sql && npm run smoke:gateway",
     "check:secrets": "bash scripts/check-secrets.sh",
-    "stripe:status": "node scripts/stripe-setup.mjs status --sandbox",
-    "stripe:smoke": "npm --prefix functions run build && node scripts/stripe-sandbox-smoke.mjs --sandbox",
+    "check:edge": "deno check --no-config --no-lock --node-modules-dir=none ../supabase/functions/faangin-api/index.ts ../supabase/functions/stripe-webhook/index.ts ../supabase/functions/billing-return/index.ts ../supabase/functions/faangin-gateway/index.ts",
+    "test:edge": "deno test --allow-env --no-config --no-lock --node-modules-dir=none ../supabase/functions/_shared/account-edge.test.ts",
+    "test:sql": "npm --prefix supabase run test:sql && npm --prefix gateway run test:sql",
     "test:client": "cd gateway && node --import tsx --test ../client/*.test.ts",
-    "emulators": "firebase emulators:start --project demo-faangin",
-    "deploy:staging": "firebase deploy --project faangin-staging --only functions,firestore,hosting",
-    "deploy:gateway:staging": "bash scripts/deploy-gateway.sh faangin-staging"
+    "smoke:gateway": "npm --prefix gateway run smoke:supabase",
+    "stripe:status": "node scripts/stripe-setup.mjs status --sandbox",
+    "stripe:smoke": "node --experimental-strip-types scripts/stripe-sandbox-smoke.mjs --sandbox",
+    "legacy:firebase:build": "npm --prefix functions run build",
+    "legacy:firebase:test": "npm --prefix functions test",
+    "legacy:firebase:emulators": "firebase emulators:start --project demo-faangin",
+    "deploy:edge": "cd .. && supabase functions deploy --project-ref uxgphdpcgcpgwbwfibkx --no-verify-jwt",
+    "test:tooling": "node --test scripts/test/*.test.mjs"
   },
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "devDependencies": {
     "firebase-tools": "15.34.1"
   }

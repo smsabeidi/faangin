@@ -1,140 +1,86 @@
-# Faangin backend contract
+# Faangin Supabase backend contract
 
-One Firebase project per environment (`faangin-staging`, `faangin-prod`), Blaze plan. Everything below is the whole backend. Keep it this small.
+The launch backend uses Supabase Auth, Postgres, and Edge Functions with Stripe billing. The current target project is `uxgphdpcgcpgwbwfibkx`; separate environments should use distinct projects, Stripe keys, and license signing keys. The Firebase implementation is retained only as historical source and fixtures.
 
-| Piece | Where | Runtime |
-|---|---|---|
-| Accounts | Firebase Auth (Google + email/password) | managed |
-| Device sign-in, license, billing | `functions/` Cloud Functions v2, Node 22, region `us-central1` | firebase-functions 7 |
-| Data | Cloud Firestore, **every collection server-only** (`firestore.rules` denies all) | managed |
-| Pro gateway | `gateway/` one Cloud Run service `faangin-gateway` (HTTP SSE + WebSocket proxy to OpenAI with metering) | Node 22 container |
-| Pages | `hosting/` Firebase Hosting: `/activate`, `/billing/success`, `/billing/cancel` | static |
-| Desktop client | `client/faangin-cloud.ts` drop-in for the Electron main process | copied into the app repo later |
+| Piece | Source | Runtime |
+| --- | --- | --- |
+| Account identity | Supabase Auth | Managed Auth REST API |
+| Device approval, licensing, billing | `backend/supabase/`, `supabase/functions/faangin-api/` | Deno Edge Function |
+| Signed Stripe delivery | `supabase/functions/stripe-webhook/` | Separate public Edge endpoint with raw-body signature verification |
+| Billing return messages | `supabase/functions/billing-return/` | Plain text Edge endpoint |
+| Pro answers and transcription | `backend/gateway/`, generated `supabase/functions/faangin-gateway/` | Node-compatible HTTP/WebSocket server on Deno Edge |
+| Browser activation | `src/main/licensing/activation-server.ts` | Expiring loopback page owned by Electron main |
+| Account tokens and licenses | `backend/client/faangin-cloud.ts`, `src/main/licensing/` | Electron main process only |
 
-Principles: the client never sends a price, model name, amount or Stripe id. The server picks everything. Secrets come from Secret Manager (`defineSecret`), never `process.env` in deployed code. Nothing in Firestore is readable by clients. Pure functions for every decision so tests need no network.
+## Storage and privilege boundary
 
-## Firestore schema (all server-only)
+Application data lives in the private `faangin` schema. All application tables enable RLS; `anon`, `authenticated`, and `PUBLIC` receive no table access. Narrow `public.faangin_*` RPCs are `SECURITY INVOKER`, use an empty search path, and grant execution only to `service_role`. Browser clients cannot call them or choose their own entitlement, usage, billing owner, or device-cap result. New RPCs must explicitly revoke PostgreSQL's default `PUBLIC` function execution grant.
 
-| Collection | Doc | Fields |
-|---|---|---|
-| `entitlements` | `{uid}` | see `functions/src/entitlements.ts`. BYOK and Pro are tracked independently: `byok: { status: 'active'\|'revoked', … }` and `pro: { status, subscriptionId, … }` each carry their own status. The top-level `plan`/`status` are the **plan in force**, derived by `fulfill.ts` (Pro while its subscription is active/past_due, else BYOK while owned, else the leftover state for support). `issueLicense` and the gateway read only those two fields. |
-| `customers` | `{uid}` | `{ stripeCustomerId, email, createdAt }` |
-| `customersByStripe` | `{stripeCustomerId}` | `{ uid }` |
-| `stripeEvents` | `{eventId}` | `{ type, receivedAt, processedAt? }` — idempotency record |
-| `deviceCodes` | `{userCode}` | `{ deviceCodeHash (sha256 hex), deviceId, deviceName, createdAt, expiresAt, status: 'pending'\|'approved', uid? }` |
-| `devices/{uid}/items` | `{deviceId}` | `{ name, firstSeenAt, lastSeenAt, lastLicenseAt }` |
-| `usage/{uid}/periods` | `{periodKey}` | `{ audioSeconds, handsfree, fast, smart, spendUsd, graceUsedAt?, days: { 'YYYY-MM-DD': { audioSeconds, spendUsd } }, updatedAt }` — gateway writes with `FieldValue.increment` |
-| `flags` | `global` | `{ checkoutOpen: true, proSessionsOpen: true, smartToFast: false, handsfreeOff: false, transcriptionOff: false, blockedUids: [], proSeatCap: 200, automaticTax: false, termsConsent: false }` — kill switches and Checkout options, edited in the console. Read strictly (`parseCheckoutFlags()`): `automaticTax` and `termsConsent` are on only when exactly `true`; `checkoutOpen` is open when absent or exactly `true` and closed for any other value (so the string `"false"` closes it); `proSeatCap` accepts a number or a numeric string, anything else means 200. `automaticTax` is flipped on only after Stripe Tax is active with registrations (otherwise Stripe collects nothing and says nothing); `termsConsent` only after the terms-of-service URL is set in the Dashboard. |
-| `stats` | `pro` | `{ activeSeats }` kept by the webhook (transaction) |
+| Table | Purpose |
+| --- | --- |
+| `entitlements` | Per-user entitlement JSON plus version for compare-and-swap updates |
+| `customers` | Unique Auth user ↔ Stripe customer mapping |
+| `device_codes` | Hashed high-entropy device secret, display code, expiry, approval/exchange lease |
+| `devices` | Per-account device identity and 30-day activity window |
+| `checkout_leases` | Per-user checkout serialization across workers |
+| `stripe_events` | Delivery ownership, retry lease, processed outcome |
+| `flags`, `stats` | Global operational controls and active Pro seat count |
+| `gateway_usage` | Per-user monthly allowance and daily usage counters |
+| `gateway_leases` | Global answer/audio admission slots with expiry |
+| `reconcile_dispatches` | Private short-lived, single-use scheduler nonce claims and delivery audit |
 
-All timestamps are Unix milliseconds (numbers). `periodKey` for a monthly Pro subscription is `String(entitlement.pro.currentPeriodStart)`. For a **yearly** Pro subscription (Stripe's period `currentPeriodEnd − currentPeriodStart` is over 35 days) it is the latest monthly anniversary of `currentPeriodStart` at or before now (UTC, same time of day, day of month clamped to the month's length, always counted from the original start), so the printed allowances and the $16 spend backstop renew every month instead of once a year; the first month's key equals `String(currentPeriodStart)`. For anything else the UTC month `YYYY-MM`. Implemented by `periodKey()` / `monthlyAnniversary()` in `gateway/src/meter.ts`.
+`auth.users.id` is the account identity. Authorization never depends on user-editable `user_metadata`. BYOK ownership and Pro subscription state remain independent inside the entitlement; the top-level `plan` and `status` describe the effective access. Pro active/past_due wins while valid, otherwise an owned BYOK license is the fallback.
 
-## Functions
+## Device and account protocol
 
-Callable protocol (`onCall`): the client POSTs `{ data }` with `Authorization: Bearer <Firebase ID token>`; errors use `HttpsError` codes. HTTP functions (`onRequest`) take JSON bodies and answer JSON. CORS: allow all origins on the two device-code HTTP functions and the callables (the desktop app has no origin).
+The account base is `${supabaseUrl}/functions/v1/faangin-api`. Public calls use `apikey: <publishable key>`. User calls also use `Authorization: Bearer <Supabase access token>`; opaque publishable and secret keys are not user bearer tokens. The Edge handler validates the user with Auth `/auth/v1/user` before accepting an authenticated operation. Anonymous Auth users are rejected.
 
-### `deviceCodeStart` — `onRequest`, POST
-- in `{ deviceId: /^[A-Za-z0-9_-]{8,64}$/, deviceName: string ≤ 64 }`
-- out `{ deviceCode, userCode, verificationUrl, expiresIn: 600, interval: 5 }`
-- `userCode`: 8 chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`; the response and `verificationUrl` (`${HOSTING_ORIGIN}/activate?code=…`) carry the display form `ABCD-EFGH` so the Mac and the page show the same string; the doc id is the raw 8 chars and `deviceCodeApprove` normalizes case, spaces and dashes. `deviceCode`: 32 random bytes base64url; only its sha256 hex is stored. One pending code per `deviceId` (a new start replaces the old).
+| Route | Request | Result |
+| --- | --- | --- |
+| `deviceCodeStart` | Raw `{deviceId,deviceName}` | `{deviceCode,userCode,verificationUrl,expiresIn,interval}` |
+| `deviceCodePoll` | Raw `{deviceCode}` | Pending, expired, or `{status:'approved',tokenHash,uid}` |
+| `deviceCodeApprove` | `{data:{userCode}}`, signed-in user | `{result:{ok:true,deviceName}}` |
+| `issueLicense` | `{data:{deviceId,deviceName}}`, signed-in user | `{result:{token,plan,status,expiresAt,graceUntil}}` |
+| `createCheckoutSession` | `{data:{plan}}`, signed-in user | `{result:{url}}` |
+| `createPortalSession` | `{data:{}}`, signed-in user | `{result:{url}}` |
+| `reconcile` | Internal POST with HMAC/time/nonce; manual secret-header fallback | `{result:{checked,failed}}` |
 
-### `deviceCodeApprove` — `onCall`, auth required
-- in `{ userCode }` (normalize: uppercase, strip spaces and dashes)
-- out `{ ok: true, deviceName }`
-- `not-found` when unknown or expired; `failed-precondition` when already approved. Sets `status: 'approved', uid`.
+Device codes expire after ten minutes; polling interval is five seconds. Only the device secret's SHA-256 hash is stored. A new start replaces that installation's old pending code. Display codes are normalized for approval. A verified account approves a code, after which one poll atomically claims the exchange lease. The backend uses Auth admin `generate_link` to obtain a one-use email token for that same verified account. The desktop exchanges `token_hash` with `/auth/v1/verify`, then verifies `/auth/v1/user` has the approved ID. This creates a desktop session independent of the browser's session; refresh tokens are never transferred from browser to desktop.
 
-### `deviceCodePoll` — `onRequest`, POST
-- in `{ deviceCode }`
-- out `{ status: 'pending' }` | `{ status: 'approved', customToken, uid }` | `{ status: 'expired' }`
-- On approved: `auth.createCustomToken(uid)`, then delete the doc (single use). Lookup is by `deviceCodeHash` (query), never by user code.
+The browser page binds only to `127.0.0.1` on an ephemeral port, requires the exact Host and random unexpired lease, sends no-store headers, and uses a nonce CSP. Its tokens stay in memory and it signs out its local browser session after approval. The desktop encrypts its own rotated refresh token with OS-backed storage and namespaces stored credentials to the Supabase origin. Old Firebase credentials are discarded locally. Refresh is serialized; sign-out clears local credentials immediately and attempts server revocation of only the desktop session.
 
-### `issueLicense` — `onCall`, auth required, secret `LICENSE_SIGNING_KEY`
-- in `{ deviceId, deviceName }`
-- out `{ token, plan, status, expiresAt, graceUntil }`
-- `failed-precondition` when `entitledPlan(entitlement) === 'none'`. Device cap: upsert `devices/{uid}/items/{deviceId}`; count devices with `lastSeenAt` in the last 30 days; a **new** device beyond `DEVICE_LIMIT` (3) gets `resource-exhausted`.
-- Token: `v1.<base64url(payload JSON)>.<base64url(Ed25519 signature over the payload bytes)>`. Payload `{ v: 1, uid, plan: 'byok'|'pro', status, iat, exp (iat + 30 d), grace (exp + 14 d), deviceId, periodEnd?, rampUntil?, cancelAtPeriodEnd? }`. Key: `LICENSE_SIGNING_KEY` is base64 PKCS#8 DER; the matching public key (base64 SPKI DER) ships in the app. Signing and verifying live in `functions/src/license/sign.ts` as pure functions.
+A license binds the user and device. At most three devices active within 30 days may receive licenses. Device admission is atomic. The signed format is unchanged: `v1.<base64url JSON>.<base64url Ed25519 signature>`, with a 30-day expiry and 14-day offline grace. The backend stores base64 PKCS#8 DER in `LICENSE_SIGNING_KEY`; the desktop receives only matching base64 SPKI public keys.
 
-### `createCheckoutSession` — `onCall`, auth required, secret `STRIPE_CHECKOUT_KEY`
-- in `{ plan: 'byok' | 'pro_monthly' | 'pro_annual' }`
-- out `{ url }`
-- Pro plans need `flags/global.checkoutOpen` and `stats/pro.activeSeats < proSeatCap`; BYOK is never gated. `failed-precondition` when the user already has that plan: BYOK already bought, or Pro active/past_due in Firestore **or** any live subscription on the Stripe customer (an `unpaid` or `paused` one gives no access but still blocks, with the message "Your Pro subscription is on hold. Use Manage billing to pay the open invoice, or contact support." instead of "Pro is already active"; `liveSubscriptionState()`) (`stripe.subscriptions.list` checked before creating a subscription session, so two Pro subscriptions can never be billed). BYOK and Pro are not exclusive of each other. Customer: reuse `customers/{uid}` else `stripe.customers.create({ email, metadata: { uid } })` and store both `customers` and `customersByStripe`. The email goes on the customer only when the Firebase token has `email_verified` (Checkout prefills and locks a customer's email, so an unverified, possibly mistyped address would get every receipt; without one Checkout asks the buyer). Creation carries an `Idempotency-Key` derived from a hash of the uid, the verified email and the current minute (`customerIdempotencyKey()`), so two concurrent first checkouts share one customer while a transient Stripe 5xx, which Stripe replays under a key for 24 hours, can only affect that minute. Before creating the session, every earlier `open` Checkout Session of the customer is expired, so a buyer can never pay two at once. Session: built by the pure `checkoutSessionParams()` in `functions/src/billing/checkout-params.ts` (the emulated tests and `scripts/stripe-sandbox-smoke.mjs` send the same object): `mode: 'payment'` for BYOK, `'subscription'` for Pro; price from `stripe.prices.list({ lookup_keys: [...] })`; `client_reference_id: uid`; `metadata: { uid, plan }` on the session and on the payment intent (BYOK, with `description`) or the subscription (Pro, `subscription_data.metadata` and `description: 'Faangin Pro'`); `customer_update: { name: 'auto', address: 'auto' }` so the name and billing address entered at Checkout land on the Customer for invoices and tax; BYOK adds `invoice_creation: { enabled: true, invoice_data: { description, metadata } }` so the one-time purchase gets a numbered invoice and PDF; `integration_identifier: 'faangin_activate_<8 letters>'` tags the flow in the Dashboard; `success_url: ${HOSTING_ORIGIN}/billing/success?session_id={CHECKOUT_SESSION_ID}`; `cancel_url: ${HOSTING_ORIGIN}/billing/cancel`; `allow_promotion_codes: false`; `expires_at` = now + 45 minutes (Stripe allows 30 minutes to 24 hours); `excluded_payment_method_types` = the delayed bank debits `us_bank_account, sepa_debit, bacs_debit, acss_debit, au_becs_debit, nz_bank_account` on both plans (Pro starts at Checkout, so a debit that settles or fails days later would grant access before the money arrives; for BYOK a pending debit leaves the buyer without a license for days and invites a second purchase). Never `payment_method_types` (Stripe picks eligible methods from the Dashboard). The Pro seat cap is soft: it is checked when a session is created, so it can be exceeded by the sessions open at once (at most 45 minutes of them). With `flags/global.automaticTax`: `automatic_tax: { enabled: true }` and `tax_id_collection: { enabled: true }` (business buyers can add a VAT/GST id). With `flags/global.termsConsent`: `consent_collection: { terms_of_service: 'required' }`.
+CORS allows the loopback activation origin. All four Edge Functions are deployed with platform JWT verification disabled because each endpoint enforces its own appropriate boundary: explicit Auth lookup, Stripe signature, internal reconciliation secret, or public return message. Disabling platform verification does not bypass those application checks.
 
-### `createPortalSession` — `onCall`, auth required, secret `STRIPE_CHECKOUT_KEY`
-- out `{ url }`; `return_url: ${HOSTING_ORIGIN}/activate`. `failed-precondition` when there is no customer, or when no Customer Portal configuration tagged `metadata.faangin == 'v1'` exists (created by `node scripts/stripe-setup.mjs portal`; chosen by the pure `pickPortalConfiguration()`, remembered per instance for 10 minutes once found; an error is logged). The Dashboard default configuration is never used as a fallback: it may allow plan switching. That configuration allows cancel at period end (with a reason), payment-method update, invoice history and email/name/address/tax-id edits, and **not** plan switching: a monthly↔annual switch would start a new billing period and reset the metered allowances for a prorated few dollars; switching is a support action.
+## Checkout, fulfillment, and reconciliation
 
-### `stripeWebhook` — `onRequest`, secrets `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_KEY`
-1. `stripe.webhooks.constructEvent(req.rawBody, sig, secret)` → 400 on failure.
-2. Live-mode check: `event.livemode` must equal `expectLivemode()` (`functions/src/config.ts`): the `STRIPE_EXPECT_LIVEMODE` env when it is exactly `true` or `false`, otherwise `true` only in the Firebase project `faangin-prod`. Production therefore rejects test events, and every other project (staging, emulator, unknown) rejects live ones, even if no env file was deployed → 400 otherwise. Hosted-page URLs come from `hostingOrigin()`: `FAANGIN_HOSTING_ORIGIN` when set, otherwise `https://<project id>.web.app`; the project id is read from `FIREBASE_CONFIG` (set in deployed functions and the emulator), never from a default that names another environment.
-3. Idempotency: transaction creating `stripeEvents/{event.id}`; if it exists and is processed, answer 200 immediately; if it was claimed under 10 minutes ago and is not processed, another delivery is in flight: answer 500 so Stripe retries (a 200 would end the retries even if that delivery then dies). A stale unprocessed claim (crash, timeout, deploy) is re-taken so Stripe's retry gets applied. The function timeout is 120 s, below that window.
-4. Resolve `uid`: `customersByStripe/{customer}` (the Stripe customer is the ownership boundary; for charge events the charge is retrieved to find the customer), falling back to the `metadata.uid` our own sessions and subscriptions carry; a disagreement between the two is logged as an error. Unknown → log and 200 (nothing to do).
-5. `next = applyStripeEvent(current, normalized, now)` from `fulfill.ts`; write `entitlements/{uid}`; keep `stats/pro.activeSeats` right (transaction); mark the event processed. 500 on any thrown error so Stripe retries.
+The client submits only `byok`, `pro_monthly`, or `pro_annual`. Prices and models are server-selected. Lookup keys are `faangin_byok_v1`, `faangin_pro_monthly`, and `faangin_pro_annual`. Catalog setup currently defines USD $10 one-time, $14.99/month, and $144/year, tax exclusive. Actual Stripe catalog values are the source for Checkout amounts.
 
-Events and their effect (`fulfill.ts` is pure and unit-tested):
+Checkout holds a per-user five-minute database lease across entitlement checks, customer mapping, subscription inspection, earlier open-session expiry, and session creation. Concurrent checkout attempts fail with a retryable message. Existing live or held subscriptions block another Pro subscription. A paid BYOK Checkout blocks repurchase before webhook fulfillment; replaying its webhook cannot restore a refunded license. Listing follows all pages, and failure to expire an earlier session prevents creation of a new payable session.
 
-| Event | Effect |
-|---|---|
-| `checkout.session.completed` or `checkout.session.async_payment_succeeded`, `mode: payment`, `payment_status` not `unpaid`, `metadata.plan: byok` | `plan: byok, status: active, byok: { purchasedAt, paymentIntentId, checkoutSessionId }`. A delayed payment method (bank debit) completes the session while still `unpaid`: nothing is granted until `async_payment_succeeded`. |
-| `checkout.session.async_payment_failed` | logged only; nothing was granted |
-| `invoice.finalization_failed` | logged at `ERROR` (invoice, customer, error code): with Stripe Tax on, a renewal that cannot be finalized is not collected while the subscription stays `active`; no entitlement change |
-| `checkout.session.completed`, `mode: subscription` | fetch the subscription with `STRIPE_WEBHOOK_KEY`, then treat as below |
-| `invoice.paid` with a subscription | fetch the subscription and treat as below (heals a missed or out-of-order subscription event) |
-| `customer.subscription.created` / `updated` / `deleted` / `paused` / `resumed` | The payload only triggers: delivery order is not guaranteed, so the current subscription is retrieved with `STRIPE_WEBHOOK_KEY` and applied (a late `active` event cannot revive a canceled subscription); the payload is used only if Stripe says the subscription no longer exists, and any other retrieve failure answers 500 so Stripe retries. `pro.status` map: `active`,`trialing` → `active`; `past_due` → `past_due` (Stripe is still retrying, access continues); `unpaid`,`paused`,`canceled`,`incomplete_expired` → `canceled` (Stripe stopped collecting: access ends until an invoice is paid and an active event arrives); `incomplete` → no change. A `canceled`/`incomplete_expired` event for a subscription id other than the stored one is ignored (an old subscription can never cancel a newer one); an active/past_due event for a new id replaces the stored subscription. Period from `items.data[0].current_period_start/end` (API 2025-03-31+), fallback `current_period_start/end` (seconds → ms). `startedAt` kept from the first sighting; `rampUntil = startedAt + 14 d`; `cancelAtPeriodEnd` copied. |
-| `invoice.payment_failed` (has subscription) | `status: past_due` |
-| `charge.refunded` with `refunded: true` (full) | `revoked, reason: 'refund'` on whichever plan the charge paid (BYOK when the payment intent matches `byok.paymentIntentId`, else Pro); partial refunds ignored |
-| `charge.dispute.created` | `revoked, reason: 'dispute'` on the plan the charge paid |
-| `radar.early_fraud_warning.created` | Pro only: `pro.status: revoked, reason: 'fraud_warning'` |
+The customer email is set only from a verified Auth email. Session and payment/subscription metadata contain the server's user ID and plan. Checkout always uses the mapped customer. BYOK creates an invoice. Customer updates save billing name/address. Sessions expire in 45 minutes; delayed bank debits are excluded. Automatic Tax and terms consent turn on only when their operational flags are true. Return URLs point to the current project's `billing-return` function. That endpoint instructs the buyer to return to the app; the app refreshes its license while payment confirmation finishes.
 
-### `reconcileEntitlements` — `onSchedule('every 24 hours')`, secret `STRIPE_WEBHOOK_KEY`
-For every `entitlements` doc with `plan == 'pro'` and status `active` or `past_due`: retrieve the subscription and re-apply through `fulfill.ts`. A missed webhook is never permanent.
+The portal configuration must be active and tagged `metadata.faangin=v1`. It permits cancel at period end, payment-method and customer-detail updates, and invoice history. Plan switching is disabled so switching cannot reset metered allowances. The arbitrary Dashboard default is never a fallback.
 
-Stripe client: `functions/src/billing/stripe-client.ts` exports `makeStripe(key)`; when `STRIPE_API_BASE` is set (tests only) it points the SDK at that host (`host`, `port`, `protocol: 'http'`). Tests run a tiny fake Stripe HTTP server on port 4242 (`functions/test/fake-stripe.ts`) that answers `POST /v1/customers`, `GET /v1/prices`, `POST /v1/checkout/sessions`, `POST /v1/billing_portal/sessions`, `GET /v1/subscriptions/:id`, and sign webhook bodies with `stripe.webhooks.generateTestHeaderString`.
+`stripe-webhook` verifies the exact raw body with Stripe's signature and rejects the wrong event mode. `STRIPE_EXPECT_LIVEMODE` must be explicitly true for a live environment; the safe default is false. An event claim is fenced by an owner lease. Fulfillment atomically compares the entitlement version, updates the entitlement and seat count, and marks the event processed. Active delivery contention returns a retryable failure. Stale claims may be recovered; a late worker cannot commit after losing ownership. Customer mapping takes precedence over metadata when resolving an account.
 
-## Gateway (Cloud Run)
+Supported events cover paid BYOK Checkout, current subscription state, invoice paid/failed, full refunds, disputes, and early fraud warnings. Subscription events retrieve current Stripe state to resist out-of-order delivery. Old canceled subscriptions cannot cancel newer subscriptions. Full refunds/disputes revoke the matching plan; partial refunds do not. BYOK remains owned when a Pro subscription ends. Entitlement revocation does not itself cancel future Stripe charges; operational payment settings and support must handle cancellation.
 
-Env: `OPENAI_API_KEY` (Secret Manager → env) and `PORT`. Application Default Credentials give Firestore, Auth and the project id (nothing else to set on Cloud Run). Constants in `gateway/src/config.ts`. All dependencies injected through `createGateway({ verifyIdToken, loadEntitlement, loadFlags, store, openaiBase, openaiWsBase, openaiKey, now, log })` so tests use fakes and an in-memory store; `server.ts` wires the Firebase implementations.
+The protected `reconcile` route re-reads eligible Pro subscriptions and applies the same entitlement logic. Scheduled calls carry a 60-second HMAC and a single-use nonce backed by a private dispatch row. The Vault-held shared credential never enters pg_net's queue. A direct secret-header fallback remains for deliberate server-side operations. The daily 03:15 UTC job is installed but remains disabled pending a successful Stripe-backed run. Reconciliation failures are reported and logged without returning secret/provider payloads. The user instructed that pg_net remain unchanged.
 
-Auth on every route: `Authorization: Bearer <Firebase ID token>` → 401 otherwise. `entitledPlan !== 'pro'` → 402 `{ error: { code: 'no_pro', message } }`. `blockedUids` contains uid → 403. `proSessionsOpen` false → 503 `{ error: { code: 'pro_paused' } }`. Entitlement and flags cached 30 s per uid.
+## Pro gateway and interview continuity
 
-### `POST /v1/responses` (SSE)
-Client sends its usual Responses body with `model` set to a **mode**: `fast` | `smart` | `handsfree` (anything else → 400 `invalid_mode`). Gateway builds the upstream body from an allowlist only: `input`, `instructions`, `max_output_tokens` (capped per mode), `reasoning`, `text`, `truncation`, `prompt_cache_key`; sets `model` from `MODELS[mode]`, `stream: true`, `store: false`. Everything else is dropped (tools, previous_response_id, metadata…).
+The gateway base is `${supabaseUrl}/functions/v1/faangin-gateway`. Public routing preserves `/v1/responses`, `/v1/realtime?intent=transcription`, and `/healthz` below that base. User operations validate Auth, require effective Pro access, check operational flags, and read service-only SQL RPCs. The provider key remains server-side. The desktop transport replaces provider credentials with the account token and public apikey and refuses reuse after sign-out.
 
-Metering, in order: concurrency (> 2 in flight → 429 `concurrency`); `smart` when `smart` count ≥ 25 or `flags.smartToFast` → silently run as `fast` and add response header `x-faangin-mode: fast`; `fast` ≥ 500 → 429 `{ error: { code: 'allowance_exhausted', allowance: 'fast' } }`; `handsfree` ≥ 1500 or `flags.handsfreeOff` → 200 with a synthetic SSE stream whose `response.completed` has empty `output` and zero usage (a "skipped", never an error); backstop (`spendUsd` ≥ $16 month or ≥ $11 UTC day) → 429 `backstop`. Ramp: while `now < rampUntil` every count cap is 30 % of the printed one. Increment the mode counter **before** forwarding (a cancelled request still counts). Pipe upstream bytes through verbatim; parse `response.completed` for `usage` and add estimated cost (`PRICES`) to `spendUsd` and `days[today].spendUsd`; a stream that ends without usage settles at the cap estimate. Upstream non-2xx → same status with upstream JSON body. 
+Answers use SSE. The client names Fast, Smart, or handsfree; the gateway chooses the configured provider model, strips unsupported fields, sets `store:false`, validates selected text/images, and caps output. Admission atomically claims a global slot and increments the allowance before forwarding. At most two answers per user run at once. Smart can fall back to Fast at its limit; handsfree exhaustion returns a safe skipped stream. Counters and leases span workers and billing-period changes.
 
-### `GET /v1/realtime?intent=transcription` (WebSocket)
-Upgrade with the same `Authorization` header. Up to 2 sockets per uid (one per audio channel); more → close 1008. `flags.transcriptionOff` → close 1013. Upstream: `${OPENAI_WS_BASE}/v1/realtime?intent=transcription` with the server key.
+Monthly allowances are 20 audio hours (5 hours per UTC day), 1,500 handsfree answers, 500 Fast answers, and 25 Smart answers. The first 14 days use 30% caps. Estimated spend backstops are $16/month and $11/day. Annual subscriptions renew allowances on monthly anniversaries of their original billing start. Completed answers use reported usage; interrupted requests use conservative estimates, including an image reserve, and may reach the spend backstop earlier.
 
-Client → upstream allowlist: `session.update` (force `session.audio.input.transcription.model = MODELS.transcribe` and `session.audio.input.format = { type: 'audio/pcm', rate: 24000 }`, the only format the metering math is right for; keep `languages`, `prompt` ≤ 2 500 chars, `delay`, `turn_detection`), `input_audio_buffer.append` (count bytes: base64 length × 3/4 ÷ 48 000 = seconds), `input_audio_buffer.commit`, `input_audio_buffer.clear`. Everything else dropped. Client messages over 1 MiB close the socket (1009).
+Transcription accepts PCM16 mono 24 kHz and at most two audio sockets per user. Usage is charged for forwarded audio, flushed every ten seconds and on close. Lease renewal cannot resurrect an expired/released slot. The once-per-period 30-minute audio grace deadline is shared across channels and reconnects. Failure to persist metering closes audio. Allowance-period rollover closes the socket before more audio is admitted.
 
-Audio metering: seconds are charged on every forwarded `append` (so server VAD, never-committing clients and clear-after-commit are all metered). All of a uid's sockets share one in-memory usage copy. Limits: `audioSeconds` ≥ 20 h/period, `days[today].audioSeconds` ≥ 5 h, backstop. When a limit is first hit in a period (`graceUsedAt` unset) a 30-minute wall-clock grace window opens at `graceUsedAt`, shared by all the uid's sockets and reconnects; it cannot be extended. Past that the socket is **muted**: appends are dropped, each `commit` is answered with a synthetic `{ type: 'input_audio_buffer.committed', event_id, item_id: 'faangin_muted_<n>', previous_item_id: null }`, `clear` is acknowledged with `input_audio_buffer.cleared`. Never send `error` events to the client; log upstream errors instead. Upstream close → close client 1011. Close after 30 min with under 1 s of audio. Flush usage to the store every 10 s and on close.
+Supabase Edge lifetime limits require periodic transcription reconnection. The server signals expiry before its deadline; the desktop rotates managed sessions proactively, refreshes account access before reconnecting, drains old output, and buffers only audio never admitted to an upstream session. The buffer is bounded and stale callbacks are discarded. Fixture reconnection tests do not establish representative long-call or physical-audio quality.
 
-### `GET /healthz` → `200 ok`
+## Verification boundary
 
-## Desktop client (`client/faangin-cloud.ts`)
-Self-contained, no dependencies beyond Node (`crypto`, `fetch`) and `ws`. Exports: `startDeviceSignIn(functionsBase, device)`, `pollDeviceSignIn(functionsBase, deviceCode)`, `exchangeCustomToken(apiKey, customToken)` and `refreshIdToken(apiKey, refreshToken)` (Identity Toolkit / Secure Token REST), `callFunction(functionsBase, name, data, idToken)`, `fetchLicense(...)`, `verifyLicense(token, publicKeyBase64, nowMs)` → payload | null (valid through `grace`), and `proTransport(getIdToken, gatewayBase)` → the app's `InferenceTransport` (`fetch` rewrites `https://api.openai.com/v1/...` to the gateway and swaps `Authorization`; `createWebSocket` likewise). `LICENSE_PUBLIC_KEYS` holds current and next public keys.
-
-## Pages (`hosting/`)
-`activate.html`: Firebase Auth compat SDK from the CDN, config from the reserved URL `/__/firebase/init.js`; sign in with Google or email/password; shows the code from `?code=` for the buyer to compare with the Mac; calls `deviceCodeApprove`; then shows plan buttons (`createCheckoutSession`) and "Manage billing" (`createPortalSession`). `billing-success.html`, `billing-cancel.html`: plain pages linking back to `/activate`.
-
-## Stripe account setup (`scripts/stripe-setup.mjs`)
-One idempotent script configures a Stripe environment through the API; it creates what is missing, updates drift, deletes nothing and prints no API keys (the first line is `MODE: test` or `MODE: live`, from the key prefix; `--live` refuses a test key). The webhook signing secret goes to `--secret-out FILE`, reserved before the endpoint is created; without that flag it is printed once. `node scripts/stripe-setup.mjs <command> --sandbox` reads `STRIPE_SANDBOX_SECRET_KEY` from the gitignored `.env.stripe-sandbox` (format in `.env.stripe-sandbox.example`); live runs pass `STRIPE_SECRET_KEY=rk_live_… … --live`.
-
-| Command | Creates / checks |
-|---|---|
-| `status` | account, Stripe Tax status and registrations, catalog table, portal configurations, webhook endpoints |
-| `catalog` | product `Faangin BYOK license` (`tax_code txcd_10202000`, downloadable software, personal use; `statement_descriptor FAANGIN BYOK`) with price `faangin_byok_v1` $10 one-time, and product `Faangin Pro` (`txcd_10103000`, SaaS, personal use; `FAANGIN PRO`) with `faangin_pro_monthly` $14.99/month and `faangin_pro_annual` $144/year. All USD, `tax_behavior: exclusive` (tax is added on top; this cannot be changed on a price once set, so a drifted price is replaced and the lookup key moved). Products are found by `metadata.faangin_key`. |
-| `tax-defaults` | account defaults `tax_behavior: exclusive`, `tax_code: txcd_10103000`. The head office and registrations stay owner steps in the Dashboard. |
-| `portal` | the Customer Portal configuration tagged `metadata.faangin=v1` (features above) |
-| `webhook --url … [--secret-out FILE] [--disabled]` | the endpoint for `stripeWebhook`, pinned to the SDK's API version, subscribed to exactly the events in the table above |
-
-`scripts/stripe-sandbox-smoke.mjs --sandbox` (after `npm --prefix functions run build`) creates a throwaway customer, one Checkout Session per plan with the production parameters and a portal session against the real sandbox, prints the URLs, then expires and deletes everything (`--keep` to pay one with a test card). `scripts/check-secrets.sh` (first step of `npm test`) fails when a Stripe key, webhook secret or private key is in a tracked file.
-
-## Secrets
-| Name | Used by | Set with |
-|---|---|---|
-| `STRIPE_CHECKOUT_KEY` (restricted: write Checkout Sessions, Customers, Customer portal (sessions and configurations); read Prices, Products, Subscriptions) | createCheckoutSession, createPortalSession | `firebase functions:secrets:set STRIPE_CHECKOUT_KEY --project faangin-staging` |
-| `STRIPE_WEBHOOK_KEY` | stripeWebhook, reconcileEntitlements | same |
-| `STRIPE_WEBHOOK_SECRET` | stripeWebhook | same (after adding the endpoint in Stripe) |
-| `LICENSE_SIGNING_KEY` | issueLicense | `node scripts/gen-license-key.mjs` then `--data-file` |
-| `OPENAI_API_KEY` | gateway | Secret Manager, mounted as env on Cloud Run |
-
-Emulator: `functions/.secret.local` from `scripts/dev-secrets.mjs` (gitignored).
+Default backend verification covers pure services, localhost HTTP/WebSocket client/gateway transport, signed webhook handlers, and real disposable Postgres transactions and grants. No test suite alone proves remote Auth configuration, email deliverability, Stripe endpoint delivery, provider quota, real audio routing, long-call performance, or a signed/notarized installer. The deployment acceptance steps are in [DEPLOY.md](DEPLOY.md).
