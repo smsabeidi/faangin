@@ -445,7 +445,7 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
   const window = new BrowserWindow({
     title: surface === 'capture' ? 'Faangin Audio Capture' : surface === 'document' ? 'Faangin Document Import' : 'Faangin',
     width: isOverlay ? OVERLAY_LAYOUT.width : 1280, height: isOverlay ? OVERLAY_LAYOUT.height : 840,
-    ...(bounds ?? {}), minWidth: Math.min(layout.minWidth, bounds?.width ?? area.width), minHeight: Math.min(layout.minHeight, bounds?.height ?? area.height), resizable: !isOverlay || !settings.overlayCollapsed,
+    ...(bounds ?? {}), minWidth: Math.min(layout.minWidth, bounds?.width ?? area.width), minHeight: Math.min(layout.minHeight, bounds?.height ?? area.height), resizable: true,
     ...(overlayLimits ? { minWidth: overlayLimits.minWidth, minHeight: overlayLimits.minHeight, maxWidth: overlayLimits.maxWidth, maxHeight: overlayLimits.maxHeight, fullscreenable: false, maximizable: false } : {}),
     ...(isUI ? (isOverlay ? platform.overlayWindowOptions() : platform.workspaceWindowOptions({ reduceTransparency: accessibility.reduceTransparency })) : {}),
     show: false, focusable: !isOverlay || !overlayInteraction.passive, frame: !isOverlay, transparent: isOverlay, alwaysOnTop: isOverlay, skipTaskbar: isOverlay || surface !== 'index',
@@ -473,6 +473,9 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     window.on('focus', () => { scheduleAppearanceRefresh(); refreshAccessReadiness() })
     if (isOverlay) {
       overlayWindowLayout = layout; platform.applyOverlayLevel(window); overlayInteraction.attach(window)
+      // Created resizable so its size limits apply, then locked: on Windows a window built non-resizable has its minimum and
+      // maximum pinned to its current size, which left a window opened already collapsed with a 480 px minimum instead of 360.
+      if (settings.overlayCollapsed) window.setResizable(false)
       // Double-clicking an app-region drag area toggles maximize on Windows, which would push the overlay past its layout limits.
       window.setMaximizable(false); window.setFullScreenable(false)
       window.on('maximize', () => { window.unmaximize(); applyOverlayLayout() })
