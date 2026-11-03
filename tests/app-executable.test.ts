@@ -51,7 +51,8 @@ test('an executable path is used as given, whether or not it exists yet', async 
 })
 
 test('app.asar sits beside the executable in each platform layout', () => {
-  assert.equal(appAsarPath('/Applications/Faangin.app/Contents/MacOS/Faangin', 'darwin'), '/Applications/Faangin.app/Contents/Resources/app.asar')
+  // Built with join on every side: the helper returns host-native separators, so a literal POSIX string fails on a Windows runner.
+  assert.equal(appAsarPath(join('/Applications', 'Faangin.app', 'Contents', 'MacOS', 'Faangin'), 'darwin'), join('/Applications', 'Faangin.app', 'Contents', 'Resources', 'app.asar'))
   assert.equal(appAsarPath(join('dist', 'win-unpacked', 'Faangin.exe'), 'win32'), join('dist', 'win-unpacked', 'resources', 'app.asar'))
   assert.equal(appAsarPath(join('dist', 'linux-unpacked', 'faangin'), 'linux'), join('dist', 'linux-unpacked', 'resources', 'app.asar'))
 })
