@@ -71,18 +71,21 @@ jobs:
         run: node scripts/onboarding-qa.mjs
         env:
           FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_QA_SHOW_WINDOWS: '1'
           FAANGIN_ONBOARDING_QA_OUTPUT: ${{ runner.temp }}\qa\onboarding
       - name: Native QA, required access
         if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
         run: node scripts/access-setup-qa.mjs
         env:
           FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_QA_SHOW_WINDOWS: '1'
           FAANGIN_ACCESS_QA_OUTPUT: ${{ runner.temp }}\qa\access-setup
       - name: Native QA, overlay geometry
         if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
         run: node scripts/overlay-layout-qa.mjs
         env:
           FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_QA_SHOW_WINDOWS: '1'
           FAANGIN_LAYOUT_QA_OUTPUT: ${{ runner.temp }}\qa\overlay-layout
       - name: Upload the Windows QA reports and screenshots
         if: runner.os == 'Windows' && always()

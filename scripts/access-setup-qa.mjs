@@ -29,6 +29,8 @@ function launch(markerName, retainedOsGrants = false) {
   const marker = join(fixture, markerName), env = { ...process.env }
   for (const name of Object.keys(env)) if (/(?:KEY|TOKEN|SECRET|PASSWORD)$/.test(name) || name.startsWith('FAANGIN_SMOKE')) delete env[name]
   for (const name of ['ELECTRON_RUN_AS_NODE', 'ELECTRON_RENDERER_URL', 'FAANGIN_QA_VISIBLE']) delete env[name]
+  // Hidden windows never paint on Windows, so CDP screenshots time out there; CI opts in to a shown window.
+  if (process.env.FAANGIN_QA_SHOW_WINDOWS === '1') env.FAANGIN_QA_VISIBLE = '1'
   Object.assign(env, { FAANGIN_SMOKE: '1', FAANGIN_USER_DATA_DIR: fixture, FAANGIN_SMOKE_READY: marker, FAANGIN_SMOKE_LIVE_FIXTURE: '1', FAANGIN_SMOKE_ACCESS_FIXTURE: 'required' })
   if (retainedOsGrants) env.FAANGIN_SMOKE_ACCESS_OS_GRANTED = '1'
   const flags = ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1']
