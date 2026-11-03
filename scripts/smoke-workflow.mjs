@@ -224,8 +224,12 @@ export async function runDesktopWorkflow(api, providerEndpoint, options = {}) {
   check((await api.getState()).currentSession.answers.length === 0, 'Disabled live suggestions issued a request.')
   await api.updateSettings({ liveSuggestions: true })
   await liveProxy({ type: 'final', itemId: 'wrong-source', channel: 'microphone', text: 'My explanation must not trigger the remote-source policy.' })
-  await liveProxy({ type: 'final', itemId: 'automatic-question', channel: 'system', text: 'Explain a hash table.' })
-  await liveProxy({ type: 'partial', itemId: 'followup', channel: 'system', text: 'UNFINISHED_FOLLOWUP' })
+  // Both messages are sent before either reply returns, so the partial reaches the coordinator inside its 120 ms settling
+  // window however slow the host is; awaiting between them let a loaded Windows runner start the request first.
+  await Promise.all([
+    liveProxy({ type: 'final', itemId: 'automatic-question', channel: 'system', text: 'Explain a hash table.' }),
+    liveProxy({ type: 'partial', itemId: 'followup', channel: 'system', text: 'UNFINISHED_FOLLOWUP' })
+  ])
   await new Promise(resolve => setTimeout(resolve, 450))
   check((await api.getState()).currentSession.answers.length === 0, 'Wrong source or unfinished speech triggered an automatic answer.')
   await liveProxy({ type: 'final', itemId: 'followup', channel: 'system', text: '' })
