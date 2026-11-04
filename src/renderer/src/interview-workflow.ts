@@ -6,7 +6,7 @@ export function questionSourcePatch(source: AudioChannel): Partial<Settings> {
   return source === 'system' ? { liveSuggestionSource: 'system', systemAudio: true, microphone: false } : { liveSuggestionSource: 'microphone', microphone: true, systemAudio: false }
 }
 
-export const HANDS_FREE_CONSENT = 'Transcribes microphone + computer audio with OpenAI. Automatically sends conversation context to your chat provider; uses credits. Screenshots stay manual.'
+export const HANDS_FREE_CONSENT = 'Faangin sends microphone + computer audio to OpenAI for transcription. Automatic replies send conversation context to Faangin and count toward plan usage. Screenshots stay manual.'
 
 export function handsFreeSettingsPatch(): Partial<Settings> {
   return { microphone: true, systemAudio: true, liveSuggestions: true, liveSuggestionSource: 'system' }

@@ -141,7 +141,7 @@ test('the rendered start control names the action and blocks conflicting setup w
   assert.match(manual, /disabled=/)
   assert.match(manual, /Stop listening first/)
   assert.match(manual, />Stop listening</)
-  assert.match(HANDS_FREE_CONSENT, /microphone \+ computer audio.*OpenAI.*chat provider.*credits/)
+  assert.match(HANDS_FREE_CONSENT, /microphone \+ computer audio.*OpenAI.*conversation context.*plan usage/)
 })
 
 test('failed automatic help exposes one resume action without restarting healthy audio', () => {

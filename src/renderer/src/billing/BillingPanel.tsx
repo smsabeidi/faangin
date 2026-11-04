@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowUpRight, Check, Copy, CreditCard, LogOut, RefreshCw, X } from 'lucide-react'
+import { ArrowUpRight, Check, Copy, CreditCard, LogOut, Mail, RefreshCw, X } from 'lucide-react'
 import type { BillingPlan, BillingSummary, LicensedPlan } from '../../../shared/billing-types'
 import { platformCopy } from '../../../shared/platform-copy'
 import { Spinner } from '../components'
@@ -7,9 +7,8 @@ import { useBilling } from './useBilling'
 
 // These mirror the Stripe catalog in backend/scripts/stripe-setup.mjs; the server picks the real price per plan.
 const PLAN_OFFERS: { plan: BillingPlan; label: string; detail: string }[] = [
-  { plan: 'byok', label: 'BYOK license', detail: '$10 once · use your own OpenAI key' },
-  { plan: 'pro_monthly', label: 'Pro monthly', detail: '$14.99 per month · Faangin supplies the models' },
-  { plan: 'pro_annual', label: 'Pro yearly', detail: '$144 per year' }
+  { plan: 'pro_monthly', label: 'Pro monthly', detail: '$49.99 per month · Faangin supplies the models' },
+  { plan: 'pro_annual', label: 'Pro yearly', detail: '$29.99 per month · $359.88 billed annually' }
 ]
 const PLAN_NAMES: Record<LicensedPlan, string> = { byok: 'BYOK license', pro: 'Pro' }
 
@@ -33,11 +32,18 @@ function Body({ summary, billing, device }: { summary: BillingSummary; billing: 
   const { state, busy } = summary
   switch (state.kind) {
     case 'unavailable':
-      return <p className="billing-muted">This build of Faangin is not connected to an accounts service. Everything else keeps working with your own OpenAI key.</p>
+      return <p className="billing-muted">This build of Faangin is not connected to an accounts service.</p>
     case 'signed-out':
+      if (summary.googleSignInPending) return <>
+        <p role="status">Finish signing in with Google in your browser, then open Faangin when prompted.</p>
+        <button type="button" className="text-button danger-text" onClick={() => { void billing.cancelGoogleSignIn() }}><X size={13}/>Cancel sign-in</button>
+      </>
       return summary.signIn ? <SignInCode summary={summary} billing={billing}/> : <>
-        <p>Sign in once with your browser. This {device} is registered to your account; one account can use up to three devices.</p>
-        <div className="billing-actions"><button className="button primary small" disabled={busy} onClick={() => { void billing.signIn() }}><ArrowUpRight size={14}/>Sign in</button></div>
+        <p>Sign in or create an account in your browser. You can register up to three devices on your account.</p>
+        <div className="billing-actions">
+          <button type="button" className="button primary small" disabled={busy} onClick={() => { void billing.googleSignIn() }}><ArrowUpRight size={14}/>Continue with Google</button>
+          <button type="button" className="button subtle small" disabled={busy} onClick={() => { void billing.signIn() }}><Mail size={14}/>Continue with email</button>
+        </div>
       </>
     case 'no-plan':
       return <>

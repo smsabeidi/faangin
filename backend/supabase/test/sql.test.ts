@@ -66,32 +66,84 @@ test('SQL webhook stale-owner fencing, version conflicts, seat changes and proce
   assert.equal((await store.commit(uid,1,{...pro(),status:'canceled',pro:{...pro().pro,status:'canceled'}},{id:second,owner})).kind,'committed')
   assert.equal(Number(await query("select active_seats from faangin.stats where key='pro';")),before)
 })
-test('services with real SQL preserve one uid/device through BYOK, Pro, webhook retry and cancellation',testSql,async()=>{
+const byokPrice = { lookup_key: 'faangin_byok_v1', type: 'one_time', currency: 'usd', unit_amount: 1000 }
+const byokLineItems = { has_more: false, data: [{ quantity: 1, price: byokPrice }] }
+
+test('services reject new BYOK sales and preserve one uid/device through legacy fulfillment, Pro and cancellation',testSql,async()=>{
   const uid=await addUser(),user={id:uid,email:'buyer@example.test',emailVerified:true},sessions:Array<Record<string,unknown>>=[],subscriptions=new Map<string,Record<string,unknown>>()
-  let customerNo=0
+  let customerNo=0, monthlyInterval = 'month', finishBeforeOpenList: Record<string,unknown> | undefined
+  let lineItems = byokLineItems
   const iterable=(items:unknown[])=>({async *[Symbol.asyncIterator](){yield*items}})
   const stripe={
     customers:{async create(){return{id:`cus_sql_${++customerNo}`}}},
-    prices:{async list(){return{data:[{id:'price_fixture'}]}}},
+    prices:{async list({lookup_keys:[lookupKey]}:{lookup_keys:string[]}){
+      const prices = {
+        faangin_pro_monthly_v2: { type: 'recurring', currency: 'usd', unit_amount: 4999, recurring: { interval: monthlyInterval, interval_count: 1 } },
+        faangin_pro_annual_v2: { type: 'recurring', currency: 'usd', unit_amount: 35988, recurring: { interval: 'year', interval_count: 1 } }
+      }
+      return { data: [{ ...prices[lookupKey as keyof typeof prices], lookup_key: lookupKey, id: `price_${lookupKey}` }] }
+    }},
     subscriptions:{list:()=>iterable([...subscriptions.values()]),async retrieve(id:string){return subscriptions.get(id)!}},
-    checkout:{sessions:{list:(params:{status:string})=>iterable(sessions.filter(s=>s.status===params.status)),async expire(id:string){sessions.find(s=>s.id===id)!.status='expired'},async create(params:Record<string,unknown>){const s={id:`cs_sql_${sessions.length}`,status:'open',...params,url:'https://checkout.stripe.test/sql'};sessions.push(s);return s}}},
+    checkout:{sessions:{
+      list({status}:{status:string}){
+        if (status === 'open' && finishBeforeOpenList) {
+          subscriptions.set(String(finishBeforeOpenList.id), finishBeforeOpenList)
+          finishBeforeOpenList = undefined
+          Object.assign(sessions.at(-1)!, { status: 'complete', payment_status: 'paid' })
+        }
+        return iterable(sessions.filter(session => session.status === status))
+      },
+      async listLineItems(){return lineItems},
+      async expire(id:string){sessions.find(s=>s.id===id)!.status='expired'},
+      async create(params:Record<string,unknown>){const s={id:`cs_sql_${sessions.length}`,status:'open',...params,url:'https://checkout.stripe.test/sql'};sessions.push(s);return s}
+    }},
     billingPortal:{configurations:{async list(){return{data:[{id:'bpc_fixture',active:true,metadata:{faangin:'v1'}}]}}}},charges:{list:()=>iterable([{paid:true,status:'succeeded',customer:'cus_sql_1',refunded:false,disputed:false}]),async retrieve(){return{customer:'cus_sql_1'}}}
   }as unknown as Stripe
   const billing=createBillingService({store,stripe,hostingOrigin:'https://example.supabase.test/functions/v1/billing-return',expectLivemode:false})
   const keys=generateKeyPairSync('ed25519'),account=createAccountService({store,auth:{async getUserById(){return user},async generateMagicLink(){return{uid,tokenHash:'fixture'}}},signingKey:keys.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'),activationUrl:'http://127.0.0.1:4000/activate'})
   const event=(id:string,type:string,object:Record<string,unknown>)=>({id,type,livemode:false,data:{object}}as unknown as Stripe.Event)
-  assert.ok((await billing.checkout(user,{plan:'byok'})).url)
-  const customer=await store.customer(uid)
-  const byok=event(`evt_byok_${uid}`,'checkout.session.completed',{id:`cs_byok_${uid}`,created:Math.floor(Date.now()/1000),mode:'payment',payment_status:'paid',customer,payment_intent:`pi_byok_${uid}`,metadata:{uid,plan:'byok'}})
+  await assert.rejects(billing.checkout(user,{plan:'byok'}), /monthly or annual Pro/)
+  assert.equal(sessions.length,0)
+  assert.equal(customerNo,0)
+  assert.equal(await store.customer(uid),null)
+  const customer='cus_sql_1'
+  await store.bindCustomer(uid,customer)
+  const paidByok={id:`cs_byok_${uid}`,created:Math.floor(Date.now()/1000),mode:'payment',payment_status:'paid',customer,payment_intent:`pi_byok_${uid}`,metadata:{uid,plan:'byok'}}
+  const invalidLineItems = [
+    { ...byokLineItems, has_more: true },
+    { ...byokLineItems, data: [{ quantity: 2, price: byokPrice }] },
+    { ...byokLineItems, data: [{ quantity: 1, price: { ...byokPrice, lookup_key: 'other_product' } }] },
+    { ...byokLineItems, data: [{ quantity: 1, price: { ...byokPrice, currency: 'eur' } }] },
+    { ...byokLineItems, data: [{ quantity: 1, price: { ...byokPrice, unit_amount: 1 } }] }
+  ]
+  for (const [i, items] of invalidLineItems.entries()) {
+    lineItems = items
+    const outcome = await billing.processWebhook(event(`evt_foreign_${i}_${uid}`,'checkout.session.completed',paidByok))
+    assert.equal(outcome.outcome,'ignored')
+    assert.equal((await store.readEntitlement(uid)).document.plan,'none')
+  }
+  lineItems = byokLineItems
+  const byok=event(`evt_byok_${uid}`,'checkout.session.completed',paidByok)
   await billing.processWebhook(byok)
+  assert.equal((await billing.processWebhook(byok)).duplicate,true)
   assert.equal((await account.issueLicense(uid,{deviceId:'mac-sql-flow-01',deviceName:'Journey Mac'})).plan,'byok')
+  await billing.checkout(user,{plan:'pro_annual'})
+  assert.deepEqual(sessions.at(-1)?.line_items,[{price:'price_faangin_pro_annual_v2',quantity:1}])
+  assert.equal(sessions.at(-1)?.mode,'subscription')
+  monthlyInterval = 'year'
+  await assert.rejects(billing.checkout(user,{plan:'pro_monthly'}), /plan is not configured/)
+  assert.deepEqual(sessions.at(-1)?.line_items,[{price:'price_faangin_pro_annual_v2',quantity:1}])
+  monthlyInterval = 'month'
   await billing.checkout(user,{plan:'pro_monthly'})
-  const subId=`sub_${uid}`,subscription=fakeSubscription({id:subId,customer:customer!,uid})
-  subscriptions.set(subId,subscription)
+  assert.deepEqual(sessions.at(-1)?.line_items,[{price:'price_faangin_pro_monthly_v2',quantity:1}])
+  const subId=`sub_${uid}`,subscription=fakeSubscription({id:subId,customer:customer!,uid,lookupKey:'faangin_pro_monthly_v2'})
+  finishBeforeOpenList = subscription
+  await assert.rejects(billing.checkout(user,{plan:'pro_monthly'}), /Pro is already active/)
+  assert.equal(sessions.length,2)
   const active=event(`evt_active_${uid}`,'customer.subscription.created',subscription)
   await billing.processWebhook(active);assert.equal((await billing.processWebhook(active)).duplicate,true)
   assert.equal((await account.issueLicense(uid,{deviceId:'mac-sql-flow-01',deviceName:'Journey Mac'})).plan,'pro')
-  await assert.rejects(billing.checkout(user,{plan:'byok'}),/already purchased/)
+  await assert.rejects(billing.checkout(user,{plan:'pro_monthly'}),/Pro is already active/)
   subscriptions.set(subId,{...subscription,status:'canceled'})
   await billing.processWebhook(event(`evt_cancel_${uid}`,'customer.subscription.deleted',subscription))
   assert.equal((await account.issueLicense(uid,{deviceId:'mac-sql-flow-01',deviceName:'Journey Mac'})).plan,'byok')
@@ -102,7 +154,7 @@ test('concurrent refund wins over a purchase that already read an earlier SQL ve
   const uid=await addUser(),customer=`cus_race_${uid}`,intent=`pi_race_${uid}`,purchaseId=`evt_purchase_${uid}`
   await store.bindCustomer(uid,customer)
   const iterable=(items:unknown[])=>({async *[Symbol.asyncIterator](){yield*items}})
-  const stripe={charges:{list:()=>iterable([{paid:true,status:'succeeded',customer,refunded:false,disputed:false}])},invoicePayments:{list:()=>iterable([])}} as unknown as Stripe
+  const stripe={checkout:{sessions:{async listLineItems(){return byokLineItems}}},charges:{list:()=>iterable([{paid:true,status:'succeeded',customer,refunded:false,disputed:false}])},invoicePayments:{list:()=>iterable([])}} as unknown as Stripe
   let signalCommit!:()=>void,releaseCommit!:()=>void,first=true
   const atCommit=new Promise<void>(resolve=>{signalCommit=resolve}),resume=new Promise<void>(resolve=>{releaseCommit=resolve})
   const guardedStore=new Proxy(store,{get(target,key){

@@ -92,6 +92,7 @@ export function harness(t: TestContext, options: HarnessOptions = {}) {
     startDeviceSignIn: async (): Promise<DeviceSignInStart> => ({ deviceCode: 'device-code', userCode: 'ABCD-EFGH', expiresIn: 600, interval: 5 }),
     waitForDeviceSignIn: async () => ({ status: 'approved', tokenHash: 'custom-token', uid: 'user-1' }),
     exchangeDeviceToken: async () => ({ uid: 'user-1', accessToken: 'id-token-1', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
+    exchangeOAuthCode: async () => ({ uid: 'user-1', accessToken: 'id-token-1', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
     refreshAuthSession: async () => ({ uid: 'user-1', accessToken: 'id-token-2', refreshToken: 'refresh-1', expiresAt: clock.now + 3600_000 }),
     revokeAuthSession: async () => {},
     callFunction: async () => { throw new Error('unexpected callFunction') },
@@ -103,7 +104,7 @@ export function harness(t: TestContext, options: HarnessOptions = {}) {
     return [name, name === 'verifyLicenseWithKeys' ? implementation : (...args: unknown[]) => { calls.push({ name, args }); return implementation(...args) }]
   })) as unknown as CloudApi
 
-  const service = new LicenseService({
+  const createService = () => new LicenseService({
     config: options.config === undefined ? CONFIG : options.config,
     store,
     identity: { get: async () => DEVICE },
@@ -117,7 +118,8 @@ export function harness(t: TestContext, options: HarnessOptions = {}) {
     dailyRefresh: false,
     purchaseRefreshMs: options.purchaseRefreshMs
   })
+  const service = createService()
   t.after(() => service.dispose())
   const count = (name: keyof CloudApi) => calls.filter(call => call.name === name).length
-  return { service, store, dir, signer, clock, opened, changes, calls, count, token, secrets, activation }
+  return { service, createService, store, dir, signer, clock, opened, changes, calls, count, token, secrets, activation }
 }

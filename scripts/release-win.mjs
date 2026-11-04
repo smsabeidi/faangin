@@ -97,6 +97,8 @@ async function main() {
   if (args.length > 1 || (args.length === 1 && args[0] !== '--check')) throw new Error('Usage: npm run release:win [-- --check]. This command never publishes.')
   const setup = validateReleaseEnvironment(process.env)
   const env = { ...process.env }
+  // Signed distributions must never inherit the packaged QA build opt-in.
+  env.FAANGIN_PACKAGE_QA = '0'
   // No provider key is needed for packaging. Disable potentially sensitive debug output.
   delete env.OPENAI_API_KEY
   delete env.DEBUG

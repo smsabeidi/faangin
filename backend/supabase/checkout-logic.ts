@@ -1,6 +1,5 @@
 // Pure decisions behind createCheckoutSession: no I/O, so unit tests need no emulator and index.ts exports no stray symbols.
 import { createHash } from 'node:crypto'
-import type { Plan } from './config.ts'
 import { entitledPlan, type Entitlement } from './entitlements.ts'
 
 /** flags/global, the parts Checkout reads. Missing fields fall back to these defaults. */
@@ -24,8 +23,7 @@ export function parseCheckoutFlags(raw: Record<string, unknown> | undefined): Ch
 }
 
 /** Why a checkout may not start, or null when it may. Pure. */
-export function checkoutBlocked(plan: Plan, entitlement: Entitlement, flags: CheckoutFlags, activeSeats: number): string | null {
-  if (plan === 'byok') return entitlement.byok?.status === 'active' || entitledPlan(entitlement) === 'byok' ? 'BYOK is already purchased' : null
+export function checkoutBlocked(entitlement: Entitlement, flags: CheckoutFlags, activeSeats: number): string | null {
   if (entitledPlan(entitlement) === 'pro') return 'Pro is already active'
   if (!flags.checkoutOpen) return 'Pro checkout is closed right now'
   if (activeSeats >= flags.proSeatCap) return 'Pro is full right now'

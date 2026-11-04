@@ -2,6 +2,7 @@
 import type Stripe from 'npm:stripe@23.0.1'
 import { PRICE_LOOKUP, RAMP_DAYS } from './config.ts'
 import type { Entitlement, EntitlementStatus } from './entitlements.ts'
+import { ServiceError } from './errors.ts'
 
 const RAMP_MS = RAMP_DAYS * 24 * 60 * 60 * 1000
 
@@ -93,13 +94,16 @@ export async function normalizeStripeEvent(
     case 'customer.subscription.paused':
     case 'customer.subscription.resumed': {
       // Delivery order is not guaranteed: a late 'active' update must not resurrect a subscription that has since been
-      // canceled. Stripe's guidance is to read the current object, so the payload is only a fallback when it is gone.
+      // canceled. When Stripe cannot find the current object, only an access-ending payload is safe to apply.
       const payload = event.data.object
       if (!fetchSubscription) return normalizeSubscription(payload)
       try {
         return normalizeSubscription(await fetchSubscription(payload.id))
       } catch (err) {
-        if ((err as { code?: string }).code === 'resource_missing') return normalizeSubscription(payload)
+        if ((err as { code?: string }).code === 'resource_missing') {
+          if (SUBSCRIPTION_STATUS[payload.status] === 'canceled') return normalizeSubscription(payload)
+          throw new ServiceError('unavailable', 'Current subscription state is unavailable; retry confirmation')
+        }
         throw err
       }
     }
@@ -132,7 +136,12 @@ export async function normalizeStripeEvent(
   }
 }
 
-export const isProPrice = (lookupKey: string) => lookupKey === PRICE_LOOKUP.pro_monthly || lookupKey === PRICE_LOOKUP.pro_annual
+const PRO_PRICE_LOOKUPS = new Set<string>([
+  PRICE_LOOKUP.pro_monthly, PRICE_LOOKUP.pro_annual,
+  // Existing subscriptions still renew on their original Stripe Prices.
+  'faangin_pro_monthly', 'faangin_pro_annual'
+])
+export const isProPrice = (lookupKey: string) => PRO_PRICE_LOOKUPS.has(lookupKey)
 
 const LIVE_PRO = new Set<EntitlementStatus>(['active', 'past_due'])
 

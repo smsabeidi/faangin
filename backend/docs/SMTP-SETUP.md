@@ -1,6 +1,6 @@
 # Auth email delivery and remaining acceptance
 
-Updated November 2, 2026. Actual signup confirmation and password-recovery emails from **Faangin <noreply@auth.faangin.com>** reached the approved connected Hostinger inbox. Signup confirmation completed; recovery reached its new-password form. The recovery page now independently confirms the password saved and requests returning to Faangin for a new code. The sign-in/device code expired without device approval/session exchange; reused/expired-link rejection and full native UI acceptance remain pending.
+Updated November 3, 2026. Actual signup confirmation and password-recovery emails from **Faangin <noreply@auth.faangin.com>** reached the approved connected Hostinger inbox. Signup confirmation completed; recovery reached its new-password form. The recovery page now independently confirms the password saved and requests returning to Faangin for a new code. The sign-in/device code expired without device approval/session exchange; reused/expired-link rejection and full native UI acceptance remain pending.
 
 ## Current verified state
 
@@ -11,7 +11,7 @@ Updated November 2, 2026. Actual signup confirmation and password-recovery email
 | `rsend.auth.faangin.com` | CNAME → `rsend.forge.rmta.net` |
 | `send.auth.faangin.com` | CNAME → `send.forge.rmta.net`; SPF/MX resolve through CNAME |
 | `_dmarc.auth.faangin.com` | Absent; DMARC remains a separate deliverability/protection step |
-| Supabase Auth readback | Earlier API read returned HTTP 200 with confirmation required and SMTP unset. SMTP has since been saved in the dashboard and verified after reload. Current Management API access is unavailable because the scoped token expired |
+| Supabase Auth readback | Earlier API read returned HTTP 200 with confirmation required and SMTP unset. SMTP has since been saved in the dashboard and verified after reload. Current deployment token intentionally grants no Auth configuration access; earlier Auth API readback remains historical |
 | Callback URLs | Previously approved Site URL and loopback allowlist remain unchanged and correct |
 | Resend domain | auth.faangin.com is Verified after Verify DNS records; DKIM and both Forge CNAME sending checks passed. Sending enabled, receiving disabled |
 | API key | Created after fresh approval: Faangin Auth / Sending access / auth.faangin.com. Captured/current key stored only in ignored backend/.env.smtp.local, mode 0600; its masked prefix matched the selected key |
@@ -40,7 +40,7 @@ The current key is named **Faangin Auth**, with **Sending access** restricted to
 
 These settings and the protected key were saved, and a reload confirmed custom SMTP enabled with no unsaved changes. The nonsecret values follow [Resend's Supabase SMTP guide](https://resend.com/docs/send-with-supabase-smtp). Keep click and open tracking **off** for this authentication subdomain; rewriting links can break single-use Auth links. See [Resend Auth deliverability](https://resend.com/docs/knowledge-base/how-do-i-maximize-deliverability-for-supabase-auth-emails).
 
-The previously approved 24-hour scoped Supabase token is now invalid/expired: the project read returned HTTP 401. Remote Management API verification is currently unavailable; the earlier Auth readback remains historical evidence only. Saving it through the Management API additionally requires both `auth_config_write` and `project_admin_write`, so do not silently expand that token. Use the owner's authorized Dashboard workflow. Read back only nonsecret settings after saving. [Read permissions](https://supabase.com/docs/reference/api/v1-get-auth-service-config), [write permissions](https://supabase.com/docs/reference/api/v1-update-auth-service-config).
+The previous scoped token expired; a fresh approved 24-hour token now supports project-read and Edge function/secret deployment only. It does not grant Auth configuration read/write, so earlier Auth API readback remains historical and owner Dashboard access is the current Auth settings path. Saving it through the Management API additionally requires both `auth_config_write` and `project_admin_write`, so do not silently expand that token. Use the owner's authorized Dashboard workflow. Read back only nonsecret settings after saving. [Read permissions](https://supabase.com/docs/reference/api/v1-get-auth-service-config), [write permissions](https://supabase.com/docs/reference/api/v1-update-auth-service-config).
 
 ## Minimal acceptance
 

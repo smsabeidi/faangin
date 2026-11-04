@@ -267,13 +267,24 @@ describe('applyStripeEvent: payment identity and delivery ordering', () => {
       assert.equal(applyStripeEvent(EMPTY_ENTITLEMENT, subscriptionEvent({ priceLookupKey }), NOW), EMPTY_ENTITLEMENT)
       assert.equal(applyStripeEvent(proActive, subscriptionEvent({ subscriptionId: 'sub_foreign', priceLookupKey }), LATER), proActive)
     }
-    const annual = applyStripeEvent(EMPTY_ENTITLEMENT, subscriptionEvent({ priceLookupKey: 'faangin_pro_annual' }), NOW)
-    assert.equal(entitledPlan(annual), 'pro')
     const moved = applyStripeEvent(proActive, subscriptionEvent({ priceLookupKey: 'other_product' }), LATER)
     assert.equal(moved.pro?.status, 'canceled', 'moving the held subscription off a Faangin price removes Pro access')
     assert.equal(entitledPlan(moved), 'none')
     const both = applyStripeEvent(proActive, byokPurchase, NOW)
     assert.equal(entitledPlan(applyStripeEvent(both, subscriptionEvent({ priceLookupKey: 'other_product' }), LATER)), 'byok')
+  })
+
+  it('current and legacy Pro prices grant access and renew the same subscription', () => {
+    for (const priceLookupKey of ['faangin_pro_monthly', 'faangin_pro_annual', 'faangin_pro_monthly_v2', 'faangin_pro_annual_v2']) {
+      const purchased = applyStripeEvent(EMPTY_ENTITLEMENT, subscriptionEvent({ priceLookupKey }), NOW)
+      assert.equal(entitledPlan(purchased), 'pro', priceLookupKey)
+      const renewed = applyStripeEvent(purchased, subscriptionEvent({ priceLookupKey, currentPeriodStart: LATER, currentPeriodEnd: LATER + 30 * DAY }), LATER)
+      assert.equal(entitledPlan(renewed), 'pro', priceLookupKey)
+      assert.equal(renewed.pro?.priceLookupKey, priceLookupKey)
+      assert.equal(renewed.pro?.currentPeriodStart, LATER)
+      assert.equal(renewed.pro?.startedAt, NOW)
+      assert.equal(seatDelta(purchased, renewed), 0)
+    }
   })
 
   it('old BYOK, old Pro and unbound charges cannot revoke current Pro', () => {
@@ -405,9 +416,11 @@ describe('normalizeStripeEvent', () => {
       const normalized = await normalizeStripeEvent(asEvent(type, stalePayload), current)
       assert.equal(normalized?.kind === 'subscription' ? normalized.status : 'n/a', 'canceled', type)
     }
-    // payload used when Stripe no longer has the object; any other failure propagates so Stripe retries the delivery
+    // A missing Stripe object may end access, but a stale active snapshot cannot grant it.
     const gone = async () => { throw Object.assign(new Error('No such subscription'), { code: 'resource_missing' }) }
-    assert.equal((await normalizeStripeEvent(asEvent('customer.subscription.updated', stalePayload), gone))?.kind, 'subscription')
+    await assert.rejects(normalizeStripeEvent(asEvent('customer.subscription.updated', stalePayload), gone), /Current subscription state is unavailable/)
+    const deleted = await normalizeStripeEvent(asEvent('customer.subscription.deleted', { ...stalePayload, status: 'canceled' }), gone)
+    assert.equal(deleted?.kind === 'subscription' && deleted.status, 'canceled')
     const down = async () => { throw new Error('network down') }
     await assert.rejects(normalizeStripeEvent(asEvent('customer.subscription.updated', stalePayload), down), /network down/)
   })

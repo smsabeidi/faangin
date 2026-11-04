@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path'
 import test, { before } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { win32Platform } from '../src/main/platform'
+import { GOOGLE_AUTH_REDIRECT } from '../src/main/licensing/auth-redirect'
 
 const require = createRequire(resolve('package.json'))
 let release: any
@@ -19,6 +20,13 @@ const base = { CSC_NAME: `Fixture Developer (${team})`, APPLE_TEAM_ID: team }
 const keychain = { ...base, APPLE_KEYCHAIN_PROFILE: 'fixture-profile' }
 const description = `Authority=Developer ID Application: Fixture Developer (${team})\nTeamIdentifier=${team}\nTimestamp=Oct 11, 2026 at 12:00:00 PM\nCodeDirectory v=20500 size=1 flags=0x10000(runtime) hashes=1+1 location=embedded\n`
 const nsis = { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, shortcutName: 'Faangin', deleteAppDataOnUninstall: false, runAfterFinish: true }
+const fuses = {
+  runAsNode: false,
+  enableNodeOptionsEnvironmentVariable: false,
+  enableNodeCliInspectArguments: false,
+  enableEmbeddedAsarIntegrityValidation: true,
+  onlyLoadAppFromAsar: true
+}
 
 test('public distribution config cannot silently skip signing or alter unsigned local packaging', async () => {
   const local = load(await readFile('electron-builder.yml', 'utf8'))
@@ -39,7 +47,10 @@ test('public distribution config cannot silently skip signing or alter unsigned 
   assert.equal(signed.dmg.writeUpdateInfo, false)
   assert.equal(signed.publish, null)
   assert.equal(signed.appId, local.appId)
+  assert.deepEqual(signed.files, local.files)
   assert.deepEqual(signed.mac.extendInfo, local.mac.extendInfo)
+  assert.deepEqual(signed.mac.protocols, local.mac.protocols)
+  assert.deepEqual(local.mac.protocols, [{ name: 'com.faangin.desktop.auth', role: 'Viewer', schemes: [new URL(GOOGLE_AUTH_REDIRECT).protocol.slice(0, -1)] }])
 })
 
 test('Windows packaging ships the committed ICO, installs per user without elevation and keeps its release config signed', async () => {
@@ -69,6 +80,15 @@ test('Windows packaging ships the committed ICO, installs per user without eleva
   assert.deepEqual(signed.files, local.files)
   assert.deepEqual(signed.win, { ...local.win, verifyUpdateCodeSignature: false })
   assert.deepEqual(signed.nsis, { ...nsis, differentialPackage: false })
+})
+
+test('all packages reject Node injection flags and require a verified ASAR', async () => {
+  for (const file of ['electron-builder.yml', 'electron-builder.release.yml', 'electron-builder.release-win.yml']) {
+    const config = load(await readFile(file, 'utf8'))
+    assert.equal(config.asar, true)
+    assert.notEqual(config.disableAsarIntegrity, true)
+    assert.deepEqual(config.electronFuses, file === 'electron-builder.yml' ? { ...fuses, resetAdHocDarwinSignature: true } : fuses)
+  }
 })
 
 // app-builder-lib loads its validator through jiti, which rewrites __filename to backslashes on win32 while the host's `path` stays posix.

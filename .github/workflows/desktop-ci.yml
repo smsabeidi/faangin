@@ -25,12 +25,13 @@ jobs:
       matrix:
         os: [macos-14, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The response-delivery audit compares against the compiler pinned at a historical commit
           # (scripts/response-delivery-eval.ts DELIVERY_BASELINE), which a shallow clone does not contain.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -57,6 +58,8 @@ jobs:
         id: winpkg
         if: runner.os == 'Windows'
         run: npm run package:win
+        env:
+          FAANGIN_PACKAGE_QA: '1'
       - name: Smoke the packaged Windows app
         if: runner.os == 'Windows'
         run: npm run smoke
@@ -89,36 +92,49 @@ jobs:
           FAANGIN_LAYOUT_QA_OUTPUT: ${{ runner.temp }}\qa\overlay-layout
       - name: Upload the Windows QA reports and screenshots
         if: runner.os == 'Windows' && always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: faangin-windows-qa
           path: ${{ runner.temp }}\qa
           if-no-files-found: ignore
-      - name: Build the unsigned Windows installer
-        if: runner.os == 'Windows'
-        run: npx electron-builder --win --x64 --publish never
       - name: Upload the unpacked Windows app
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: faangin-windows-unpacked
+          name: faangin-windows-unpacked-qa-only
           path: dist/win-unpacked
+          if-no-files-found: error
+      - name: Build the unsigned Windows installer
+        if: runner.os == 'Windows'
+        # Rebuild the main bundle with QA disabled before packaging an installer.
+        run: npm run dist:win -- --publish never
+        env:
+          FAANGIN_PACKAGE_QA: '0'
       - name: Upload the Windows installer
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: faangin-windows-installer
+          name: faangin-windows-installer-unsigned
           path: dist/*.exe
+          if-no-files-found: error
       - name: Package the unpacked macOS app
         if: runner.os == 'macOS'
         run: npm run package:mac
+        env:
+          FAANGIN_PACKAGE_QA: '1'
+      - name: Smoke the packaged macOS app
+        if: runner.os == 'macOS'
+        run: npm run smoke
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}/dist/mac-arm64/Faangin.app
       - name: Archive the unpacked macOS app
         # The .app bundle holds symlinks that the artifact zipper would flatten; ditto keeps them.
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent dist/mac-arm64/Faangin.app dist/Faangin-macOS-arm64-unpacked.zip
+        run: ditto -c -k --sequesterRsrc --keepParent dist/mac-arm64/Faangin.app dist/Faangin-macOS-arm64-unpacked-qa-only.zip
       - name: Upload the unpacked macOS app
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: faangin-macos-unpacked
-          path: dist/Faangin-macOS-arm64-unpacked.zip
+          name: faangin-macos-unpacked-qa-only
+          path: dist/Faangin-macOS-arm64-unpacked-qa-only.zip
+          if-no-files-found: error

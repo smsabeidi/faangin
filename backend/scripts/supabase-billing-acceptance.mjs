@@ -23,7 +23,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const PROJECT = 'uxgphdpcgcpgwbwfibkx', ACCOUNT = 'acct_1UVc6oRrWEBZT5Mj'
 const BASE = `https://${PROJECT}.supabase.co`, API = `${BASE}/functions/v1/faangin-api`
 const execute = promisify(execFile)
-const PLANS = { byok: ['faangin_byok_v1', 1000], pro_monthly: ['faangin_pro_monthly', 1499], pro_annual: ['faangin_pro_annual', 14400] }
+const PLANS = { byok: ['faangin_byok_v1', 1000], pro_monthly: ['faangin_pro_monthly_v2', 4999], pro_annual: ['faangin_pro_annual_v2', 35988] }
+const LEGACY_PRO_PLANS = { pro_monthly: ['faangin_pro_monthly', 1499], pro_annual: ['faangin_pro_annual', 14400] }
 class CheckError extends Error {}
 const check = (ok, message) => { if (!ok) throw new CheckError(message) }
 const q = value => `'${String(value).replaceAll("'", "''")}'`
@@ -153,12 +154,16 @@ function ownedUnpaidCheckout(session, expectedId) {
   check(session?.id === expectedId && isId(session.id, 'cs_test') && session.livemode === false && id(session.customer) === state.customerId && session.client_reference_id === state.uid && session.metadata?.uid === state.uid && session.metadata.plan === state.plan && session.mode === (state.plan === 'byok' ? 'payment' : 'subscription'), 'Checkout identity, customer, mode, or metadata does not match the exact unpaid fixture')
   check(session.payment_status === 'unpaid', 'Renewal refuses paid, no-payment-required, or unknown payment states')
 }
-async function expectedCheckoutPrice(session) {
+async function expectedCheckoutPrice(session, allowLegacy = false) {
   const items = []
   for await (const item of stripe.checkout.sessions.listLineItems(session.id, { limit: 100 })) {
     check(items.length < 2, 'Fixture Checkout has too many line items'); items.push(item)
   }
-  check(items.length === 1 && items[0].quantity === 1 && items[0].price?.lookup_key === PLANS[state.plan][0] && session.currency === 'usd' && session.amount_subtotal === PLANS[state.plan][1], 'Fixture Checkout price, quantity, currency, or subtotal is unexpected')
+  const lookupKey = items[0]?.price?.lookup_key
+  const matches = expected => expected && lookupKey === expected[0] && session.amount_subtotal === expected[1]
+  check(items.length === 1 && items[0].quantity === 1 && session.currency === 'usd'
+    && (matches(PLANS[state.plan]) || (allowLegacy && matches(LEGACY_PRO_PLANS[state.plan]))), 'Fixture Checkout price, quantity, currency, or subtotal is unexpected')
+  return lookupKey
 }
 async function renewCheckout() {
   check(state.phase === 'checkout-ready' && !state.eventId && !state.verifiedAt && !state.subscriptionId && !state.pendingCheckoutUrl, 'Only an unverified prepared fixture can renew; ambiguous or completed runs require management-backed review')
@@ -168,7 +173,7 @@ async function renewCheckout() {
   const old = await stripe.checkout.sessions.retrieve(oldId)
   ownedUnpaidCheckout(old, oldId)
   check(old.status === 'expired', 'Renewal requires the old Checkout to be expired; open, completed, or unknown sessions are refused')
-  await expectedCheckoutPrice(old)
+  await expectedCheckoutPrice(old, true)
   // The approved webhook read key intentionally has no Customers permission. Use only the
   // existing accountGuard-verified OAuth CLI for this exact read; do not broaden that key.
   const customer = await cliRequest('get', `/v1/customers/${state.customerId}`)
@@ -252,15 +257,13 @@ async function status(verifyLicense = false) {
   if (!session) return { run: state.run, phase: state.phase, readyForPayment: false, note: 'No owned Checkout found; use cleanup before a new prepare' }
   const result = { run: state.run, uid: state.uid, customerId: state.customerId, checkoutId: state.checkoutId, plan: state.plan, checkoutStatus: session.status, paymentStatus: session.payment_status, paidFulfillmentVerified: false, deliveryHttpVerified: false, emailDeliveryVerified: false, desktopUiVerified: false }
   if (session.status !== 'complete' || session.payment_status !== 'paid') return result
-  const items = []
-  for await (const item of stripe.checkout.sessions.listLineItems(session.id, { limit: 100 })) items.push(item)
-  check(items.length === 1 && items[0].quantity === 1 && items[0].price?.lookup_key === PLANS[state.plan][0] && session.currency === 'usd' && session.amount_subtotal === PLANS[state.plan][1], 'Paid Checkout price, quantity, currency, or subtotal is unexpected')
+  const lookupKey = await expectedCheckoutPrice(session, true)
   const document = (await sql(`select document from faangin.entitlements where uid=${q(state.uid)}::uuid`))[0]?.document
   const plan = state.plan === 'byok' ? 'byok' : 'pro'
   if (plan === 'byok') check(document?.byok?.checkoutSessionId === session.id && document.byok.paymentIntentId === id(session.payment_intent) && document.byok.status === 'active', 'Paid BYOK fulfillment has not settled as active ownership')
   else {
     const subscription = await stripe.subscriptions.retrieve(id(session.subscription))
-    check(subscription.livemode === false && id(subscription.customer) === state.customerId && subscription.metadata?.uid === state.uid && subscription.items.data[0]?.price.lookup_key === PLANS[state.plan][0], 'Paid subscription ownership or price is incorrect')
+    check(subscription.livemode === false && id(subscription.customer) === state.customerId && subscription.metadata?.uid === state.uid && subscription.items.data[0]?.price.lookup_key === lookupKey, 'Paid subscription ownership or price is incorrect')
     check(document?.pro?.subscriptionId === subscription.id && ['active', 'past_due'].includes(document.pro.status), 'Paid Pro fulfillment has not settled as active ownership')
     state.subscriptionId = subscription.id
   }
@@ -360,6 +363,7 @@ try {
       const url = new URL(created.data.result.url); check(url.protocol === 'https:' && url.hostname === 'checkout.stripe.com' && !url.username && !url.password, 'App returned an unexpected Checkout destination')
       state.checkoutUrl = url.href; await save()
       const session = await discoverCheckout(); check(session && session.url === state.checkoutUrl && session.status === 'open', 'App-created Checkout was not found as an owned open test session')
+      await expectedCheckoutPrice(session)
       state.phase = 'checkout-ready'; await save()
       console.log(JSON.stringify({ run, phase: state.phase, uid: state.uid, customerId: state.customerId, checkoutId: state.checkoutId, plan, privateStateFile: statePath, paymentCreated: false, note: 'Owner must complete the private saved sandbox Checkout separately; URL and credentials withheld' }, null, 2))
     } else {

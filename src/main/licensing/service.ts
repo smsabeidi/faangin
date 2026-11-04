@@ -1,14 +1,15 @@
 import * as realCloud from '../faangin-cloud'
-import { CloudError, LICENSE_PUBLIC_KEYS, proTransport, type DeviceInfo, type DeviceSignInStart, type InferenceTransport } from '../faangin-cloud'
+import { CloudError, LICENSE_PUBLIC_KEYS, proTransport, type AuthSession, type DeviceInfo, type DeviceSignInStart, type InferenceTransport } from '../faangin-cloud'
 import type { BillingPlan, BillingSummary, SignInPrompt } from '../../shared/billing-types'
-import type { AccountStore, StoredSession } from './account-store'
+import type { AccountStore, StoredGoogleSignIn, StoredSession } from './account-store'
 import { allowedExternalUrl, type CloudConfig, type ExternalPurpose } from './config'
 import type { DeviceIdentity } from './device-identity'
 import { deriveLicenseState } from './state'
 import { startActivationServer, type ActivationLease } from './activation-server'
+import { createGoogleSignIn, GOOGLE_SIGN_IN_TTL_MS, parseGoogleCallback } from './google-sign-in'
 
 /** The slice of faangin-cloud.ts the service uses; tests pass a fake. */
-export type CloudApi = Pick<typeof realCloud, 'startDeviceSignIn' | 'waitForDeviceSignIn' | 'exchangeDeviceToken' | 'refreshAuthSession' | 'revokeAuthSession' | 'callFunction' | 'fetchLicense' | 'verifyLicenseWithKeys'>
+export type CloudApi = Pick<typeof realCloud, 'startDeviceSignIn' | 'waitForDeviceSignIn' | 'exchangeDeviceToken' | 'exchangeOAuthCode' | 'refreshAuthSession' | 'revokeAuthSession' | 'callFunction' | 'fetchLicense' | 'verifyLicenseWithKeys'>
 
 export interface LicenseServiceOptions {
   /** Null when the build has no accounts backend. */
@@ -39,7 +40,7 @@ export class BillingError extends Error {
 /** The server no longer accepts this sign-in: the account was disabled, deleted or its token revoked. */
 class SessionRevoked extends Error {}
 
-const PLANS: readonly BillingPlan[] = ['byok', 'pro_monthly', 'pro_annual']
+const PLANS: readonly BillingPlan[] = ['pro_monthly', 'pro_annual']
 const DAY_MS = 24 * 60 * 60 * 1000
 const ACCESS_TOKEN_MARGIN_MS = 5 * 60_000
 const FOCUS_REFRESH_GAP_MS = 10_000
@@ -53,8 +54,14 @@ const MESSAGES = {
   encryption: 'OS credential encryption is unavailable. Unlock your system credential store and try again.',
   codeExpired: 'The sign-in code expired. Start again to get a new one.',
   signInFailed: 'Sign-in could not finish. Check your connection and start again.',
+  googleExpired: 'Google sign-in expired. Start again to continue.',
+  googleFailed: 'Google sign-in could not finish. Try again or continue with email.',
+  googleCancelled: 'Google sign-in was cancelled.',
+  googleStorage: 'Faangin could not save Google sign-in securely. Try again after checking your system credential store.',
   startFailed: 'Faangin could not reach the accounts service. Check your connection and try again.',
   revoked: 'You were signed out. Sign in again to keep using your plan.',
+  clearAccount: 'You were signed out, but Faangin could not remove all saved sign-in data from this device.',
+  clearLicense: 'Faangin could not remove the invalid saved license from this device.',
   deviceLimit: 'This account is already active on 3 devices. A device unused for 30 days frees its slot.',
   unverified: 'This build could not verify the license it received. Update Faangin and try again.',
   offline: 'Could not reach Faangin to check your license. A license you already have keeps working offline.',
@@ -63,6 +70,8 @@ const MESSAGES = {
   badLink: 'Faangin received an unexpected link and did not open it.',
   browser: 'The link could not be opened in your browser.'
 } as const
+
+type GoogleSignInAttempt = StoredGoogleSignIn & { exchanging: boolean }
 
 export class LicenseService {
   private readonly cloud: CloudApi
@@ -75,6 +84,8 @@ export class LicenseService {
   private activation: ActivationLease | null = null
   private signIn: SignInPrompt | null = null
   private signInAbort: AbortController | null = null
+  private googleSignIn: GoogleSignInAttempt | null = null
+  private googleSignInTimer: ReturnType<typeof setTimeout> | null = null
   private busy = false
   private error: string | null = null
   private awaitingPurchase = false
@@ -93,25 +104,37 @@ export class LicenseService {
   }
 
   /** Loads what is stored and re-checks the license in the background. Never blocks launch and needs no network. */
-  async start(): Promise<void> {
-    if (!this.options.config) return
-    const stored = await this.options.store.readSession()
-    this.session = stored?.provider === 'supabase' && stored.supabaseUrl === this.options.config.supabaseUrl ? stored : null
-    if (stored && !this.session) { await this.options.store.clearSession(); await this.options.store.clearLicense() }
-    this.token = await this.options.store.readLicense()
-    this.device = await this.options.identity.get()
-    this.emit()
-    if (this.options.dailyRefresh !== false) {
-      this.timer = setInterval(() => { void this.refresh({ background: true }) }, DAY_MS)
-      this.timer.unref?.()
-    }
-    if (this.session) void this.refresh({ background: true })
+  start(): Promise<void> {
+    return this.exclusive(async () => {
+      const config = this.options.config
+      if (!config) return
+      const stored = await this.options.store.readSession()
+      this.session = stored?.provider === 'supabase' && stored.supabaseUrl === config.supabaseUrl ? stored : null
+      if (stored && !this.session) { await this.options.store.clearSession(); await this.options.store.clearLicense() }
+      this.token = await this.options.store.readLicense()
+      this.device = await this.options.identity.get()
+      const pending = await this.options.store.readGoogleSignIn()
+      if (pending) {
+        if (!this.session && pending.supabaseUrl === config.supabaseUrl && pending.expiresAt > this.now()) this.setGoogleSignIn(pending)
+        else {
+          await this.options.store.clearGoogleSignIn()
+          if (!this.session && pending.supabaseUrl === config.supabaseUrl) this.error = MESSAGES.googleExpired
+        }
+      }
+      this.emit()
+      if (this.options.dailyRefresh !== false) {
+        this.timer = setInterval(() => { void this.refresh({ background: true }) }, DAY_MS)
+        this.timer.unref?.()
+      }
+      if (this.session) void this.refresh({ background: true })
+    })
   }
 
   dispose(): void {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     this.signInAbort?.abort()
+    this.forgetGoogleSignIn()
     void this.closeActivation()
     if (this.purchaseTimer) clearTimeout(this.purchaseTimer)
     this.purchaseTimer = null
@@ -124,6 +147,7 @@ export class LicenseService {
     return {
       state: deriveLicenseState({ configured: this.options.config !== null, signedIn: this.session !== null, hasToken: this.token !== null, verified }),
       signIn: this.signIn,
+      googleSignInPending: this.googleSignIn !== null,
       awaitingPurchase: this.awaitingPurchase,
       busy: this.busy,
       error: this.error,
@@ -138,7 +162,11 @@ export class LicenseService {
     this.signInAbort?.abort()
     const controller = new AbortController()
     this.signInAbort = controller
-    await this.closeActivation()
+    await this.exclusive(async () => {
+      if (controller.signal.aborted) return
+      await this.clearGoogleSignIn()
+      await this.closeActivation()
+    })
     if (controller.signal.aborted || this.signInAbort !== controller) return this.summary()
     this.signIn = null
     this.error = null
@@ -171,6 +199,69 @@ export class LicenseService {
     return this.summary()
   }
 
+  startGoogleSignIn(): Promise<BillingSummary> {
+    return this.exclusive(async () => {
+      const config = this.requireConfig()
+      if (this.session || this.googleSignIn) return this.summary()
+      if (!this.options.encryptionAvailable()) throw new BillingError(MESSAGES.encryption)
+      this.cancelSignIn()
+      const { url, verifier } = createGoogleSignIn(config.supabaseUrl)
+      const pending = { verifier, supabaseUrl: config.supabaseUrl, expiresAt: this.now() + GOOGLE_SIGN_IN_TTL_MS }
+      try { await this.options.store.writeGoogleSignIn(pending) } catch { throw new BillingError(MESSAGES.googleStorage) }
+      this.setGoogleSignIn(pending)
+      this.error = null
+      this.emit()
+      try { await this.open(url) } catch (error) {
+        await this.endGoogleSignIn(null)
+        throw error
+      }
+      return this.summary()
+    })
+  }
+
+  cancelGoogleSignIn(): Promise<BillingSummary> {
+    return this.exclusive(async () => {
+      if (this.googleSignIn) await this.endGoogleSignIn(null)
+      return this.summary()
+    })
+  }
+
+  async handleGoogleCallback(raw: string): Promise<void> {
+    const callback = parseGoogleCallback(raw)
+    const config = this.options.config
+    if (!callback || !config) return
+    const attempt = await this.exclusive(async () => {
+      const pending = this.googleSignIn
+      if (!pending || pending.exchanging || this.session) return null
+      if (pending.expiresAt <= this.now()) { await this.endGoogleSignIn(MESSAGES.googleExpired); return null }
+      if (callback.kind !== 'code') {
+        await this.endGoogleSignIn(callback.kind === 'cancelled' ? MESSAGES.googleCancelled : MESSAGES.googleFailed)
+        return null
+      }
+      pending.exchanging = true
+      return pending
+    })
+    if (!attempt || callback.kind !== 'code') return
+
+    // Supabase checks this code against the S256 challenge for this attempt. Its provider state is handled by Supabase.
+    let session: AuthSession | undefined
+    try { session = await this.cloud.exchangeOAuthCode(config.supabaseUrl, config.publishableKey, callback.code, attempt.verifier) } catch { /* Show a retryable error below. */ }
+    const signedIn = await this.exclusive(async () => {
+      if (this.googleSignIn !== attempt) return false
+      try {
+        await this.clearGoogleSignIn()
+        if (session) await this.storeAuthSession(config, session)
+        this.error = session ? null : MESSAGES.googleFailed
+      } catch {
+        this.error = MESSAGES.googleStorage
+      }
+      this.emit()
+      return this.error === null
+    })
+    if (signedIn) await this.refresh()
+    else if (session) void this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, session.accessToken).catch(() => {})
+  }
+
   /** Renderer links may reopen only this exact live lease, never arbitrary loopback services. */
   isActivationUrl(raw: string): boolean {
     return !!this.activation && this.signIn?.verificationUrl === raw && this.signIn.expiresAt > this.now()
@@ -179,11 +270,17 @@ export class LicenseService {
   signOut(): Promise<BillingSummary> {
     this.cancelSignIn()
     return this.exclusive(async () => {
-      const config = this.options.config, accessToken = this.accessMemo?.accessToken
-      await this.dropAccount()
-      this.error = null
+      const config = this.options.config, session = this.session, access = this.accessMemo
+      const cleared = await this.dropAccount()
+      this.error = cleared ? null : MESSAGES.clearAccount
       this.emit()
-      if (config && accessToken) void this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, accessToken).catch(() => {})
+      if (config && session) {
+        void (async () => {
+          const current = access && access.expiresAt > this.now() ? access : await this.cloud.refreshAuthSession(config.supabaseUrl, config.publishableKey, session.refreshToken)
+          if ('uid' in current && current.uid !== session.uid) return
+          await this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, current.accessToken)
+        })().catch(() => {})
+      }
       return this.summary()
     })
   }
@@ -213,7 +310,7 @@ export class LicenseService {
       if (!PLANS.includes(plan)) throw new BillingError('Unknown plan.')
       const url = await this.stripeLink('createCheckoutSession', { plan }, 'checkout', MESSAGES.checkout)
       this.awaitingPurchase = true
-      this.expectedPurchase = plan === 'byok' ? 'byok' : 'pro'
+      this.expectedPurchase = 'pro'
       try { await this.open(url) } catch (error) { this.awaitingPurchase = false; this.expectedPurchase = null; throw error }
       this.beginPurchaseChecks()
       this.error = null
@@ -288,36 +385,68 @@ export class LicenseService {
     return run
   }
 
+  private setGoogleSignIn(pending: StoredGoogleSignIn): void {
+    const attempt = this.googleSignIn = { ...pending, exchanging: false }
+    this.googleSignInTimer = setTimeout(() => {
+      void this.exclusive(async () => {
+        if (this.googleSignIn === attempt) await this.endGoogleSignIn(MESSAGES.googleExpired)
+      }).catch(() => {})
+    }, pending.expiresAt - this.now())
+    this.googleSignInTimer.unref()
+  }
+
+  private forgetGoogleSignIn(): void {
+    this.googleSignIn = null
+    if (this.googleSignInTimer) clearTimeout(this.googleSignInTimer)
+    this.googleSignInTimer = null
+  }
+
+  private async clearGoogleSignIn(): Promise<void> {
+    this.forgetGoogleSignIn()
+    await this.options.store.clearGoogleSignIn()
+  }
+
+  private async endGoogleSignIn(error: string | null): Promise<void> {
+    try { await this.clearGoogleSignIn(); this.error = error }
+    catch { this.error = MESSAGES.googleStorage }
+    this.emit()
+  }
+
+  private async storeAuthSession(config: CloudConfig, session: AuthSession, signal?: AbortSignal): Promise<boolean> {
+    const stored: StoredSession = { uid: session.uid, refreshToken: session.refreshToken, provider: 'supabase', supabaseUrl: config.supabaseUrl }
+    await this.options.store.writeSession(stored)
+    if (signal?.aborted) {
+      if (this.session) await this.options.store.writeSession(this.session)
+      else await this.options.store.clearSession()
+      return false
+    }
+    this.session = stored
+    this.accessMemo = { accessToken: session.accessToken, expiresAt: session.expiresAt }
+    return true
+  }
+
   private async finishSignIn(config: CloudConfig, start: DeviceSignInStart, controller: AbortController, activation: ActivationLease): Promise<void> {
     // Email confirmations and password recovery remain useful after the device code expires.
     // A fresh sign-in, explicit cancellation, disposal or the callback server's own one-hour limit closes it.
     let keepCallback = false
+    let exchanged: AuthSession | undefined
+    let accepted = false
     try {
       const result = await this.cloud.waitForDeviceSignIn(config.functionsBase, start, { signal: controller.signal, publishableKey: config.publishableKey })
       if (controller.signal.aborted || this.signInAbort !== controller) return
       if (result.status === 'aborted') return
       if (result.status === 'expired') { keepCallback = true; this.error = MESSAGES.codeExpired; return }
       const session = await this.cloud.exchangeDeviceToken(config.supabaseUrl, config.publishableKey, result.tokenHash, result.uid)
-      if (controller.signal.aborted || this.signInAbort !== controller) {
-        void this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, session.accessToken).catch(() => {})
-        return
-      }
+      exchanged = session
       await this.exclusive(async () => {
         if (controller.signal.aborted || this.signInAbort !== controller) return
-        const stored: StoredSession = { uid: session.uid, refreshToken: session.refreshToken, provider: 'supabase', supabaseUrl: config.supabaseUrl }
-        await this.options.store.writeSession(stored)
-        if (controller.signal.aborted || this.signInAbort !== controller) {
-          if (this.session) await this.options.store.writeSession(this.session)
-          else await this.options.store.clearSession()
-          return
-        }
-        this.session = stored
-        this.accessMemo = { accessToken: session.accessToken, expiresAt: session.expiresAt }
+        accepted = await this.storeAuthSession(config, session, controller.signal)
       })
     } catch (error) {
       if (!controller.signal.aborted) { keepCallback = true; this.error = MESSAGES.signInFailed }
       return
     } finally {
+      if (exchanged && !accepted) void this.cloud.revokeAuthSession(config.supabaseUrl, config.publishableKey, exchanged.accessToken).catch(() => {})
       if (!keepCallback || controller.signal.aborted) {
         await activation.close()
         if (this.activation === activation) this.activation = null
@@ -368,15 +497,12 @@ export class LicenseService {
 
   private async afterRefreshFailure(error: unknown, background: boolean): Promise<void> {
     if (error instanceof SessionRevoked || (error instanceof CloudError && error.code === 'UNAUTHENTICATED')) {
-      await this.dropAccount()
-      this.error = MESSAGES.revoked
-    } else if (error instanceof CloudError && error.code === 'FAILED_PRECONDITION') {
-      // Nothing is bought, or the purchase ended (refund, cancellation): the old license must not linger.
-      await this.options.store.clearLicense()
+      this.error = await this.dropAccount() ? MESSAGES.revoked : MESSAGES.clearAccount
+    } else if (error instanceof CloudError && (error.code === 'FAILED_PRECONDITION' || error.code === 'RESOURCE_EXHAUSTED')) {
+      // A server denial invalidates the cached license, including when the device's slot has been reassigned.
       this.token = null
-      this.error = null
-    } else if (error instanceof CloudError && error.code === 'RESOURCE_EXHAUSTED') {
-      this.error = MESSAGES.deviceLimit
+      this.error = error.code === 'RESOURCE_EXHAUSTED' ? MESSAGES.deviceLimit : null
+      try { await this.options.store.clearLicense() } catch { this.error = MESSAGES.clearLicense }
     } else if (error instanceof BillingError) {
       this.error = error.message
     } else if (!background || !['active', 'grace'].includes(this.summary().state.kind)) {
@@ -384,11 +510,10 @@ export class LicenseService {
     }
   }
 
-  private async dropAccount(): Promise<void> {
+  private async dropAccount(): Promise<boolean> {
     this.signInAbort?.abort()
     this.signInAbort = null
     this.signIn = null
-    await this.closeActivation()
     this.session = null
     this.token = null
     this.accessMemo = null
@@ -397,8 +522,13 @@ export class LicenseService {
     this.awaitingBillingReturn = false
     if (this.purchaseTimer) clearTimeout(this.purchaseTimer)
     this.purchaseTimer = null
-    await this.options.store.clearSession()
-    await this.options.store.clearLicense()
+    const cleanup = await Promise.allSettled([
+      this.closeActivation(),
+      this.clearGoogleSignIn(),
+      this.options.store.clearSession(),
+      this.options.store.clearLicense()
+    ])
+    return cleanup.every(result => result.status === 'fulfilled')
   }
 
   private async stripeLink(name: 'createCheckoutSession' | 'createPortalSession', data: unknown, purpose: ExternalPurpose, failure: string): Promise<string> {
@@ -409,8 +539,7 @@ export class LicenseService {
       result = await this.cloud.callFunction<{ url?: unknown }>(config.functionsBase, name, data, await this.accessToken(), config.publishableKey)
     } catch (error) {
       if (error instanceof SessionRevoked || (error instanceof CloudError && error.code === 'UNAUTHENTICATED')) {
-        await this.dropAccount()
-        this.error = MESSAGES.revoked
+        this.error = await this.dropAccount() ? MESSAGES.revoked : MESSAGES.clearAccount
         this.emit()
         throw new BillingError(MESSAGES.revoked)
       }

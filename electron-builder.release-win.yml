@@ -15,6 +15,12 @@ files:
   - '!node_modules/**/test/**'
   - '!node_modules/**/tests/**'
 asar: true
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
 npmRebuild: false
 forceCodeSigning: true
 win:

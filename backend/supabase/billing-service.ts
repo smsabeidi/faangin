@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type Stripe from 'npm:stripe@23.0.1'
-import { PRICE_LOOKUP, type Plan } from './config.ts'
+import { CHECKOUT_PRICE_USD_CENTS, isCheckoutPlan, LEGACY_BYOK_PRICE, PRICE_LOOKUP, type Plan } from './config.ts'
 import { ServiceError } from './errors.ts'
 import { applyStripeEvent, normalizeStripeEvent, normalizeSubscription, type NormalizedEvent } from './fulfill.ts'
 import { checkoutBlocked, customerIdempotencyKey, liveSubscriptionState, parseCheckoutFlags } from './checkout-logic.ts'
@@ -22,6 +22,18 @@ export function createBillingService(deps: BillingDeps) {
   const { store, stripe } = deps, now = deps.now ?? Date.now, owner = deps.owner ?? randomUUID
   const log = deps.log ?? (() => {})
   const origin = deps.hostingOrigin.replace(/\/$/, '')
+  function isConfiguredPrice(price: Stripe.Price | null | undefined, plan: Plan) {
+    if (price?.lookup_key !== PRICE_LOOKUP[plan] || price.currency !== 'usd' || price.unit_amount !== CHECKOUT_PRICE_USD_CENTS[plan]) return false
+    const interval = plan === 'pro_monthly' ? 'month' : 'year'
+    return price.type === 'recurring' && price.recurring?.interval === interval && price.recurring.interval_count === 1
+  }
+  async function isLegacyByokCheckout(sessionId: string) {
+    const items = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 2 })
+    const price = items.data[0]?.price
+    return !items.has_more && items.data.length === 1 && items.data[0].quantity === 1 &&
+      price?.lookup_key === LEGACY_BYOK_PRICE.lookupKey && price.currency === 'usd' &&
+      price.unit_amount === LEGACY_BYOK_PRICE.amountUsdCents && price.type === 'one_time' && !price.recurring
+  }
   async function customer(user: AccountUser) {
     const existing = await store.customer(user.id)
     if (existing) return existing
@@ -57,36 +69,29 @@ export function createBillingService(deps: BillingDeps) {
     async checkout(user: AccountUser, input: unknown) {
       if (!user.id) throw new ServiceError('unauthenticated', 'Sign in first')
       const plan = input && typeof input === 'object' ? (input as Record<string, unknown>).plan : undefined
-      if (typeof plan !== 'string' || !Object.hasOwn(PRICE_LOOKUP, plan)) throw new ServiceError('invalid-argument', 'plan must be byok, pro_monthly or pro_annual')
+      if (!isCheckoutPlan(plan)) throw new ServiceError('invalid-argument', 'Choose a monthly or annual Pro plan.')
       const lease = owner()
       if (!(await store.claimCheckout(user.id, lease))) throw new ServiceError('resource-exhausted', 'Another checkout is being prepared. Please wait a moment and try again.')
       try {
         const state = await store.billingState(user.id), flags = parseCheckoutFlags(state.flags)
-        const blocked = checkoutBlocked(plan as Plan, state.entitlement.document, flags, state.activeSeats)
+        const blocked = checkoutBlocked(state.entitlement.document, flags, state.activeSeats)
         if (blocked) throw new ServiceError('failed-precondition', blocked)
         const customerId = await customer(user)
-        if (plan === 'byok') {
-          for await (const completed of stripe.checkout.sessions.list({ customer: customerId, status: 'complete', limit: 100 })) {
-            if (completed.mode !== 'payment' || completed.metadata?.plan !== 'byok' || !['paid', 'no_payment_required'].includes(completed.payment_status)) continue
-            const known = state.entitlement.document.byok
-            if (known?.status === 'revoked' && (completed.id === known.checkoutSessionId || completed.created * 1000 < known.purchasedAt)) continue
-            throw new ServiceError('failed-precondition', 'Your BYOK purchase is already completed. Refresh your license while payment confirmation finishes.')
-          }
-        } else {
-          const subscriptions = []
-          for await (const subscription of stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 })) subscriptions.push(subscription)
-          const live = liveSubscriptionState(subscriptions)
-          if (live === 'access') throw new ServiceError('failed-precondition', 'Pro is already active')
-          if (live === 'on_hold') throw new ServiceError('failed-precondition', 'Your Pro subscription is on hold. Use Manage billing to pay the open invoice, or contact support.')
-        }
-        const price = (await stripe.prices.list({ lookup_keys: [PRICE_LOOKUP[plan as Plan]], active: true, limit: 1 })).data[0]
-        if (!price) throw new ServiceError('unavailable', 'This plan is not configured for checkout yet')
+        const price = (await stripe.prices.list({ lookup_keys: [PRICE_LOOKUP[plan]], active: true, limit: 1 })).data[0]
+        if (!isConfiguredPrice(price, plan)) throw new ServiceError('unavailable', 'This plan is not configured for checkout yet')
+        // Resolve open sessions before checking for payments. A session that completes during this check
+        // either fails expiration or appears in the subsequent paid-state check.
         for await (const earlier of stripe.checkout.sessions.list({ customer: customerId, status: 'open', limit: 100 })) {
           try { await stripe.checkout.sessions.expire(earlier.id) } catch {
             throw new ServiceError('unavailable', 'Your previous checkout is still resolving. Please wait a moment and try again.')
           }
         }
-        const session = await stripe.checkout.sessions.create(checkoutSessionParams({ plan: plan as Plan, uid: user.id, customer: customerId, priceId: price.id, hostingOrigin: origin, automaticTax: flags.automaticTax, termsConsent: flags.termsConsent, now: now() }))
+        const subscriptions = []
+        for await (const subscription of stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 })) subscriptions.push(subscription)
+        const live = liveSubscriptionState(subscriptions)
+        if (live === 'access') throw new ServiceError('failed-precondition', 'Pro is already active')
+        if (live === 'on_hold') throw new ServiceError('failed-precondition', 'Your Pro subscription is on hold. Use Manage billing to pay the open invoice, or contact support.')
+        const session = await stripe.checkout.sessions.create(checkoutSessionParams({ plan, uid: user.id, customer: customerId, priceId: price.id, hostingOrigin: origin, automaticTax: flags.automaticTax, termsConsent: flags.termsConsent, now: now() }))
         if (!session.url) throw new ServiceError('unavailable', 'Stripe returned no checkout URL')
         return { url: session.url }
       } finally {
@@ -111,7 +116,8 @@ export function createBillingService(deps: BillingDeps) {
       try {
         if (event.type === 'invoice.finalization_failed') log('invoice_finalization_failed', { id: event.id, invoice: event.data.object.id })
         const raw = await normalizeStripeEvent(event, id => stripe.subscriptions.retrieve(id))
-        const normalized = raw ? await bindPaymentState(raw, stripe) : null
+        const normalized = raw && (raw.kind !== 'byok_purchase' || await isLegacyByokCheckout(raw.checkoutSessionId))
+          ? await bindPaymentState(raw, stripe) : null
         if (normalized) {
           const uid = await resolveUid(normalized)
           if (uid) {

@@ -26,19 +26,14 @@ describe('parseCheckoutFlags', () => {
 describe('checkoutBlocked', () => {
   const flags = { checkoutOpen: true, proSeatCap: 2, automaticTax: false, termsConsent: false }
   const pro = (status: 'active' | 'past_due' | 'canceled'): Entitlement => ({ plan: 'pro', status, updatedAt: 1 })
-  it('BYOK is never gated by the Pro flags, only by owning it', () => {
-    assert.equal(checkoutBlocked('byok', EMPTY_ENTITLEMENT, { ...flags, checkoutOpen: false, proSeatCap: 0 }, 99), null)
-    assert.equal(checkoutBlocked('byok', { plan: 'byok', status: 'active', updatedAt: 1 }, flags, 0), 'BYOK is already purchased')
-    assert.equal(checkoutBlocked('byok', { plan: 'byok', status: 'revoked', updatedAt: 1 }, flags, 0), null)
-    assert.equal(checkoutBlocked('byok', { ...pro('active'), byok: { status: 'active', purchasedAt: 1, paymentIntentId: 'pi_owned', checkoutSessionId: 'cs_owned' } }, flags, 0), 'BYOK is already purchased')
-  })
   it('Pro: closed flag, full seats, and an active or past_due subscription all block', () => {
-    assert.equal(checkoutBlocked('pro_monthly', EMPTY_ENTITLEMENT, flags, 1), null)
-    assert.equal(checkoutBlocked('pro_monthly', EMPTY_ENTITLEMENT, { ...flags, checkoutOpen: false }, 0), 'Pro checkout is closed right now')
-    assert.equal(checkoutBlocked('pro_annual', EMPTY_ENTITLEMENT, flags, 2), 'Pro is full right now')
-    assert.equal(checkoutBlocked('pro_monthly', pro('active'), flags, 0), 'Pro is already active')
-    assert.equal(checkoutBlocked('pro_monthly', pro('past_due'), flags, 0), 'Pro is already active')
-    assert.equal(checkoutBlocked('pro_monthly', pro('canceled'), flags, 0), null)
+    assert.equal(checkoutBlocked(EMPTY_ENTITLEMENT, flags, 1), null)
+    assert.equal(checkoutBlocked(EMPTY_ENTITLEMENT, { ...flags, checkoutOpen: false }, 0), 'Pro checkout is closed right now')
+    assert.equal(checkoutBlocked(EMPTY_ENTITLEMENT, flags, 2), 'Pro is full right now')
+    assert.equal(checkoutBlocked(pro('active'), flags, 0), 'Pro is already active')
+    assert.equal(checkoutBlocked(pro('past_due'), flags, 0), 'Pro is already active')
+    assert.equal(checkoutBlocked(pro('canceled'), flags, 0), null)
+    assert.equal(checkoutBlocked({ plan: 'byok', status: 'active', updatedAt: 1 }, flags, 0), null)
   })
 })
 

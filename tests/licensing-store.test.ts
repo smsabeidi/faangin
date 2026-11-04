@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { mock } from 'node:test'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, type PathLike } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, type PathLike } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -73,6 +73,8 @@ test('the license token is a plain owner-only file that can be cleared', async t
 test('replacing a file retries brief Windows sharing violations and surfaces persistent or unrelated failures', async t => {
   const dir = directory(t)
   const store = new AccountStore({ userDataPath: dir, secrets: fakeSecrets() })
+  const preexisting = join(dir, 'license-token.txt.tmp')
+  writeFileSync(preexisting, 'preexisting file')
   const realRename = fsPromises.rename
   const failing = (code: string) => Promise.reject(Object.assign(new Error(code), { code }))
   let busy = 2
@@ -85,7 +87,8 @@ test('replacing a file retries brief Windows sharing violations and surfaces per
   await assert.rejects(store.writeLicense('v1.second.signature'), { code: 'EPERM' })
   assert.equal(spy.mock.callCount(), 3 + 5, 'a persistent violation gives up after five attempts')
   assert.equal(await store.readLicense(), 'v1.first.signature', 'the previous file is untouched')
-  assert.throws(() => readFileSync(join(dir, 'license-token.txt.tmp')), /ENOENT/, 'no temporary file is left behind')
+  assert.equal(readFileSync(preexisting, 'utf8'), 'preexisting file')
+  assert.deepEqual(readdirSync(dir).sort(), ['license-token.txt', 'license-token.txt.tmp'])
   spy.mock.mockImplementation(() => failing('EXDEV'))
   await assert.rejects(store.writeLicense('v1.third.signature'), { code: 'EXDEV' })
   assert.equal(spy.mock.callCount(), 3 + 5 + 1, 'unrelated errors are not retried')

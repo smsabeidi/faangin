@@ -1,6 +1,6 @@
 /** Plans a signed-in user can start Checkout for. The server maps each to its own Stripe price. */
-export type BillingPlan = 'byok' | 'pro_monthly' | 'pro_annual'
-/** What a license carries: BYOK is the one-time key license, Pro covers both subscription cadences. */
+export type BillingPlan = 'pro_monthly' | 'pro_annual'
+/** What a license carries: Pro covers both subscription cadences; BYOK remains only for licenses bought before Pro-only checkout. */
 export type LicensedPlan = 'byok' | 'pro'
 
 /** All times are Unix milliseconds. */
@@ -27,6 +27,8 @@ export interface SignInPrompt {
 export interface BillingSummary {
   state: LicenseState
   signIn: SignInPrompt | null
+  /** Waiting for the browser to return from Google sign-in. */
+  googleSignInPending: boolean
   /** Checkout was opened in the browser; the license is re-checked when the app regains focus. */
   awaitingPurchase: boolean
   busy: boolean

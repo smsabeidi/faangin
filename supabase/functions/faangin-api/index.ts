@@ -14,14 +14,14 @@ export function createAccountHandler(runtime: () => AccountRuntime = createRunti
       const route = match?.[1]
       if (match && request.method === 'GET' && (!route || route === 'health')) {
         const service = runtime()
-        return json({ ok: true, authConfigured: true, licenseConfigured: !!service.env.get('LICENSE_SIGNING_KEY'), billingConfigured: !!service.env.get('STRIPE_CHECKOUT_KEY') && !!service.env.get('STRIPE_WEBHOOK_KEY') && !!service.env.get('STRIPE_WEBHOOK_SECRET') }, 200, headers)
+        return json({ ok: true, authConfigured: service.authConfigured, licenseConfigured: !!service.env.get('LICENSE_SIGNING_KEY'), billingConfigured: service.billingConfigured }, 200, headers)
       }
       if (!route || !ROUTES.has(route)) return json({ error: { status: 'NOT_FOUND', message: 'Unknown account route' } }, 404, headers)
       if (request.method !== 'POST') return json({ error: { status: 'INVALID_ARGUMENT', message: 'POST only' } }, 405, headers)
       const service = runtime()
       if (route === 'reconcile') {
         await authorizeReconciliation(service, request)
-        return json({ result: await service.billing(true).service.reconcile() }, 200, headers)
+        return json({ result: await service.billing('webhook').service.reconcile() }, 200, headers)
       }
       if (route === 'deviceCodeStart') return json(await service.account.start(await body(request)), 200, headers)
       if (route === 'deviceCodePoll') return json(await service.account.poll(await body(request)), 200, headers)
@@ -33,8 +33,8 @@ export function createAccountHandler(runtime: () => AccountRuntime = createRunti
         case 'issueLicense':
           if (!service.env.get('LICENSE_SIGNING_KEY')) throw new ServiceError('unavailable', 'Licensing is not configured yet')
           result = await service.account.issueLicense(user.id, envelope.data); break
-        case 'createCheckoutSession': result = await service.billing().service.checkout(user, envelope.data); break
-        case 'createPortalSession': result = await service.billing().service.portal(user); break
+        case 'createCheckoutSession': result = await service.billing('checkout').service.checkout(user, envelope.data); break
+        case 'createPortalSession': result = await service.billing('portal').service.portal(user); break
       }
       return json({ result }, 200, headers)
     } catch (error) { return errorResponse(error, headers) }

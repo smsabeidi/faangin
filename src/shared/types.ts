@@ -219,7 +219,7 @@ export type AppEvent =
   | { type: 'capture-status'; active: boolean; sessionId: string | null; microphone: string; system: string }
   | { type: 'live-suggestions'; state: NonNullable<AppState['liveSuggestions']> }
   | { type: 'error'; message: string; code?: string }
-  | { type: 'navigate'; view: 'workspace' | 'library' | 'settings' }
+  | { type: 'navigate'; view: 'workspace' | 'library' | 'settings'; settingsSection?: 'account' }
   | { type: 'system-audio-consent'; sessionId: string; resume: boolean }
   | { type: 'shortcut'; action: 'assist' | 'solve' | 'reply' | 'reset' | 'scroll-up' | 'scroll-down' }
 
@@ -300,6 +300,8 @@ export interface FaanginAPI {
   getBilling(): Promise<BillingSummary>
   billingSignIn(): Promise<BillingSummary>
   billingCancelSignIn(): Promise<BillingSummary>
+  billingGoogleSignIn(): Promise<BillingSummary>
+  billingGoogleCancelSignIn(): Promise<BillingSummary>
   billingSignOut(): Promise<BillingSummary>
   billingRefresh(): Promise<BillingSummary>
   billingCheckout(plan: BillingPlan): Promise<BillingSummary>

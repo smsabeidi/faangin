@@ -102,6 +102,11 @@ function authSession(body: SupabaseSession): AuthSession {
   return { uid: body.user.id, accessToken: body.access_token, refreshToken: body.refresh_token, expiresAt }
 }
 
+/** Exchanges the single-use OAuth code with the verifier kept by the desktop app. */
+export async function exchangeOAuthCode(supabaseUrl: string, publishableKey: string, code: string, verifier: string): Promise<AuthSession> {
+  return authSession(await postJson<SupabaseSession>(`${supabaseUrl}/auth/v1/token?grant_type=pkce`, { auth_code: code, code_verifier: verifier }, { apikey: publishableKey }))
+}
+
 /** Exchanges the one-use device approval for a separate desktop session, then verifies its user online. */
 export async function exchangeDeviceToken(supabaseUrl: string, publishableKey: string, tokenHash: string, expectedUid: string): Promise<AuthSession> {
   const session = authSession(await postJson<SupabaseSession>(`${supabaseUrl}/auth/v1/verify`, { token_hash: tokenHash, type: 'email' }, { apikey: publishableKey }))
