@@ -52,7 +52,7 @@ create table faangin.stripe_events (
 create index faangin_stripe_events_pending on faangin.stripe_events(claimed_at) where processed_at is null;
 create table faangin.flags (key text primary key, document jsonb not null check (jsonb_typeof(document) = 'object'));
 create table faangin.stats (key text primary key, active_seats integer not null default 0 check (active_seats >= 0));
-insert into faangin.flags(key,document) values ('global','{"checkoutOpen":true,"proSessionsOpen":true,"smartToFast":false,"handsfreeOff":false,"transcriptionOff":false,"blockedUids":[],"proSeatCap":200,"automaticTax":false,"termsConsent":false}'::jsonb);
+insert into faangin.flags(key,document) values ('global','{"checkoutOpen":true,"proSessionsOpen":true,"smartToFast":false,"handsfreeOff":false,"transcriptionOff":false,"blockedUids":[],"proSeatCap":100000,"automaticTax":false,"termsConsent":false}'::jsonb);
 insert into faangin.stats(key,active_seats) values ('pro',0);
 
 alter table faangin.entitlements enable row level security;
@@ -147,7 +147,7 @@ begin
   v_state := public.faangin_entitlement_read(p_uid);
   if not ((v_state->'document'->>'plan'='byok' and v_state->'document'->>'status'='active') or (v_state->'document'->>'plan'='pro' and v_state->'document'->>'status' in ('active','past_due'))) then raise exception using errcode='FA409',message='No active plan'; end if;
   select exists(select 1 from faangin.devices where uid=p_uid and device_id=p_device_id and last_seen_at>=v_now-interval '30 days'),count(*) into v_active,v_count from faangin.devices where uid=p_uid and last_seen_at>=v_now-interval '30 days';
-  if not v_active and v_count>=3 then raise exception using errcode='FA429',message='Up to 3 devices in 30 days'; end if;
+  if not v_active and v_count>=100000 then raise exception using errcode='FA429',message='Up to 100000 devices in 30 days'; end if;
   insert into faangin.devices(uid,device_id,name,first_seen_at,last_seen_at,last_license_at) values(p_uid,p_device_id,p_name,v_now,v_now,v_now)
   on conflict(uid,device_id) do update set name=p_name,last_seen_at=v_now,last_license_at=v_now;
   return v_state || jsonb_build_object('now',floor(extract(epoch from v_now)*1000));
