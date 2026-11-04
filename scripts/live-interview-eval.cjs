@@ -32,12 +32,12 @@ function pcmWav(file) {
 }
 async function run() {
   if (process.env.FAANGIN_LIVE_EVAL !== '1') throw new Error('Live evaluation requires explicit opt-in.')
-  const keyFile = path.join(os.homedir(), 'Library/Application Support/Faangin/openai.key.enc')
+  const keyFile = path.join(app.getPath('appData'), 'Faangin', 'openai.key.enc')
   if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(keyFile)) throw new Error('The saved encrypted OpenAI connection is unavailable.')
   const apiKey = safeStorage.decryptString(fs.readFileSync(keyFile))
   if (process.env.FAANGIN_EVAL_ACCESS_ONLY === '1') {
     const access = await verifyConfiguredModels(apiKey, { fastModel: 'gpt-6-luna', smartModel: 'gpt-6.1-sol', transcriptionModel: 'gpt-live-transcribe' })
-    fs.writeFileSync('/private/tmp/faangin-handsfree-model-access.json', JSON.stringify(access, null, 2) + '\n', { mode: 0o600 })
+    fs.writeFileSync(path.join(os.tmpdir(), 'faangin-handsfree-model-access.json'), JSON.stringify(access, null, 2) + '\n', { mode: 0o600 })
     console.log(JSON.stringify(access)); return
   }
   let model = process.env.FAANGIN_EVAL_MODEL || 'gpt-4.1-mini'
@@ -75,7 +75,7 @@ async function run() {
     const result = await generateCompiledAnswer(compiled, model, { apiKey, signal: AbortSignal.timeout(35_000), maxOutputTokens: 600, onDelta(delta) { const body = decoder.push(delta); if (body.trim()) firstVisibleMs ??= Math.round(performance.now() - started); visible += body } })
     const disposition = decoder.finish()
     report.trials.push({ id, expected, disposition, passed: expected === disposition, firstVisibleMs, totalMs: Math.round(performance.now() - started), inputTokens: result.inputTokens, outputTokens: result.outputTokens, answer: visible })
-    fs.writeFileSync(process.env.FAANGIN_EVAL_REPORT || '/private/tmp/faangin-live-interview-eval.json', JSON.stringify(report, null, 2) + '\n', { mode: 0o600 })
+    fs.writeFileSync(process.env.FAANGIN_EVAL_REPORT || path.join(os.tmpdir(), 'faangin-live-interview-eval.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 })
     if (disposition === 'assist') session.answers.push({ id: `answer-${id}`, requestId: id, sessionId: session.id, action: 'reply', origin: 'automatic', prompt: '', text: visible, model, status: 'complete', createdAt: turn.timestamp + 2, context: { transcriptIds: compiled.sources.transcriptIds, replyTargetId: id, attachmentIds: [], priorAnswerIds: [], memorySourceIds: [], truncated: false, interviewContextKey: compiled.sources.interviewContextKey, interviewSnapshot: compiled.sources.interviewSnapshot } })
   }
   await trial('bfs-question', transcript, 'assist')
@@ -84,7 +84,7 @@ async function run() {
   await trial('changed-scenario', 'Now suppose edges have different nonnegative weights. Should we keep the same queue and BFS implementation?', 'assist')
   await trial('candidate-thinking', 'I am thinking out loud. Let me work through that example for a moment. I might use a heap, but I am still reasoning about the invariant.', 'wait', 'microphone')
   report.passed = report.trials.every(trial => trial.passed)
-  fs.writeFileSync(process.env.FAANGIN_EVAL_REPORT || '/private/tmp/faangin-live-interview-eval.json', JSON.stringify(report, null, 2) + '\n', { mode: 0o600 })
+  fs.writeFileSync(process.env.FAANGIN_EVAL_REPORT || path.join(os.tmpdir(), 'faangin-live-interview-eval.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 })
   console.log(JSON.stringify({ passed: report.passed, model, trials: report.trials.map(({ id, disposition, passed, firstVisibleMs, totalMs }) => ({ id, disposition, passed, firstVisibleMs, totalMs })), transcription: report.transcription }))
   if (!report.passed) process.exitCode = 1
 }

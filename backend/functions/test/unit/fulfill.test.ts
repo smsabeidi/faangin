@@ -95,6 +95,14 @@ describe('applyStripeEvent: contract event table', () => {
 })
 
 describe('applyStripeEvent: invariants', () => {
+  it('a late BYOK checkout cannot revive a refunded purchase or replace a newer purchase', () => {
+    const revoked = applyStripeEvent(byokActive, { kind: 'refund', chargeId: 'ch', paymentIntentId: 'pi_byok', full: true }, LATER)
+    assert.equal(applyStripeEvent(revoked, byokPurchase, LATER + DAY), revoked)
+    const newer = applyStripeEvent(revoked, { ...byokPurchase, purchasedAt: LATER, paymentIntentId: 'pi_new', checkoutSessionId: 'cs_new' } as NormalizedEvent, LATER)
+    assert.equal(newer.byok?.status, 'active')
+    assert.equal(applyStripeEvent(newer, byokPurchase, LATER + DAY), newer)
+  })
+
   it('never mutates its input', () => {
     const current = frozen(proActive)
     assert.doesNotThrow(() => applyStripeEvent(current, subscriptionEvent({ status: 'canceled' }), LATER))
@@ -232,6 +240,58 @@ describe('normalizeSubscription: period shapes', () => {
     assert.equal(normalized.currentPeriodStart, start * 1000)
     assert.equal(normalized.currentPeriodEnd, end * 1000)
     assert.equal(normalized.uid, undefined)
+  })
+
+  it('recognizes portal cancel_at at the current item period end with the legacy flag false', () => {
+    const normalized = normalizeSubscription(fakeSubscription({ id: 'sub_1', periodStart: start, periodEnd: end, cancelAtPeriodEnd: false, cancelAt: end }) as unknown as Stripe.Subscription)
+    assert.equal(normalized.cancelAtPeriodEnd, true)
+    assert.equal(normalized.currentPeriodEnd, end * 1000)
+    const next = applyStripeEvent(proActive, normalized, LATER)
+    assert.equal(next.pro?.cancelAtPeriodEnd, true)
+    assert.equal(entitledPlan(next), 'pro', 'scheduling cancellation must preserve paid access')
+    assert.equal(seatDelta(proActive, next), 0)
+  })
+
+  it('recognizes explicit cancellation against the legacy top-level period', () => {
+    const normalized = normalizeSubscription(fakeSubscription({ periodStart: start, periodEnd: end, topLevelPeriod: true, cancelAt: end }) as unknown as Stripe.Subscription)
+    assert.equal(normalized.cancelAtPeriodEnd, true)
+    assert.equal(normalized.currentPeriodEnd, end * 1000)
+  })
+
+  it('shortens the displayed effective end for a valid earlier cancellation in this period', () => {
+    const cancelAt = start + 10 * 86400
+    for (const topLevelPeriod of [false, true]) {
+      const normalized = normalizeSubscription(fakeSubscription({ periodStart: start, periodEnd: end, topLevelPeriod, cancelAt }) as unknown as Stripe.Subscription)
+      assert.equal(normalized.cancelAtPeriodEnd, true)
+      assert.equal(normalized.currentPeriodStart, start * 1000)
+      assert.equal(normalized.currentPeriodEnd, cancelAt * 1000)
+      assert.equal(normalized.status, 'active')
+    }
+  })
+
+  it('ignores absent, invalid and later-period cancel_at timestamps', () => {
+    for (const cancelAt of [undefined, null, 0, -1, start - 1, start, end + 1, end + 30 * 86400, NaN, Infinity, -Infinity, end - 0.5, String(end)]) {
+      const snapshot = { ...fakeSubscription({ periodStart: start, periodEnd: end }), cancel_at: cancelAt }
+      const normalized = normalizeSubscription(snapshot as unknown as Stripe.Subscription)
+      assert.equal(normalized.cancelAtPeriodEnd, false, String(cancelAt))
+      assert.equal(normalized.currentPeriodEnd, end * 1000, String(cancelAt))
+    }
+  })
+
+  it('uses the item period instead of a conflicting legacy end and requires a valid end', () => {
+    const snapshot = { ...fakeSubscription({ periodStart: start, periodEnd: end, cancelAt: end + 86400 }), current_period_end: end + 86400 }
+    assert.equal(normalizeSubscription(snapshot as unknown as Stripe.Subscription).cancelAtPeriodEnd, false)
+    for (const cancelAt of [0, end]) {
+      assert.equal(normalizeSubscription(fakeSubscription({ periodStart: start, periodEnd: 0, cancelAt }) as unknown as Stripe.Subscription).cancelAtPeriodEnd, false)
+    }
+  })
+
+  it('preserves an existing true legacy cancellation flag', () => {
+    for (const cancelAt of [null, NaN, end + 30 * 86400]) {
+      const normalized = normalizeSubscription(fakeSubscription({ periodStart: start, periodEnd: end, cancelAtPeriodEnd: true, cancelAt }) as unknown as Stripe.Subscription)
+      assert.equal(normalized.cancelAtPeriodEnd, true)
+      assert.equal(normalized.currentPeriodEnd, end * 1000)
+    }
   })
 })
 

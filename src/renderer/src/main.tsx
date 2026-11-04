@@ -7,5 +7,6 @@ import './overlay-polish.css'
 import './onboarding.css'
 import './access-setup.css'
 import './billing/billing.css'
+import './forced-colors.css'
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

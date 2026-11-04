@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { WindowStateManager, displayForBounds, jsonWindowStateStore, reachableWindowBounds, restoreWindowBounds, snapshotWindowState, type WindowBounds, type WindowDisplay, type WindowStateStore } from '../src/main/window-state'
@@ -138,6 +138,81 @@ test('atomic geometry store survives reopening and recovers a corrupt file witho
     store.write('overlay', state); store.write('workspace', { ...state, bounds: { ...state.bounds, width: 1000 } })
     assert.deepEqual(jsonWindowStateStore(path).read('overlay'), state)
     assert.equal(JSON.parse(readFileSync(path, 'utf8')).workspace.bounds.width, 1000)
-    assert.equal(statSync(path).mode & 0o777, 0o600)
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+    // NTFS has no POSIX mode bits; the per-user profile ACL protects the file there.
+    if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+})
+
+function flakyFiles(failures: string[]) {
+  const pauses: number[] = [], attempts: Array<[string, string]> = []
+  return {
+    pauses, attempts,
+    files: {
+      rename(from: string, to: string) {
+        attempts.push([from, to])
+        const code = failures.shift()
+        if (code) throw Object.assign(new Error(`${code}: rename`), { code })
+        renameSync(from, to)
+      },
+      pause: (milliseconds: number) => { pauses.push(milliseconds) }
+    }
+  }
+}
+
+test('a geometry save that antivirus or the indexer briefly blocks is retried instead of surfacing a save error', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'faangin-window-'))
+  try {
+    const path = join(directory, 'geometry.json'), state = snapshotWindowState(layout.defaultBounds, [primary], primary)
+    const flaky = flakyFiles(['EPERM', 'EBUSY', 'EACCES'])
+    const store = jsonWindowStateStore(path, flaky.files)
+    assert.doesNotThrow(() => store.write('overlay', state))
+    assert.equal(flaky.attempts.length, 4); assert.deepEqual(flaky.pauses, [25, 50, 75])
+    assert.deepEqual(store.read('overlay'), state); assert.deepEqual(jsonWindowStateStore(path).read('overlay'), state)
+    assert.deepEqual(readdirSync(directory), ['geometry.json'], 'the temporary file is gone')
+    // Every attempt renames the same freshly written temporary file onto the destination.
+    assert.ok(flaky.attempts.every(([from, to]) => from === flaky.attempts[0][0] && to === path))
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+})
+
+test('a geometry file that stays locked fails after a bounded wait, keeps the previous value and leaves no temporary file', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'faangin-window-'))
+  try {
+    const path = join(directory, 'geometry.json'), state = snapshotWindowState(layout.defaultBounds, [primary], primary)
+    const healthy = jsonWindowStateStore(path); healthy.write('overlay', state)
+    const flaky = flakyFiles(['EPERM', 'EPERM', 'EPERM', 'EPERM', 'EPERM', 'EPERM'])
+    const store = jsonWindowStateStore(path, flaky.files)
+    const moved = { ...state, bounds: { ...state.bounds, x: 5 } }
+    assert.throws(() => store.write('overlay', moved), /EPERM/)
+    assert.equal(flaky.attempts.length, 5); assert.deepEqual(flaky.pauses, [25, 50, 75, 100])
+    assert.deepEqual(store.read('overlay'), state, 'the in-memory value only follows a write that landed')
+    assert.deepEqual(jsonWindowStateStore(path).read('overlay'), state)
+    assert.deepEqual(readdirSync(directory), ['geometry.json'])
+    // The next save starts a fresh budget and lands once the lock clears.
+    flaky.files.rename = renameSync
+    store.write('overlay', moved); assert.deepEqual(jsonWindowStateStore(path).read('overlay'), moved)
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+})
+
+test('failures that are not sharing violations are reported at once without waiting', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'faangin-window-'))
+  try {
+    const state = snapshotWindowState(layout.defaultBounds, [primary], primary), flaky = flakyFiles(['ENOSPC'])
+    const store = jsonWindowStateStore(join(directory, 'geometry.json'), flaky.files)
+    assert.throws(() => store.write('overlay', state), /ENOSPC/)
+    assert.equal(flaky.attempts.length, 1); assert.deepEqual(flaky.pauses, [])
+    assert.deepEqual(readdirSync(directory), [])
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+})
+
+test('the manager raises no save error when a transient lock clears within the store retries', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'faangin-window-'))
+  try {
+    const displays = new Displays(), window = new Window({ x: 100, y: 100, width: 480, height: 700 }), errors: unknown[] = []
+    const flaky = flakyFiles(['EPERM'])
+    const manager = new WindowStateManager(displays, jsonWindowStateStore(join(directory, 'geometry.json'), flaky.files), error => errors.push(error), 0)
+    manager.attach('overlay', window, layout)
+    manager.save('overlay')
+    assert.deepEqual(errors, []); assert.equal(flaky.attempts.length, 2)
+    manager.dispose()
+  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })

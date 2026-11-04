@@ -9,8 +9,8 @@ import { accessSetupReady, nextAccessPermission, permissionBlocked, permissionNe
 
 const missing: AccessSetupState = { required: true, completed: false, ready: false, checking: false, permissions: { screen: 'unknown', microphone: 'unknown', systemAudio: 'not-requested' }, systemAudioVerifiedAt: null }
 const ready: AccessSetupState = { ...missing, ready: true, permissions: { screen: 'granted', microphone: 'granted', systemAudio: 'verified' }, systemAudioVerifiedAt: 123 }
-function state(report: AccessSetupState): AppState {
-  return { accessSetup: report, settings: DEFAULT_SETTINGS, permissions: { platform: 'darwin', microphone: report.permissions.microphone, screen: report.permissions.screen }, accessibility: { reduceMotion: false, reduceTransparency: false, increaseContrast: false }, keyConfigured: false, chatConfigured: false, compatibleKeyConfigured: false, sessions: [], currentSession: null, version: 'fixture', windowKind: 'workspace', capture: { active: false, sessionId: null, microphone: 'Off', system: 'Off' }, shortcuts: [] }
+function state(report: AccessSetupState, platform = 'darwin'): AppState {
+  return { accessSetup: report, settings: DEFAULT_SETTINGS, permissions: { platform, microphone: report.permissions.microphone, screen: report.permissions.screen }, accessibility: { reduceMotion: false, reduceTransparency: false, increaseContrast: false }, keyConfigured: false, chatConfigured: false, compatibleKeyConfigured: false, sessions: [], currentSession: null, version: 'fixture', windowKind: 'workspace', capture: { active: false, sessionId: null, microphone: 'Off', system: 'Off' }, shortcuts: [] }
 }
 const render = (value: AppState) => renderToStaticMarkup(createElement(AccessSetup, { state: value, onRefresh: async () => {}, onComplete() {} }))
 
@@ -50,4 +50,61 @@ test('first-run gate presents permission setup without a tour, a bypass or a scr
   assert.match(html, /does not transcribe or save audio/)
   for (const report of [missing, ready, { ...missing, completed: true }]) assert.doesNotMatch(render(state(report)), /screen-share privacy|type="checkbox"/i)
   assert.match(render(state(ready)), />Continue</)
+})
+
+test('macOS setup keeps its System Settings guidance, restart caveat and three required checks', () => {
+  const html = render(state({ ...missing, permissions: { ...missing.permissions, microphone: 'denied' } }))
+  assert.match(html, /Allow screen and audio access once\. We’ll guide you through each step\./)
+  assert.match(html, /0 of 3 ready/)
+  assert.match(html, /Open <strong>System Settings → Privacy &amp; Security → Microphone<\/strong> and enable Faangin\. Return here when you’re done; we’ll check automatically\.  If macOS asks to quit and reopen Faangin, choose <strong>Quit &amp; Reopen<\/strong>\. Your setup will resume\./)
+  assert.match(html, /Open System Settings</)
+  const audio = render(state({ ...missing, permissions: { screen: 'granted', microphone: 'granted', systemAudio: 'denied' } }))
+  assert.match(audio, /Screen &amp; System Audio Recording<\/strong> and enable Faangin/)
+  assert.match(audio, /Open System Settings</)
+  assert.match(audio, /Retry audio check/)
+})
+
+test('Windows setup never presents screen recording as a permission and keeps computer audio a device check', () => {
+  const windows: AccessSetupState = { ...missing, permissions: { screen: 'not-required', microphone: 'not-determined', systemAudio: 'not-requested' } }
+  const html = render(state(windows, 'win32'))
+  assert.match(html, /Allow microphone access once and let us check computer audio\. We’ll guide you through each step\./)
+  assert.match(html, /0 of 2 ready/)
+  assert.match(html, /data-permission="screen".*?Not required on this device/)
+  assert.match(html, /aria-label="Screen capture access ready" disabled=""/)
+  assert.match(html, /aria-label="Allow access to microphone"/)
+  assert.match(html, /aria-label="Allow access to computer audio"/)
+  assert.doesNotMatch(html, /Allow access to screen|Open settings for screen|System Settings|Screen &amp; System Audio Recording|macOS|Quit &amp; Reopen/)
+  const microphoneDenied = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'denied' } }, 'win32'))
+  assert.match(microphoneDenied, /Open <strong>Settings → Privacy &amp; security \(Privacy on Windows 10\) → Microphone<\/strong> and turn on microphone access for this device and for desktop apps\. Return here when you’re done; we’ll check automatically\./)
+  assert.match(microphoneDenied, /aria-label="Open settings for microphone"/)
+  assert.match(microphoneDenied, /Open Windows Settings</)
+  assert.doesNotMatch(microphoneDenied, /System Settings|macOS|Quit &amp; Reopen|privacy settings|restart/)
+  const audioDenied = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'granted', systemAudio: 'denied' } }, 'win32'))
+  assert.match(audioDenied, /Computer audio is captured from your default playback device\. Open Settings → System → Sound and choose the speakers or headset you listen on as the output device, and make sure it is not in exclusive mode\. Then choose Retry audio check below/)
+  assert.match(audioDenied, /aria-label="Open settings for computer audio"/)
+  assert.equal(audioDenied.match(/Open Windows Settings</g)?.length, 1, 'the help box offers the Sound page the main process deep-links to')
+  assert.match(audioDenied, /Retry audio check</)
+  assert.doesNotMatch(audioDenied, /System Settings|access for Faangin|privacy settings|Screen &amp; System Audio Recording/)
+  const audioUnavailable = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'granted', systemAudio: 'unavailable' } }, 'win32'))
+  assert.match(audioUnavailable, /aria-label="Retry access to computer audio"/)
+  assert.doesNotMatch(audioUnavailable, /Open settings for computer audio/)
+  // The usual Windows failure (no usable playback device) is 'unavailable', not 'denied'; its help is the Sound page and a retry.
+  assert.match(audioUnavailable, /Computer audio is captured from your default playback device\. Open Settings → System → Sound and choose the speakers or headset you listen on as the output device, and make sure it is not in exclusive mode\. Then choose Retry audio check below/)
+  assert.equal(audioUnavailable.match(/Open Windows Settings</g)?.length, 1)
+  assert.equal(audioUnavailable.match(/Retry audio check</g)?.length, 1)
+  // A blocked microphone still takes the help slot first, and a check that has not failed shows no device help.
+  assert.match(render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'denied', systemAudio: 'unavailable' } }, 'win32')), /Privacy &amp; security \(Privacy on Windows 10\) → Microphone<\/strong>/)
+  for (const systemAudio of ['not-requested', 'checking', 'verified'] as const) {
+    const quiet = render(state({ ...windows, permissions: { ...windows.permissions, microphone: 'granted', systemAudio } }, 'win32'))
+    assert.doesNotMatch(quiet, /access-setup-help|Retry audio check</, systemAudio)
+  }
+})
+
+test('on macOS and Linux an unavailable computer-audio check keeps its row retry and gains no Windows device help', () => {
+  for (const platform of ['darwin', 'linux']) {
+    const report: AccessSetupState = { ...missing, permissions: { screen: platform === 'darwin' ? 'granted' : 'not-required', microphone: 'granted', systemAudio: 'unavailable' } }
+    const html = render(state(report, platform))
+    assert.match(html, /aria-label="Retry access to computer audio"/, platform)
+    assert.doesNotMatch(html, /access-setup-help|Retry audio check<|Open Windows Settings|Sound/, platform)
+  }
 })

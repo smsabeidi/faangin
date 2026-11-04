@@ -1,18 +1,18 @@
-// Shared by scripts/stripe-*.mjs: the Stripe SDK the functions use, its pinned API version, and key resolution.
+// Shared by scripts/stripe-*.mjs: the pinned Stripe SDK the Supabase services use, its pinned API version, and key resolution.
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const require = createRequire(join(root, 'functions', 'package.json'))
+const require = createRequire(join(root, 'supabase', 'package.json'))
 export const Stripe = require('stripe')
 
 export function fail(message) { console.error(`stripe-scripts: ${message}`); process.exit(1) }
 
 /** The API version pinned by the installed SDK; webhook endpoints are created with it so payload shapes match the code. */
 export const API_VERSION = readFileSync(join(dirname(require.resolve('stripe')), 'apiVersion.js'), 'utf8').match(/ApiVersion = '([^']+)'/)?.[1]
-if (!API_VERSION) fail('could not read the Stripe SDK API version from functions/node_modules/stripe')
+if (!API_VERSION) fail('could not read the Stripe SDK API version from supabase/node_modules/stripe')
 
 export function readEnvFile(path) {
   const out = {}
@@ -46,3 +46,16 @@ export function resolveKey(args, { allowLive = true } = {}) {
 
 /** 'live' or 'test', from the key prefix (the account's charges_enabled says nothing about the mode of the key in use). */
 export function keyMode(key) { return /^(sk|rk)_live_/.test(key) ? 'live' : 'test' }
+
+/** CLI OAuth is suitable for setup/smoke; its credential-store token is never exported as an Edge runtime key. */
+export async function createStripeClient(args, { allowLive = true } = {}) {
+  if (args.includes('--cli')) {
+    if (args.includes('--live')) fail('--cli supports sandbox setup only; live mode is refused')
+    const index = args.indexOf('--expected-account')
+    const { createCliStripe } = await import('./stripe-cli.mjs')
+    const stripe = await createCliStripe({ accountId: index >= 0 ? args[index + 1] : undefined, apiVersion: API_VERSION })
+    return { stripe, mode: 'test' }
+  }
+  const key = resolveKey(args, { allowLive })
+  return { stripe: new Stripe(key, { maxNetworkRetries: 2, timeout: 20_000 }), mode: keyMode(key) }
+}

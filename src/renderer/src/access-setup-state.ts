@@ -31,6 +31,6 @@ export function permissionNeedsSettings(report: AccessSetupState | undefined, ki
 export function permissionStatusLabel(report: AccessSetupState | undefined, kind: AccessPermission, requesting = false): string {
   const value = permissionValue(report, kind)
   if (requesting || value === 'checking') return 'Checking'
-  if (permissionReady(report, kind)) return kind === 'system-audio' ? 'Access checked' : value === 'not-required' ? 'Ready on this device' : 'Granted'
+  if (permissionReady(report, kind)) return kind === 'system-audio' ? 'Access checked' : value === 'not-required' ? 'Not required on this device' : 'Granted'
   return permissionBlocked(report, kind) ? 'Blocked' : 'Needs access'
 }

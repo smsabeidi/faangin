@@ -1,19 +1,16 @@
 /** First-run UX regression in a disposable Electron profile. No credentials or recording. */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import WebSocket from 'ws'
+import { appProcessKill, resolveAppExecutable } from './lib/app-executable.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const require = createRequire(import.meta.url)
 const configuredApp = process.env.FAANGIN_APP_PATH
-const executable = configuredApp
-  ? configuredApp.endsWith('.app') ? join(configuredApp, 'Contents', 'MacOS', 'Faangin') : configuredApp
-  : require('electron')
+const executable = resolveAppExecutable(configuredApp)
 const fixture = await mkdtemp(join(tmpdir(), 'faangin-onboarding-qa-'))
 const output = process.env.FAANGIN_ONBOARDING_QA_OUTPUT || join(root, 'output', 'qa', 'onboarding')
 const storageKey = 'faangin.onboarding.v1'
@@ -33,6 +30,8 @@ function launch(markerName) {
     if (/(?:KEY|TOKEN|SECRET|PASSWORD)$/.test(name) || name.startsWith('FAANGIN_SMOKE')) delete env[name]
   }
   for (const name of ['ELECTRON_RUN_AS_NODE', 'ELECTRON_RENDERER_URL', 'FAANGIN_QA_VISIBLE']) delete env[name]
+  // Hidden windows never paint on Windows, so CDP screenshots time out there; CI opts in to a shown window.
+  if (process.env.FAANGIN_QA_SHOW_WINDOWS === '1') env.FAANGIN_QA_VISIBLE = '1'
   Object.assign(env, { FAANGIN_SMOKE: '1', FAANGIN_USER_DATA_DIR: fixture, FAANGIN_SMOKE_READY: marker, FAANGIN_SMOKE_ACCESS_FIXTURE: 'ready' })
   const flags = ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1']
   const child = spawn(executable, configuredApp ? flags : [root, ...flags], {
@@ -75,14 +74,10 @@ async function ready(running) {
 
 async function stop(running) {
   if (!running?.child.pid || running.exitCode !== undefined) return
-  const signal = value => {
-    try { process.kill(process.platform === 'win32' ? running.child.pid : -running.child.pid, value) }
-    catch { running.child.kill(value) }
-  }
-  signal('SIGTERM')
+  appProcessKill(running.child, 'SIGTERM')
   await Promise.race([new Promise(resolve => running.child.once('exit', resolve)), delay(2000)])
   if (running.exitCode === undefined) {
-    signal('SIGKILL')
+    appProcessKill(running.child, 'SIGKILL')
     await Promise.race([new Promise(resolve => running.child.once('exit', resolve)), delay(1000)])
   }
 }

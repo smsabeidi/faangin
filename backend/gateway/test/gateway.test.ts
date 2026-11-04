@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { WebSocket } from 'ws'
+import { INPUT_LIMITS } from '../src/input-validation.js'
 import { post, proEntitlement, startFakeOpenAI, startGateway, type FakeOpenAI, type Gateway } from './support.js'
 
 let fake: FakeOpenAI
@@ -86,7 +87,7 @@ describe('body limit', () => {
         res.on('end', () => resolve({ code: res.statusCode ?? 0, body: text }))
       })
       req.on('error', reject)
-      req.write(Buffer.alloc(1_200_000, 0x20)) // 1.2 MB of spaces: over BODY_LIMIT_BYTES before any JSON parsing
+      req.write(Buffer.alloc(INPUT_LIMITS.bodyBytes + 1, 0x20)) // Over the image-compatible body limit before JSON parsing.
       req.end()
     })
     assert.equal(status.code, 413)

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { ScreenshotCapture, type ScreenshotDisplay, type ScreenshotSource, type ScreenshotWindow } from '../src/main/screenshot-capture'
+import { ScreenshotCapture, type ScreenshotDisplay, type ScreenshotSource, type ScreenshotSourceType, type ScreenshotWindow } from '../src/main/screenshot-capture'
 import { AttachmentSelection } from '../src/main/attachment-selection'
 
 function deferred<T>() {
@@ -33,10 +33,10 @@ function fixture(timeoutMs = 8000) {
   const workspace = new Window('window:100:0'), overlay = new Window('window:101:0'), captureSurface = new Window('window:102:0', false)
   const windows: Window[] = [workspace, overlay, captureSurface], watchers = new Set<(window: ScreenshotWindow) => void>(), deadlines = new Set<() => void>()
   const source: ScreenshotSource<string> = { id: 'screen:1:0', name: 'Primary display', display_id: 'primary', thumbnail: 'captured pixels' }
-  const sizes: Array<{ width: number; height: number }> = [], calls: boolean[][] = []
+  const sizes: Array<{ width: number; height: number }> = [], kinds: Array<readonly ScreenshotSourceType[]> = [], calls: boolean[][] = []
   let epoch = 1
   const env = {
-    windows, workspace, overlay, captureSurface, watchers, deadlines, source, sizes, calls,
+    windows, workspace, overlay, captureSurface, watchers, deadlines, source, sizes, kinds, calls,
     displays: [{ id: 'primary', width: 1920, height: 1080, scaleFactor: 2 }] as ScreenshotDisplay[],
     quitting: false,
     mayRestore: (_window: ScreenshotWindow) => true,
@@ -51,7 +51,7 @@ function fixture(timeoutMs = 8000) {
     windows: () => windows,
     watchWindows: listener => { watchers.add(listener); return () => { watchers.delete(listener) } },
     displays: () => env.displays,
-    sources: size => { sizes.push(size); calls.push(windows.map(window => window.visible)); return env.sources() },
+    sources: (size, types) => { sizes.push(size); kinds.push(types); calls.push(windows.map(window => window.visible)); return env.sources() },
     quitting: () => env.quitting,
     timeoutMs,
     mayRestore: window => env.mayRestore(window),
@@ -76,8 +76,20 @@ test('display capture hides every owned window and restores only the previously 
   assert.deepEqual(result.display, { id: 'primary', width: 1920, height: 1080, scaleFactor: 2 })
   assert.deepEqual(f.calls, [[false, false, false]])
   assert.deepEqual(f.sizes, [{ width: 2560, height: 1600 }])
+  assert.deepEqual(f.kinds, [['screen']], 'a display capture must not pay for a thumbnail of every open window')
   restored(f)
   assert.equal(f.workspace.inactiveCalls, 1); assert.equal(f.overlay.inactiveCalls, 1); assert.equal(f.captureSurface.inactiveCalls, 0)
+})
+
+test('capture asks the OS only for the source kind the request can resolve to', async () => {
+  const f = fixture(), foreign = { ...f.source, id: 'window:131726:0', display_id: '' }
+  f.env.sources = async () => [foreign]
+  assert.strictEqual((await f.manager.capture(f.request(foreign.id))).source, foreign)
+  f.env.sources = async () => [f.source]
+  await f.manager.capture(f.request('screen:1:0'))
+  await f.manager.capture(f.request())
+  assert.deepEqual(f.kinds, [['window'], ['screen'], ['screen']])
+  restored(f)
 })
 
 test('an explicit user Hide during capture overrides temporary overlay restoration without hiding the workspace', async () => {
@@ -288,7 +300,7 @@ test('source listing filters all owned window IDs, including windows created dur
   const foreign = { ...f.source, id: 'window:200:0', display_id: '' }
   native.resolve([f.source, foreign, ...f.windows.map(window => ({ ...foreign, id: window.id }))])
   assert.deepEqual((await listing).map(source => source.id), [f.source.id, foreign.id])
-  assert.deepEqual(f.sizes, [{ width: 240, height: 150 }])
+  assert.deepEqual(f.sizes, [{ width: 240, height: 150 }]); assert.deepEqual(f.kinds, [['screen', 'window']])
   assert.equal(f.windows.reduce((sum, window) => sum + window.hideCalls + window.inactiveCalls + window.focusCalls, 0), 0)
   assert.equal(extra.visible, true); restored(f)
 })

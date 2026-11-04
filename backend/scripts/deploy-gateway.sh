@@ -23,7 +23,8 @@ gcloud run deploy faangin-gateway \
   --allow-unauthenticated \
   --min-instances 0 \
   --max-instances 20 \
-  --concurrency 80 \
+  --memory 1Gi \
+  --concurrency 4 \
   --timeout 3600 \
   --session-affinity
 

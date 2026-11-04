@@ -130,6 +130,56 @@ describe('GET /v1/realtime', () => {
     await client.close()
   })
 
+  it('resumes a daily-muted socket when the next UTC day has unused allowance', async () => {
+    await gw.store.increment(uid, PERIOD_KEY, TODAY, { audioSeconds: 5 * 3600, graceUsedAt: NOW - GRACE_MS })
+    const client = await openClient(gw, token)
+    client.send(append(1)); client.send(COMMIT)
+    await until(() => client.messages.some(muted))
+    assert.equal(fake.appends.length, 0)
+    gw.clock.now = Date.UTC(2026, 9, 29)
+    client.send(append(1))
+    await until(() => fake.appends.length === 1)
+    await client.close()
+    await until(async () => (await usage()).days['2026-10-29']?.audioSeconds === 1)
+  })
+
+  it('rechecks the ramp deadline for a socket already muted at the introductory allowance', async () => {
+    gw.entitlements.set(uid, proEntitlement({ rampUntil: NOW + 1 }))
+    await gw.store.increment(uid, PERIOD_KEY, '2026-10-27', { audioSeconds: 6 * 3600, graceUsedAt: NOW - GRACE_MS })
+    const client = await openClient(gw, token)
+    client.send(append(1)); client.send(COMMIT)
+    await until(() => client.messages.some(muted))
+    gw.clock.now += 2
+    client.send(append(1))
+    await until(() => fake.appends.length === 1)
+    await client.close()
+  })
+
+  it('closes audio at monthly and annual allowance boundaries before charging the old period again', async () => {
+    for (const annual of [false, true]) {
+      const account = `${uid}-${annual}`, accountToken = `tok-${account}`
+      gw.clock.now = Date.UTC(2026, 9, 31, 23, 59, 59)
+      gw.entitlements.set(account, proEntitlement(annual ? { currentPeriodEnd: Date.UTC(2027, 9, 1) } : {}))
+      const client = await openClient(gw, accountToken)
+      const previousAppends = fake.appends.length
+      client.send(append(1))
+      await until(() => fake.appends.length === previousAppends + 1)
+      const closed = once(client.ws, 'close')
+      gw.clock.now += 2000
+      client.send(append(2))
+      const [code, reason] = await closed
+      assert.equal(code, 1001); assert.equal(String(reason), 'allowance_period_ended')
+      await until(async () => (await gw.store.read(account, PERIOD_KEY)).audioSeconds === 1)
+      if (!annual) gw.entitlements.set(account, proEntitlement({ currentPeriodStart: Date.UTC(2026, 10, 1), currentPeriodEnd: Date.UTC(2026, 11, 1) }))
+      const renewed = await openClient(gw, accountToken)
+      renewed.send(append(1))
+      await until(() => fake.appends.length === previousAppends + 2)
+      await renewed.close()
+      await until(async () => (await gw.store.read(account, String(Date.UTC(2026, 10, 1)))).audioSeconds === 1)
+      assert.equal((await gw.store.read(account, PERIOD_KEY)).audioSeconds, 1)
+    }
+  })
+
   it('charges both sockets of a uid against one usage copy and one grace window', async () => {
     await gw.store.increment(uid, PERIOD_KEY, TODAY, { audioSeconds: HOURS_20 - 3 })
     const a = await openClient(gw, token)
@@ -183,16 +233,35 @@ describe('GET /v1/realtime', () => {
     assert.equal((await fetch(`${gw.base}/healthz`)).status, 200)
   })
 
-  it('never forwards upstream error events', async () => {
+  it('closes a failed transcription channel without forwarding private upstream errors', async () => {
     const client = await openClient(gw, token)
     client.send({ type: 'input_audio_buffer.commit' })
     await until(() => fake.commits === 1)
+    const closed = once(client.ws, 'close')
     fake.emitError()
-    client.send({ type: 'input_audio_buffer.commit' })
-    await until(() => client.messages.filter(m => m.type === 'input_audio_buffer.committed').length === 2)
+    const [code, reason] = await closed
+    assert.equal(code, 1011)
+    assert.equal(String(reason), 'transcription_failed')
     assert.ok(client.messages.every(m => m.type !== 'error'))
     assert.ok(gw.logs.some(l => l.event === 'upstream_event_error'))
     await client.close()
+  })
+
+  it('attributes buffered audio to the UTC day it arrived, including across midnight', async () => {
+    gw.clock.now = Date.UTC(2026, 9, 28, 23, 59, 59)
+    const client = await openClient(gw, token)
+    client.send(append(2))
+    await until(() => fake.appends.length === 1)
+    gw.clock.now += 2_000
+    client.send(append(3))
+    await until(() => fake.appends.length === 2)
+    await client.close()
+    await until(async () => (await usage()).audioSeconds === 5)
+    const u = await usage()
+    assert.equal(u.days[TODAY].audioSeconds, 2)
+    assert.equal(u.days['2026-10-29'].audioSeconds, 3)
+    assert.ok(u.days[TODAY].spendUsd > 0)
+    assert.ok(u.days['2026-10-29'].spendUsd > u.days[TODAY].spendUsd)
   })
 
   it('closes the client 1011 when upstream closes', async () => {

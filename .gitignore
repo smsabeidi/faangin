@@ -6,7 +6,9 @@
 .env
 .env.*
 !.env.example
+!backend/.env.stripe-runtime.example
 .DS_Store
+config/cloud.staging.json
 
 # Build output
 node_modules/

@@ -1,0 +1,124 @@
+name: Desktop CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI packaging stays unsigned; scripts/release-mac.mjs and scripts/release-win.mjs own signing.
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  desktop:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The response-delivery audit compares against the compiler pinned at a historical commit
+          # (scripts/response-delivery-eval.ts DELIVERY_BASELINE), which a shallow clone does not contain.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure the Electron binary is present
+        # A restored npm cache can satisfy npm ci without re-running Electron's download step.
+        run: node node_modules/electron/install.js
+      - name: Check the public cloud configuration
+        run: npm run check:launch
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Test with win32 simulated
+        # The preload that redefines process.platform exists for Mac developers; running it here keeps it from drifting unnoticed.
+        if: runner.os == 'macOS'
+        run: npm run test:win32
+      - name: Build
+        run: npm run build
+      - name: Smoke the development build
+        run: npm run smoke
+      - name: Package the unpacked Windows app
+        id: winpkg
+        if: runner.os == 'Windows'
+        run: npm run package:win
+      - name: Smoke the packaged Windows app
+        if: runner.os == 'Windows'
+        run: npm run smoke
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+      # The three self-contained native QA suites drive the real packaged app over the debugging protocol in disposable
+      # profiles: first-run flow, permission gating, and BrowserWindow geometry for the overlay. Their screenshots are
+      # real Windows renders and are uploaded below. overlay-interaction-qa is left out because it already fails on macOS
+      # at its resume-credential step, which is unrelated to the platform.
+      - name: Native QA, first-run flow
+        if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
+        run: node scripts/onboarding-qa.mjs
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_QA_SHOW_WINDOWS: '1'
+          FAANGIN_ONBOARDING_QA_OUTPUT: ${{ runner.temp }}\qa\onboarding
+      - name: Native QA, required access
+        if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
+        run: node scripts/access-setup-qa.mjs
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_QA_SHOW_WINDOWS: '1'
+          FAANGIN_ACCESS_QA_OUTPUT: ${{ runner.temp }}\qa\access-setup
+      - name: Native QA, overlay geometry
+        if: runner.os == 'Windows' && !cancelled() && steps.winpkg.conclusion == 'success'
+        run: node scripts/overlay-layout-qa.mjs
+        env:
+          FAANGIN_APP_PATH: ${{ github.workspace }}\dist\win-unpacked\Faangin.exe
+          FAANGIN_QA_SHOW_WINDOWS: '1'
+          FAANGIN_LAYOUT_QA_OUTPUT: ${{ runner.temp }}\qa\overlay-layout
+      - name: Upload the Windows QA reports and screenshots
+        if: runner.os == 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faangin-windows-qa
+          path: ${{ runner.temp }}\qa
+          if-no-files-found: ignore
+      - name: Build the unsigned Windows installer
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win --x64 --publish never
+      - name: Upload the unpacked Windows app
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: faangin-windows-unpacked
+          path: dist/win-unpacked
+      - name: Upload the Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: faangin-windows-installer
+          path: dist/*.exe
+      - name: Package the unpacked macOS app
+        if: runner.os == 'macOS'
+        run: npm run package:mac
+      - name: Archive the unpacked macOS app
+        # The .app bundle holds symlinks that the artifact zipper would flatten; ditto keeps them.
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/mac-arm64/Faangin.app dist/Faangin-macOS-arm64-unpacked.zip
+      - name: Upload the unpacked macOS app
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: faangin-macos-unpacked
+          path: dist/Faangin-macOS-arm64-unpacked.zip

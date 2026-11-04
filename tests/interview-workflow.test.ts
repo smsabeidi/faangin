@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { audioHealthMessages, AUDIO_HEALTH_MESSAGES } from '../src/capture/audio-health'
+import { audioTrackMissing } from '../src/capture/media'
+import { win32Platform } from '../src/main/platform'
 import { audioInputGuidance, hasReplyContext, interviewFollowupRequest, questionSourceHealth, questionSourcePatch } from '../src/renderer/src/interview-workflow'
 import { DEFAULT_SETTINGS, type AppState, type Session } from '../src/shared/types'
 
@@ -36,13 +39,59 @@ test('stale, stopped, foreign, and blank partial speech do not enable a follow-u
 })
 
 test('degraded inputs give visible recovery instructions for the selected source', () => {
-  assert.match(audioInputGuidance('system', false, 'Off'), /Enable system audio/)
-  assert.match(audioInputGuidance('system', true, 'Permission denied'), /system settings/)
-  assert.match(audioInputGuidance('microphone', true, 'Unavailable'), /choose another input/)
-  assert.match(audioInputGuidance('system', true, 'Silent · 15s'), /interviewer.*computer/)
-  assert.match(audioInputGuidance('microphone', true, 'Low audio'), /Speak near the microphone/)
-  assert.match(audioInputGuidance('system', true, 'Disconnected'), /Stop listening/)
-  assert.equal(audioInputGuidance('system', true, 'Listening'), '')
+  assert.match(audioInputGuidance('system', false, 'Off', 'darwin'), /Enable system audio/)
+  assert.match(audioInputGuidance('system', true, 'Permission denied', 'darwin'), /system settings/)
+  assert.match(audioInputGuidance('microphone', true, 'Unavailable', 'darwin'), /choose another input/)
+  assert.match(audioInputGuidance('system', true, 'Silent · 15s', 'darwin'), /interviewer.*computer/)
+  assert.match(audioInputGuidance('microphone', true, 'Low audio', 'darwin'), /Speak near the microphone/)
+  assert.match(audioInputGuidance('system', true, 'Disconnected', 'darwin'), /Stop listening/)
+  assert.equal(audioInputGuidance('system', true, 'Listening', 'darwin'), '')
+})
+
+test('Windows points a failed computer-audio source at the default playback device, never at a permission it does not have', () => {
+  for (const status of ['Permission denied', 'System audio access was blocked.']) {
+    const denied = audioInputGuidance('system', true, status, 'win32', 'not-required')
+    assert.match(denied, /default playback device in Windows Sound settings/)
+    assert.match(denied, /fully quit and reopen Faangin.*Stop listening.*Start listening/)
+    assert.doesNotMatch(denied, /screen|permission|system settings/)
+  }
+  const unavailable = audioInputGuidance('system', true, 'System audio is unavailable', 'win32')
+  assert.match(unavailable, /default playback device in Windows Sound settings/)
+  assert.match(unavailable, /choose Microphone/)
+  assert.doesNotMatch(unavailable, /permissions/)
+  // The microphone and every other status keep the shared copy, and Linux keeps the macOS copy as today.
+  assert.equal(audioInputGuidance('microphone', true, 'Permission denied', 'win32'), audioInputGuidance('microphone', true, 'Permission denied', 'darwin'))
+  for (const status of ['Silent · 15s', 'Disconnected', 'Listening']) assert.equal(audioInputGuidance('system', true, status, 'win32'), audioInputGuidance('system', true, status, 'darwin'))
+  for (const status of ['Permission denied', 'System audio is unavailable']) assert.equal(audioInputGuidance('system', true, status, 'linux'), audioInputGuidance('system', true, status, 'darwin'))
+})
+
+test('Windows shows the Default Device hints in full, because the meter clips them and the shared sentence names no setting to change', () => {
+  const messages = audioHealthMessages('win32', 'system')
+  assert.match(messages.silent, /Default Communications Device/); assert.match(messages['low-level'], /Windows output volume/)
+  assert.equal(audioInputGuidance('system', true, messages.silent, 'win32'), messages.silent)
+  assert.equal(audioInputGuidance('system', true, messages['low-level'], 'win32'), messages['low-level'])
+  assert.equal(audioInputGuidance('system', true, messages.silent, 'win32').length > 100, true, 'the full instruction, not a one-line label')
+  // The microphone, macOS and Linux keep the shared copy for the very same statuses.
+  for (const platform of ['darwin', 'linux']) {
+    assert.match(audioInputGuidance('system', true, messages.silent, platform), /Play the interviewer.s voice through your computer/)
+    assert.match(audioInputGuidance('system', true, messages['low-level'], platform), /Play the interviewer.s voice through your computer/)
+  }
+  assert.match(audioInputGuidance('microphone', true, messages.silent, 'win32'), /Speak near the microphone/)
+  assert.match(audioInputGuidance('system', true, AUDIO_HEALTH_MESSAGES.silent, 'win32'), /Play the interviewer.s voice through your computer/)
+  assert.equal(audioInputGuidance('system', false, messages.silent, 'win32'), audioInputGuidance('system', false, messages.silent, 'darwin'))
+})
+
+test('Windows classifies its own capture strings: a missing playback device and a switched-off microphone both read as unavailable', async () => {
+  const noDevice = audioTrackMissing('system', 'win32'), pending = win32Platform.pendingMicrophoneMessage()
+  const denied = (await win32Platform.microphoneAccess({ getMediaAccessStatus: () => 'denied', askForMediaAccess: async () => false })).message!
+  assert.match(denied, /Privacy & security \(Privacy on Windows 10\) → Microphone/)
+  assert.match(audioInputGuidance('system', true, noDevice, 'win32'), /default playback device in Windows Sound settings/)
+  assert.match(audioInputGuidance('system', true, noDevice, 'darwin'), /Check audio permissions/, 'only Windows produces this status; elsewhere the shared unavailable copy applies')
+  const settings = { ...DEFAULT_SETTINGS, microphone: true, systemAudio: true, liveSuggestionSource: 'system' as const }
+  assert.deepEqual(questionSourceHealth(settings, { ...capture, microphone: 'Listening', system: noDevice }), { listening: false, unavailable: true, headline: 'Computer audio unavailable · microphone only' })
+  assert.match(audioInputGuidance('microphone', true, denied, 'win32', 'denied'), /Check microphone access in system settings/)
+  assert.deepEqual(questionSourceHealth({ ...settings, liveSuggestionSource: 'microphone' }, { ...capture, microphone: denied, system: 'Listening' }), { listening: false, unavailable: true, headline: 'Microphone unavailable · computer audio only' })
+  assert.deepEqual(questionSourceHealth({ ...settings, liveSuggestionSource: 'microphone' }, { ...capture, microphone: pending, system: 'Listening' }), { listening: false, unavailable: true, headline: 'Microphone unavailable · computer audio only' })
 })
 
 
@@ -54,12 +103,12 @@ test('typed follow-ups work after a screenshot solution without requiring a tran
 
 test('blocked audio explains recovery when the operating system already reports access granted', () => {
   for (const status of ['Permission denied', 'System audio access was blocked.']) {
-    const guidance = audioInputGuidance('system', true, status, 'granted')
+    const guidance = audioInputGuidance('system', true, status, 'darwin', 'granted')
     assert.match(guidance, /already allowed/)
     assert.match(guidance, /Stop listening.*fully quit and reopen.*Start listening/)
     assert.doesNotMatch(guidance, /Allow.*access/)
   }
-  const unknown = audioInputGuidance('system', true, 'System audio access was blocked.')
+  const unknown = audioInputGuidance('system', true, 'System audio access was blocked.', 'darwin')
   assert.match(unknown, /Check screen and system audio access/)
   assert.match(unknown, /already allowed.*fully quit and reopen/)
   assert.match(unknown, /Stop listening.*Start listening/)

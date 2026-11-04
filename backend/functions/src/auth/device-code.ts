@@ -69,11 +69,14 @@ export const deviceCodeStart = onRequest({ cors: true }, async (req, res) => {
     status: 'pending'
   }
   // One code per device: a new start replaces whatever this device had before.
-  const previous = await codes().where('deviceId', '==', deviceId).get()
-  const batch = db.batch()
-  for (const old of previous.docs) batch.delete(old.ref)
-  batch.set(codes().doc(userCode), doc)
-  await batch.commit()
+  await db.runTransaction(async (tx) => {
+    const previous = await tx.get(codes().where('deviceId', '==', deviceId))
+    const candidate = codes().doc(userCode)
+    // A rare display-code collision must never replace another device's approval.
+    if ((await tx.get(candidate)).exists) throw new HttpsError('aborted', 'Please start sign-in again')
+    for (const old of previous.docs) tx.delete(old.ref)
+    tx.create(candidate, doc)
+  })
 
   const shown = showUserCode(userCode)
   res.json({
@@ -118,6 +121,14 @@ export const deviceCodePoll = onRequest({ cors: true }, async (req, res) => {
   if (code.status !== 'approved' || !code.uid) return void res.json({ status: 'pending' })
 
   const customToken = await auth.createCustomToken(code.uid)
-  await snap.ref.delete() // single use
+  // Minting a token does not consume it. Only the poll that atomically consumes the approval may return it;
+  // concurrent polls and a replacement start must never receive a second valid sign-in response.
+  const consumed = await db.runTransaction(async (tx) => {
+    const current = (await tx.get(snap.ref)).data() as DeviceCodeDoc | undefined
+    if (!current || current.expiresAt <= Date.now() || current.status !== 'approved' || current.uid !== code.uid || current.deviceCodeHash !== code.deviceCodeHash) return false
+    tx.delete(snap.ref)
+    return true
+  })
+  if (!consumed) return void res.json({ status: 'expired' })
   res.json({ status: 'approved', customToken, uid: code.uid })
 })

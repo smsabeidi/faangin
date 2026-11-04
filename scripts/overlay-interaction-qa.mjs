@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname, basename } from 'node:path'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
+import { appProcessKill, resolveAppExecutable } from './lib/app-executable.mjs'
 
 const configuredApp = process.env.FAANGIN_APP_PATH
 const selfProject = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -21,10 +22,12 @@ if (sourceRoot && !sourceElectron) {
   try { sourceElectron = createRequire(join(sourceRoot,'package.json'))('electron') }
   catch { throw new Error('Set FAANGIN_QA_ELECTRON to the installed Electron executable for an extracted app without dev dependencies.') }
 }
-const application = sourceRoot || configuredApp || '/Applications/Faangin.app'
-const executable = sourceRoot ? sourceElectron : application.endsWith('.app') ? join(application,'Contents/MacOS/Faangin') : application
+// The NSIS installer is per-user (perMachine: false), so the Windows install lives under %LOCALAPPDATA%\Programs.
+const installedApplication = process.platform === 'win32' ? join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Faangin', 'Faangin.exe') : '/Applications/Faangin.app'
+const application = sourceRoot || configuredApp || installedApplication
+const executable = sourceRoot ? sourceElectron : resolveAppExecutable(application)
 const fixture = await mkdtemp(join(tmpdir(), 'faangin-overlay-interaction-v033-'))
-const output = process.env.FAANGIN_INTERACTION_QA_REPORT || '/private/tmp/faangin-overlay-interaction-v033-report.json'
+const output = process.env.FAANGIN_INTERACTION_QA_REPORT || join(tmpdir(), 'faangin-overlay-interaction-v033-report.json')
 const imagesDirectory = process.env.FAANGIN_INTERACTION_QA_IMAGES || join(dirname(output), 'screenshots-'+basename(output,'.json'))
 const env = { ...process.env, FAANGIN_SMOKE: '1', FAANGIN_USER_DATA_DIR: fixture, FAANGIN_SMOKE_READY: join(fixture, 'ready.json'), FAANGIN_SMOKE_LIVE_FIXTURE: '1', FAANGIN_SMOKE_CAPTURE_FIXTURE: '1', FAANGIN_SMOKE_ACCESS_FIXTURE: 'ready' }
 for (const name of Object.keys(env)) if (/(?:KEY|TOKEN|SECRET|PASSWORD)$/.test(name)) delete env[name]
@@ -51,7 +54,7 @@ const provider = createServer((request, response) => {
 provider.on('connection', socket=>{sockets.add(socket);socket.once('close',()=>sockets.delete(socket))})
 provider.listen(0,'127.0.0.1');await once(provider,'listening')
 const endpoint = 'http://127.0.0.1:'+provider.address().port+'/chat/completions'
-const child = spawn(executable, [...(sourceRoot ? [sourceRoot] : []), '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'], { cwd: fixture, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+const child = spawn(executable, [...(sourceRoot ? [sourceRoot] : []), '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'], { cwd: fixture, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
 let logs = '', ended, spawnError, workspace, overlay
 child.stdout.on('data', bytes => { logs = (logs + bytes).slice(-12000) }); child.stderr.on('data', bytes => { logs = (logs + bytes).slice(-12000) })
 child.on('exit', code => { ended = code ?? -1 }); child.on('error', error => { spawnError = error })
@@ -290,9 +293,9 @@ try {
 } finally {
   workspace?.close(); overlay?.close()
   if (child.pid && ended === undefined) {
-    try { process.kill(-child.pid, 'SIGTERM') } catch { child.kill('SIGTERM') }
+    appProcessKill(child, 'SIGTERM')
     await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(2000)])
-    if (ended === undefined) { try { process.kill(-child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') } }
+    if (ended === undefined) appProcessKill(child, 'SIGKILL')
   }
   for(const socket of sockets)socket.destroy()
   await new Promise(resolve=>provider.close(resolve))

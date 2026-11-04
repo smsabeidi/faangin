@@ -1,10 +1,12 @@
 /** GET /v1/realtime?intent=transcription: WebSocket proxy to OpenAI with audio metering and mute mode. */
 import type { IncomingMessage } from 'node:http'
+import type { Buffer } from 'node:buffer'
 import type { Duplex } from 'node:stream'
+import { randomUUID } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { AuthOk, Entitlement } from './auth.js'
 import { MAX_LIVE_SESSIONS, MODELS, SOCKET_IDLE_CLOSE_MS } from './config.js'
-import { audioCostUsd, audioSecondsFromBase64, dayKey, isRamped, nextAudioState, overAudioLimit, periodKey, type AudioState } from './meter.js'
+import { audioCostUsd, audioSecondsFromBase64, dayKey, isRamped, nextAllowanceBoundary, nextAudioState, overAudioLimit, periodKey, type AudioState } from './meter.js'
 import type { Store, Usage } from './store.js'
 
 export interface RealtimeDeps {
@@ -13,6 +15,9 @@ export interface RealtimeDeps {
   openaiKey: string
   now: () => number
   log: (event: string, fields?: Record<string, unknown>) => void
+  audioFlushMs?: number
+  /** Edge workers advertise a planned connection rotation before their hard lifetime ends. */
+  sessionExpiresAt?: number
 }
 
 /** One live session has two audio channels, so two sockets. */
@@ -23,6 +28,8 @@ const MAX_PAYLOAD_BYTES = 1024 * 1024
 /** Bytes held for upstream while it is still connecting; anything beyond is dropped. */
 const MAX_QUEUED_BYTES = 4 * 1024 * 1024
 const FLUSH_MS = 10_000
+/** Crash recovery: renew on every flush; a dead instance frees its sockets shortly afterwards. */
+const AUDIO_LEASE_MS = 45_000
 /** Sockets with less audio than this at the idle deadline are closed. */
 const IDLE_AUDIO_SECONDS = 1
 /** The only input format the metering math (PCM_BYTES_PER_SECOND) is right for, so it is forced. */
@@ -96,35 +103,52 @@ export function createRealtime(deps: RealtimeDeps) {
         deps.log('store_read_failed', { uid, error: String(error) })
       }
     }
-    wss.handleUpgrade(req, socket, head, client => {
-      // Before any close(): ws emits 'error' for a malformed frame even mid close handshake, and an unhandled one kills the process.
-      client.on('error', error => deps.log('client_socket_error', { uid, error: String(error) }))
-      if (flags.transcriptionOff) return client.close(1013, 'transcription_off')
-      let live = liveByUid.get(uid)
-      if (live && live.sockets.size >= MAX_SOCKETS_PER_UID) return client.close(1008, 'too_many_sockets')
-      if (!live || live.period !== period) {
-        if (!fresh) return client.close(1011, 'store_unavailable')
-        live = { sockets: live?.sockets ?? new Set(), period, usage: fresh }
-        liveByUid.set(uid, live)
-      }
-      const { sockets, usage } = live
-      sockets.add(client)
-      client.once('close', () => {
-        sockets.delete(client)
-        if (!sockets.size) liveByUid.delete(uid)
+    const leaseId = randomUUID()
+    const leased = await deps.store.claimLease(uid, 'audio', leaseId, deps.now(), deps.now() + AUDIO_LEASE_MS, MAX_SOCKETS_PER_UID)
+    const release = () => {
+      if (!leased) return
+      const pending = deps.store.releaseLease(uid, 'audio', leaseId).catch(error => deps.log('audio_lease_release_failed', { uid, error: String(error) }))
+      inflightFlushes.add(pending)
+      void pending.finally(() => inflightFlushes.delete(pending))
+    }
+    try {
+      wss.handleUpgrade(req, socket, head, client => {
+        // Before any close(): ws emits 'error' for a malformed frame even mid close handshake, and an unhandled one kills the process.
+        client.on('error', error => deps.log('client_socket_error', { uid, error: String(error) }))
+        client.once('close', release)
+        if (!leased) return client.close(1008, 'too_many_sockets')
+        if (flags.transcriptionOff) return client.close(1013, 'transcription_off')
+        let live = liveByUid.get(uid)
+        if (live && live.sockets.size >= MAX_SOCKETS_PER_UID) return client.close(1008, 'too_many_sockets')
+        if (!live || live.period !== period) {
+          if (!fresh) return client.close(1011, 'store_unavailable')
+          live = { sockets: live?.sockets ?? new Set(), period, usage: fresh }
+          liveByUid.set(uid, live)
+        }
+        const { sockets, usage } = live
+        sockets.add(client)
+        client.once('close', () => {
+          sockets.delete(client)
+          if (!sockets.size) liveByUid.delete(uid)
+        })
+        runSession(client, uid, entitlement, period, usage, leaseId)
       })
-      runSession(client, uid, entitlement, period, usage)
-    })
+    } catch (error) { release(); throw error }
   }
 
-  function runSession(client: WebSocket, uid: string, entitlement: Entitlement, period: string, usage: Usage): void {
-    const ramped = isRamped(entitlement, deps.now())
+  function runSession(client: WebSocket, uid: string, entitlement: Entitlement, period: string, usage: Usage, leaseId: string): void {
+    const allowanceEndsAt = nextAllowanceBoundary(entitlement, deps.now())
+    const periodCurrent = () => {
+      if (allowanceEndsAt !== undefined && deps.now() >= allowanceEndsAt) { client.close(1001, 'allowance_period_ended'); return false }
+      return true
+    }
+    if (!periodCurrent()) return
     const upstream = new WebSocket(`${deps.openaiWsBase}/v1/realtime?intent=transcription`, { headers: { authorization: `Bearer ${deps.openaiKey}` } })
     const queued: string[] = []
     let queuedBytes = 0
     let state: AudioState = { kind: 'open' }
     let sessionSeconds = 0 // charged on this socket
-    let unflushed = { audioSeconds: 0, spendUsd: 0 }
+    let unflushed = new Map<string, { audioSeconds: number; spendUsd: number }>()
     let mutedCommits = 0
 
     const toClient = (event: unknown) => { if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify(event)) }
@@ -146,16 +170,47 @@ export function createRealtime(deps: RealtimeDeps) {
       const today = (usage.days[day] ??= { audioSeconds: 0, spendUsd: 0 })
       today.audioSeconds += seconds
       today.spendUsd += cost
-      unflushed.audioSeconds += seconds
-      unflushed.spendUsd += cost
+      const pending = unflushed.get(day) ?? { audioSeconds: 0, spendUsd: 0 }
+      pending.audioSeconds += seconds
+      pending.spendUsd += cost
+      unflushed.set(day, pending)
     }
 
     const flush = (): Promise<void> => {
-      if (!unflushed.audioSeconds) return Promise.resolve()
-      const delta = unflushed
-      unflushed = { audioSeconds: 0, spendUsd: 0 }
-      const pending = deps.store.increment(uid, period, dayKey(deps.now()), delta).catch(error => {
-        deps.log('usage_flush_failed', { uid, error: String(error), ...delta })
+      const days = unflushed
+      unflushed = new Map()
+      const pending = (async () => {
+        const entries = [...days]
+        const writes = await Promise.allSettled(entries.map(([day, delta]) => deps.store.increment(uid, period, day, delta)))
+        let writeError: unknown
+        writes.forEach((result, index) => {
+          if (result.status === 'fulfilled') return
+          writeError = result.reason
+          const [day, delta] = entries[index]
+          const retry = unflushed.get(day) ?? { audioSeconds: 0, spendUsd: 0 }
+          retry.audioSeconds += delta.audioSeconds; retry.spendUsd += delta.spendUsd
+          unflushed.set(day, retry)
+        })
+        if (writeError) throw writeError
+        const fresh = await deps.store.read(uid, period)
+        // Other instances may own the second channel; keep local unflushed audio and catch up to their persisted totals.
+        usage.audioSeconds = Math.max(usage.audioSeconds, fresh.audioSeconds)
+        usage.spendUsd = Math.max(usage.spendUsd, fresh.spendUsd)
+        for (const [day, incoming] of Object.entries(fresh.days)) {
+          const current = usage.days[day] ??= { audioSeconds: 0, spendUsd: 0 }
+          current.audioSeconds = Math.max(current.audioSeconds, incoming.audioSeconds)
+          current.spendUsd = Math.max(current.spendUsd, incoming.spendUsd)
+        }
+        if (fresh.graceUsedAt !== undefined) usage.graceUsedAt = Math.min(usage.graceUsedAt ?? fresh.graceUsedAt, fresh.graceUsedAt)
+        if (client.readyState === WebSocket.OPEN) {
+          const now = deps.now()
+          if (!(await deps.store.claimLease(uid, 'audio', leaseId, now, now + AUDIO_LEASE_MS, MAX_SOCKETS_PER_UID, true))) client.close(1011, 'session_lease_lost')
+          evaluate()
+        }
+      })().catch(error => {
+        deps.log('usage_flush_failed', { uid, error: String(error), days: Object.fromEntries(days) })
+        // Fail closed rather than continue unmetered through a database outage.
+        client.close(1011, 'metering_unavailable')
       })
       inflightFlushes.add(pending)
       void pending.finally(() => inflightFlushes.delete(pending))
@@ -164,12 +219,18 @@ export function createRealtime(deps: RealtimeDeps) {
 
     const evaluate = () => {
       const now = deps.now()
-      const next = nextAudioState(state, overAudioLimit(usage, dayKey(now), ramped), usage.graceUsedAt, now)
-      if (next.kind === state.kind) return
+      if (!periodCurrent()) return
+      const next = nextAudioState(state, overAudioLimit(usage, dayKey(now), isRamped(entitlement, now)), usage.graceUsedAt, now)
+      if (next.kind === state.kind && (next.kind !== 'grace' || state.kind !== 'grace' || next.until === state.until)) return
       state = next
       if (next.kind === 'grace' && usage.graceUsedAt === undefined) {
         usage.graceUsedAt = now
-        deps.store.increment(uid, period, dayKey(now), { graceUsedAt: now }).catch(error => deps.log('grace_write_failed', { uid, error: String(error) }))
+        const pending = deps.store.claimGrace(uid, period, now).then(first => {
+          usage.graceUsedAt = Math.min(usage.graceUsedAt ?? first, first)
+          evaluate()
+        }).catch(error => { deps.log('grace_write_failed', { uid, error: String(error) }); client.close(1011, 'metering_unavailable') })
+        inflightFlushes.add(pending)
+        void pending.finally(() => inflightFlushes.delete(pending))
       }
       deps.log('audio_state', { uid, state: next.kind, sessionSeconds })
     }
@@ -179,7 +240,12 @@ export function createRealtime(deps: RealtimeDeps) {
       const text = data.toString()
       try {
         const event = JSON.parse(text) as Json
-        if (event.type === 'error') return deps.log('upstream_event_error', { uid, error: event.error })
+        if (event.type === 'error') {
+          // Keep provider details server-side, but stop the channel so the app cannot report a healthy silent microphone.
+          deps.log('upstream_event_error', { uid, error: event.error })
+          client.close(1011, 'transcription_failed')
+          return
+        }
       } catch { /* forward as is */ }
       if (client.readyState === WebSocket.OPEN) client.send(text)
     })
@@ -190,6 +256,7 @@ export function createRealtime(deps: RealtimeDeps) {
     })
 
     client.on('message', data => {
+      if (!periodCurrent()) return
       let raw: unknown
       try { raw = JSON.parse(data.toString()) } catch { return }
       const event = shapeClientEvent(raw)
@@ -216,11 +283,25 @@ export function createRealtime(deps: RealtimeDeps) {
       }
     })
 
-    const flushTimer = setInterval(() => void flush(), FLUSH_MS)
+    const flushTimer = setInterval(() => void flush(), deps.audioFlushMs ?? FLUSH_MS)
+    let retirementTimer: ReturnType<typeof setTimeout> | undefined
+    const rotationTimer = deps.sessionExpiresAt === undefined ? undefined : setTimeout(() => {
+      toClient({ type: 'faangin.session.expiring' })
+      retirementTimer = setTimeout(() => client.close(1001, 'edge_rotation'), 5000)
+    }, Math.max(0, deps.sessionExpiresAt - deps.now()))
+    // Use short bounded timers: a 31-day interval exceeds Node's maximum setTimeout delay.
+    let periodTimer: ReturnType<typeof setTimeout> | undefined
+    const watchPeriod = () => {
+      if (allowanceEndsAt === undefined || !periodCurrent()) return
+      periodTimer = setTimeout(watchPeriod, Math.min(60_000, allowanceEndsAt - deps.now()))
+    }
+    watchPeriod()
     const idleTimer = setTimeout(() => { if (sessionSeconds < IDLE_AUDIO_SECONDS) client.close(1000, 'idle') }, SOCKET_IDLE_CLOSE_MS)
     client.once('close', () => {
       clearInterval(flushTimer)
       clearTimeout(idleTimer)
+      clearTimeout(periodTimer)
+      clearTimeout(rotationTimer); clearTimeout(retirementTimer)
       void flush()
       if (upstream.readyState === WebSocket.OPEN) upstream.close(1000)
       else upstream.terminate()

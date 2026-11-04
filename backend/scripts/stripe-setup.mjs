@@ -6,14 +6,14 @@
 //   node scripts/stripe-setup.mjs catalog                      products + prices with lookup keys, tax codes, tax behavior
 //   node scripts/stripe-setup.mjs tax-defaults                 account default tax_behavior/tax_code (head office stays an owner step)
 //   node scripts/stripe-setup.mjs portal [--return-url U] [--privacy-url U] [--terms-url U]
-//   node scripts/stripe-setup.mjs webhook --url URL [--secret-out FILE] [--disabled]   endpoint pinned to the SDK's API version
+//   node scripts/stripe-setup.mjs webhook --url URL --secret-out FILE [--disabled]   endpoint pinned to the SDK's API version
 //
 // Key: STRIPE_SECRET_KEY in the environment, or --sandbox to read STRIPE_SANDBOX_SECRET_KEY from .env.stripe-sandbox
 // (gitignored). Live keys are refused unless --live is also passed.
 import { closeSync, openSync, unlinkSync, writeSync } from 'node:fs'
-import { API_VERSION, Stripe, fail, keyMode, resolveKey } from './lib/stripe-env.mjs'
+import { API_VERSION, createStripeClient, fail } from './lib/stripe-env.mjs'
 
-// Product catalog. Lookup keys are the contract with functions/src/config.ts; amounts come from the pricing decision
+// Product catalog. Lookup keys are the contract with supabase/config.ts; amounts come from the pricing decision
 // of 2026-10-27 (BYOK $10 one-time, Pro $14.99/month or $144/year). USD, tax added on top (exclusive).
 // Tax codes: txcd_10202000 "Downloadable Software - personal use" for the Mac app license,
 // txcd_10103000 "Software as a service (SaaS) - personal use" for Pro. Confirm with a tax advisor before live.
@@ -43,7 +43,7 @@ export const CATALOG = [
   }
 ]
 
-/** Exactly the events stripeWebhook acts on (fulfill.ts) plus async_payment_failed and invoice.finalization_failed, which it logs. Nothing else is subscribed. */
+/** Exactly the events stripe-webhook acts on (fulfill.ts) plus async_payment_failed and invoice.finalization_failed, which it logs. Nothing else is subscribed. */
 export const WEBHOOK_EVENTS = [
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
@@ -157,37 +157,31 @@ async function ensurePortal(stripe) {
     console.log(`updated portal configuration ${config.id}`)
   }
   console.log(`portal: is_default=${config.is_default} features=${Object.entries(config.features).filter(([, v]) => v.enabled).map(([k]) => k).join(', ')}`)
-  console.log('createPortalSession picks this configuration by metadata.faangin=v1 (functions/src/billing/checkout.ts).')
+  console.log('createPortalSession picks this configuration by metadata.faangin=v1 (supabase/billing-service.ts).')
   return config
 }
 
 async function ensureWebhook(stripe) {
   const url = flag('url')
-  if (!url) fail('webhook needs --url https://.../stripeWebhook')
+  if (!url) fail('webhook needs --url https://.../functions/v1/stripe-webhook')
   const endpoints = await allPages(stripe.webhookEndpoints.list({ limit: 100 }))
   let endpoint = endpoints.find((e) => e.url === url)
   if (!endpoint) {
     const out = flag('secret-out')
-    if (has('secret-out') && !out) fail('--secret-out needs a file path')
+    if (!out) fail('webhook creation requires --secret-out FILE; the signing secret is never printed')
     // Reserve the file before creating anything: a bad directory, an existing file or a symlink fails now, not after the one-time secret exists.
-    const fd = out ? openSync(out, 'wx', 0o600) : undefined
+    const fd = openSync(out, 'wx', 0o600)
     try {
-      endpoint = await stripe.webhookEndpoints.create({ url, enabled_events: WEBHOOK_EVENTS, api_version: API_VERSION, description: 'Faangin stripeWebhook (Cloud Functions)' })
+      endpoint = await stripe.webhookEndpoints.create({ url, enabled_events: WEBHOOK_EVENTS, api_version: API_VERSION, description: 'Faangin stripe-webhook (Supabase Edge)' })
     } catch (err) {
       if (fd !== undefined) { closeSync(fd); unlinkSync(out) }
       throw err
     }
-    if (has('disabled')) endpoint = await stripe.webhookEndpoints.update(endpoint.id, { disabled: true }) // until the function is deployed; enable in the Dashboard
+    // Save before update: Stripe returns the secret only from creation, never from update.
+    try { writeSync(fd, `STRIPE_WEBHOOK_SECRET=${endpoint.secret}\n`) } finally { closeSync(fd) }
+    if (has('disabled')) endpoint = await stripe.webhookEndpoints.update(endpoint.id, { disabled: true }) // until deployed; enable in Dashboard
     console.log(`created webhook endpoint ${endpoint.id} (api_version ${endpoint.api_version}, ${endpoint.enabled_events.length} events)`)
-    if (fd !== undefined) {
-      // Raw value, no newline: `npx firebase functions:secrets:set STRIPE_WEBHOOK_SECRET --data-file <out>` takes the file verbatim.
-      writeSync(fd, endpoint.secret)
-      closeSync(fd)
-      console.log(`signing secret written to ${out}; set it with: npx firebase functions:secrets:set STRIPE_WEBHOOK_SECRET --project <project> --data-file ${out}  (then delete the file)`)
-    } else {
-      console.log(`signing secret: ${endpoint.secret}`)
-      console.log('(shown once because --secret-out was not given; roll it in the Dashboard if this output is logged anywhere)')
-    }
+    console.log(`signing secret saved to ${out}; upload with supabase secrets set --project-ref <project-ref> --env-file ${out}, then delete the file`)
   } else {
     const missing = WEBHOOK_EVENTS.filter((e) => !endpoint.enabled_events.includes(e))
     const extra = endpoint.enabled_events.filter((e) => !WEBHOOK_EVENTS.includes(e))
@@ -217,12 +211,11 @@ async function status(stripe) {
   console.log(`portal configurations: ${portals.length}${portals.length ? ' (' + portals.map((c) => `${c.id}${c.is_default ? ' default' : ''}${c.metadata?.faangin ? ' faangin=' + c.metadata.faangin : ''}`).join(', ') + ')' : ' (run: portal)'}`)
   const endpoints = await allPages(stripe.webhookEndpoints.list({ limit: 100 }))
   for (const e of endpoints) console.log(`webhook ${e.id} ${e.status} api_version=${e.api_version} ${e.url} (${e.enabled_events.length} events)`)
-  if (!endpoints.length) console.log('webhook endpoints: none (run: webhook --url ... after the functions are deployed)')
+  if (!endpoints.length) console.log('webhook endpoints: none (run: webhook --url ... after the Edge function is deployed)')
 }
 
-const key = resolveKey(args)
-const stripe = new Stripe(key, { maxNetworkRetries: 2, timeout: 20_000 })
-console.log(`MODE: ${keyMode(key)}`)
+const { stripe, mode } = await createStripeClient(args)
+console.log(`MODE: ${mode}`)
 const commands = { status, catalog: ensureCatalog, 'tax-defaults': ensureTaxDefaults, portal: ensurePortal, webhook: ensureWebhook }
 if (!commands[command]) fail(`unknown command ${command}; one of ${Object.keys(commands).join(', ')}`)
 await commands[command](stripe)

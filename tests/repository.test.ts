@@ -10,8 +10,8 @@ import { generateInput, settingsPatch } from '../src/main/validation'
 
 test('SQLite persists session, transcript, notes, settings and answer; recovers interrupted capture', () => {
   const directory = mkdtempSync(join(tmpdir(), 'faangin-repository-')), path = join(directory, 'test.sqlite')
+  let repo = new Repository(path)
   try {
-    let repo = new Repository(path)
     const session = repo.create('meeting')
     repo.setStatus(session.id, 'recording'); repo.update(session.id, { title: 'Specific roadmap', notes: 'Decision recorded' })
     repo.transcript(session.id, 'microphone', 'Budget is 10%', 'stable-segment')
@@ -29,8 +29,7 @@ test('SQLite persists session, transcript, notes, settings and answer; recovers 
     assert.equal(repo.list('', true).length, 1); repo.restore(session.id); assert.equal(repo.list().length, 1)
     const reset = repo.reset(session.id)
     assert.equal(reset.contextEpoch, 1); assert.equal(reset.transcript.length, 0); assert.equal(reset.answers.length, 0); assert.equal(reset.notes, '')
-    repo.close()
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  } finally { repo.close(); rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })
 test('strict settings and generation schemas exclude secrets and unknown privilege fields', () => {
   assert.throws(() => settingsPatch({ apiKey: 'secret' })); assert.throws(() => settingsPatch({ opacity: 1.1 })); assert.throws(() => settingsPatch({ microphone: 'yes' }))
@@ -82,7 +81,7 @@ test('a second SQLite connection cannot have its saved notes overwritten by a pe
     first.close()
     const reopened = new Repository(path)
     try { assert.equal(reopened.get(session.id).notes, 'Another window saved these notes') } finally { reopened.close() }
-  } finally { second.close(); rmSync(directory, { recursive: true, force: true }) }
+  } finally { first.close(); second.close(); rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })
 
 test('image imports reject decompression-sized dimensions before native decode', async () => {
@@ -96,7 +95,7 @@ test('image imports reject decompression-sized dimensions before native decode',
 
 function databaseFixture(run: (file: string) => void): void {
   const directory = mkdtempSync(join(tmpdir(), 'faangin-data-control-'))
-  try { run(join(directory, 'workspace.sqlite')) } finally { rmSync(directory, { recursive: true, force: true }) }
+  try { run(join(directory, 'workspace.sqlite')) } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 }
 const answer = (sessionId: string, text = 'fixture answer', id = 'fixture-answer'): Answer => ({ id, sessionId, requestId: 'fixture-request', action: 'ask', prompt: 'fixture prompt', text, model: 'fixture-model', status: 'complete', createdAt: Date.now() })
 

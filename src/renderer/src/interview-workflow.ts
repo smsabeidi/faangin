@@ -63,14 +63,23 @@ export function hasReplyContext(session: Session | null, capture: AppState['capt
   return !!session && (session.transcript.some(turn => turn.sessionId === session.id && !turn.provisional && !!turn.text.trim()) || (capture.active && capture.sessionId === session.id && partials.some(turn => turn.sessionId === session.id && !!turn.text.trim())))
 }
 
-export function audioInputGuidance(source: AudioChannel, enabled: boolean, status: string, permission?: string): string {
+export function audioInputGuidance(source: AudioChannel, enabled: boolean, status: string, platform: string, permission?: string): string {
   if (!enabled) return `Enable ${source === 'system' ? 'system audio to hear the remote interviewer' : 'the microphone to hear questions in the room'}.`
   const lower = status.toLowerCase()
+  // Windows has no system-audio permission: the loopback follows the default playback device, so that is what a user can fix.
+  const windowsLoopback = source === 'system' && platform === 'win32'
+  // The loopback health hints (audio-health.ts) already name the setting to change: the Default Device, not only the Default Communications Device.
+  // The meter clips them to one line and the generic sentence below names no setting, so the paragraph shows them in full. Only they mention Windows.
+  if (windowsLoopback && /^(?:silent|low audio level) — .*windows/i.test(status)) return status
   if (/denied|permission|not allowed|access was blocked/.test(lower)) {
+    if (windowsLoopback) return 'Check the default playback device in Windows Sound settings. If it is already set, fully quit and reopen Faangin. Choose Stop listening, then Start listening to try again.'
     if (permission === 'granted') return 'Your system reports that access is already allowed. Choose Stop listening, fully quit and reopen Faangin, then choose Start listening.'
     return `Check ${source === 'system' ? 'screen and system audio' : 'microphone'} access in system settings. If access is already allowed, fully quit and reopen Faangin. Choose Stop listening, then Start listening to try again.`
   }
-  if (/unavailable|not found|no device|not supported|unsupported/.test(lower)) return source === 'system' ? 'System audio is unavailable. Check audio permissions or choose Microphone for an in-person practice question.' : 'Reconnect your microphone or choose another input in Audio settings, then restart listening.'
+  if (/unavailable|not found|no device|not supported|unsupported|no computer audio/.test(lower)) {
+    if (windowsLoopback) return 'System audio is unavailable. Check the default playback device in Windows Sound settings or choose Microphone for an in-person practice question.'
+    return source === 'system' ? 'System audio is unavailable. Check audio permissions or choose Microphone for an in-person practice question.' : 'Reconnect your microphone or choose another input in Audio settings, then restart listening.'
+  }
   if (/disconnected|error|failed/.test(lower)) return 'This audio source disconnected. Stop listening, check the connection, and start again.'
   if (/muted/.test(lower)) return source === 'system' ? 'Computer audio is muted. Unmute the call or playback source to continue.' : 'The microphone is muted. Unmute it to continue.'
   if (/silent|low audio|no audio/.test(lower)) return source === 'system' ? 'No clear computer audio yet. Play the interviewer’s voice through your computer and check that the meter moves.' : 'No clear microphone audio yet. Speak near the microphone and check that the meter moves.'
@@ -97,7 +106,7 @@ export function questionSourceHealth(settings: Pick<Settings, 'liveSuggestionSou
   if (status === 'paused') return { listening: false, unavailable: false, headline: 'Listening paused' }
   if (enabled && /muted/.test(status)) return { listening: false, unavailable: false, waiting: true, headline: `${label} muted · waiting for audio` }
   if (enabled && capture.active && live(status)) return { listening: true, unavailable: false, headline: 'Listening to question audio' }
-  const failed = /denied|permission|blocked|unavailable|disconnected|failed|error|interrupted|could not|no audio frames|no system audio track/.test(status)
+  const failed = /denied|permission|blocked|unavailable|disconnected|failed|error|interrupted|could not|no audio frames|no system audio track|no computer audio/.test(status)
   if (!enabled || failed) {
     const secondaryLive = capture.active && (source === 'system' ? settings.microphone && live(capture.microphone) : settings.systemAudio && live(capture.system))
     return { listening: false, unavailable: true, headline: `${label} ${enabled ? 'unavailable' : 'is off'}${secondaryLive ? source === 'system' ? ' · microphone only' : ' · computer audio only' : ''}` }

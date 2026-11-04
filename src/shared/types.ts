@@ -159,6 +159,8 @@ export interface PermissionStatus {
   screen: string
   platform: string
 }
+/** The desktop platforms Faangin ships for; the main process's DesktopPlatform contract and the sandboxed renderers share this one definition. */
+export type PlatformId = 'darwin' | 'win32' | 'linux'
 export type AccessPermissionKind = 'microphone' | 'screen' | 'system-audio'
 export type SystemAudioAccessStatus = 'not-requested' | 'checking' | 'verified' | 'denied' | 'unavailable'
 export interface AccessSetupState {
@@ -186,6 +188,9 @@ export interface AppState {
   settings: Settings
   accessibility: { reduceTransparency: boolean; reduceMotion: boolean; increaseContrast: boolean }
   keyConfigured: boolean
+  transcriptionConfigured?: boolean
+  proConfigured?: boolean
+  billing?: BillingSummary
   permissions: PermissionStatus
   sessions: SessionSummary[]
   currentSession: Session | null
@@ -235,6 +240,8 @@ export interface CaptureCommand {
   microphone: boolean
   systemAudio: boolean
   microphoneDeviceId: string
+  /** The sandboxed capture renderer cannot read process.platform, so main sends the OS with every command. */
+  platform: PlatformId
 }
 
 export interface FaanginAPI {

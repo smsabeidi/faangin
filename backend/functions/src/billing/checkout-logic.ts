@@ -25,7 +25,7 @@ export function parseCheckoutFlags(raw: Record<string, unknown> | undefined): Ch
 
 /** Why a checkout may not start, or null when it may. Pure. */
 export function checkoutBlocked(plan: Plan, entitlement: Entitlement, flags: CheckoutFlags, activeSeats: number): string | null {
-  if (plan === 'byok') return entitledPlan(entitlement) === 'byok' ? 'BYOK is already purchased' : null
+  if (plan === 'byok') return entitlement.byok?.status === 'active' || entitledPlan(entitlement) === 'byok' ? 'BYOK is already purchased' : null
   if (entitledPlan(entitlement) === 'pro') return 'Pro is already active'
   if (!flags.checkoutOpen) return 'Pro checkout is closed right now'
   if (activeSeats >= flags.proSeatCap) return 'Pro is full right now'
@@ -33,9 +33,9 @@ export function checkoutBlocked(plan: Plan, entitlement: Entitlement, flags: Che
 }
 
 /** Stripe statuses that still bill or may resume billing. Anything else is over for good. */
-const ENDED_SUBSCRIPTION = new Set<string>(['canceled', 'incomplete_expired', 'incomplete'])
+const ENDED_SUBSCRIPTION = new Set<string>(['canceled', 'incomplete_expired'])
 /** Live subscriptions that do not give access: the entitlement is 'canceled' until an invoice is paid or the subscription resumes. */
-const ON_HOLD_SUBSCRIPTION = new Set<string>(['unpaid', 'paused'])
+const ON_HOLD_SUBSCRIPTION = new Set<string>(['unpaid', 'paused', 'incomplete'])
 
 /**
  * What the Stripe customer's subscriptions mean for a new Pro checkout. null: none left, checkout may start. 'access': one is

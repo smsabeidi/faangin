@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildDiagnosticBundle, diagnosticCaptureStatus, diagnosticJSON } from '../src/main/diagnostics'
+import { audioHealthMessages } from '../src/capture/audio-health'
 import { DEFAULT_SETTINGS } from '../src/shared/types'
 
 const now = 1_700_000_000_000
@@ -26,6 +27,13 @@ test('diagnostics include only useful versions, bounded health metadata, counter
   assert.deepEqual(report.timings.firstText, { samples: 2, p50Ms: 100, p95Ms: 200, maxMs: 200 })
   assert.deepEqual(report.timings.completion, { samples: 2, p50Ms: 500, p95Ms: 700, maxMs: 700 })
   assert.deepEqual(report.errorCounts, { 'provider-timeout': 1 })
+})
+
+test('Windows reports pass through their platform and the not-required screen permission instead of reading as unknown', () => {
+  const report = buildDiagnosticBundle({ ...metadata(), platform: 'win32', arch: 'x64', permissions: { microphone: 'denied', screen: 'not-required' } }, now)
+  assert.equal(report.platform, 'win32'); assert.equal(report.arch, 'x64')
+  assert.deepEqual(report.permissions, { microphone: 'denied', screen: 'not-required' })
+  assert.deepEqual(buildDiagnosticBundle({ ...metadata(), permissions: { microphone: 'not-required', screen: 'Not-Required' } }, now).permissions, { microphone: 'not-required', screen: 'unknown' })
 })
 
 test('diagnostics report only the allowlisted selected chat provider without endpoints, model aliases or credentials', () => {
@@ -92,7 +100,7 @@ test('timing and error collections are bounded, and raw capture errors remain ex
   const report = buildDiagnosticBundle({ ...metadata(), timings: Array.from({ length: 10_000 }, (_, i) => ({ firstTokenMs: i, totalMs: i * 2 })), errorCodes: Array(10_000).fill('provider-timeout') }, now)
   assert.equal(report.timings.firstText.samples, 1_000); assert.equal(report.timings.firstText.maxMs, 999)
   assert.equal(report.errorCounts['provider-timeout'], 100)
-  for (const [value, expected] of [['Off', 'off'], ['Connecting…', 'connecting'], ['Requesting permission…', 'connecting'], ['Capturing', 'capturing'], ['Silent — check the source if speech is playing.', 'silent'], ['Paused', 'paused'], ['failed', 'failed'], ['Audio device disconnected.', 'failed'], ['Permission denied at /Users/private', 'unknown']] as const) assert.equal(diagnosticCaptureStatus(value), expected)
+  for (const [value, expected] of [['Off', 'off'], ['Connecting…', 'connecting'], ['Requesting permission…', 'connecting'], ['Capturing', 'capturing'], ['Silent — check the source if speech is playing.', 'silent'], [audioHealthMessages('win32', 'system').silent, 'silent'], ['Silent — Faangin hears the Windows Default Device. Raw text must not be exported.', 'unknown'], ['Paused', 'paused'], ['failed', 'failed'], ['Audio device disconnected.', 'failed'], ['Permission denied at /Users/private', 'unknown']] as const) assert.equal(diagnosticCaptureStatus(value), expected)
 })
 
 test('export timestamps are generated locally and invalid or input-supplied timestamps are rejected or ignored', () => {

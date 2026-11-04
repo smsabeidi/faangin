@@ -14,7 +14,7 @@ export const charges = new Map<string, Record<string, unknown>>()
 /** Customer Portal configurations served by GET /v1/billing_portal/configurations; tests seed these. */
 export const portalConfigurations: Array<Record<string, unknown>> = []
 /** Checkout Sessions created through POST /v1/checkout/sessions, so list(status=open) and expire work. */
-export const sessions = new Map<string, { id: string; customer: string; status: 'open' | 'expired' | 'complete' }>()
+export const sessions = new Map<string, { id: string; customer: string; status: 'open' | 'expired' | 'complete'; mode?: string; payment_status?: string; metadata?: Record<string, string>; created?: number }>()
 /** Ids of the customers actually created (an idempotent replay creates none), and the responses saved per Idempotency-Key. */
 export const createdCustomers: string[] = []
 /** Session ids whose expire call Stripe refuses (for example a session that was paid a moment ago). */
@@ -48,7 +48,7 @@ export function fakeEvent(type: string, object: Record<string, unknown>, overrid
 }
 
 export interface FakeSubscriptionOptions {
-  id?: string; status?: string; customer?: string; uid?: string; cancelAtPeriodEnd?: boolean
+  id?: string; status?: string; customer?: string; uid?: string; cancelAtPeriodEnd?: boolean; cancelAt?: number | null
   periodStart?: number; periodEnd?: number; lookupKey?: string
   /** Old API shape: period on the subscription itself instead of its first item. */
   topLevelPeriod?: boolean
@@ -63,7 +63,7 @@ export function fakeSubscription(options: FakeSubscriptionOptions = {}): Record<
   const lookupKey = options.lookupKey ?? 'faangin_pro_monthly'
   return {
     id: options.id ?? 'sub_fake', object: 'subscription', status: options.status ?? 'active',
-    customer: options.customer ?? 'cus_fake', cancel_at_period_end: options.cancelAtPeriodEnd ?? false,
+    customer: options.customer ?? 'cus_fake', cancel_at_period_end: options.cancelAtPeriodEnd ?? false, cancel_at: options.cancelAt ?? null,
     metadata: options.uid ? { uid: options.uid, plan: 'pro_monthly' } : {},
     start_date: start,
     ...(options.topLevelPeriod ? period : {}),

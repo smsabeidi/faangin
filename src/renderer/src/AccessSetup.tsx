@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowRight, ArrowUpRight, AudioLines, Check, CircleCheck, FolderDown, Info, LoaderCircle, LockKeyhole, Mic, Monitor, ShieldCheck } from 'lucide-react'
 import type { AccessSetupState, AppState } from '../../shared/types'
+import { platformCopy } from '../../shared/platform-copy'
 import { Brand } from './components'
-import { ACCESS_PERMISSION_ORDER, accessSetupReady, nextAccessPermission, permissionBlocked, permissionNeedsSettings, permissionReady, permissionStatusLabel, type AccessPermission } from './access-setup-state'
+import { ACCESS_PERMISSION_ORDER, accessSetupReady, nextAccessPermission, permissionBlocked, permissionNeedsSettings, permissionReady, permissionStatusLabel, permissionValue, type AccessPermission } from './access-setup-state'
 
 export interface AccessSetupProps {
   state: AppState
@@ -35,8 +36,10 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
   parentRefresh.current = onRefresh
   complete.current = onComplete
   const ready = accessSetupReady(report)
-  const grantedCount = ACCESS_PERMISSION_ORDER.filter(kind => permissionReady(report, kind)).length
-  const isMac = state.permissions.platform === 'darwin'
+  const os = platformCopy(state.permissions.platform)
+  // A permission the OS does not have is ready from the start; counting it would open the dialog at "1 of 3 ready".
+  const required = ACCESS_PERMISSION_ORDER.filter(kind => permissionValue(report, kind) !== 'not-required')
+  const grantedCount = required.filter(kind => permissionReady(report, kind)).length
   const session = state.currentSession
   const unsavedSession = session?.persistent === false && !!(session.transcript.length || session.answers.length || session.notes.trim() || session.attachments.length)
 
@@ -153,7 +156,7 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
     if (actionLocked.current) return
     actionLocked.current = true; setPending(kind); setError(''); setHelp(kind)
     try { await window.faangin.openPermissionSettings(kind) }
-    catch (value) { if (alive.current) setError(value instanceof Error ? value.message : 'System settings could not be opened. Open your system’s privacy settings manually.') }
+    catch (value) { if (alive.current) setError(value instanceof Error ? value.message : `${os.settingsApp} could not be opened. Open your system’s privacy settings manually.`) }
     finally { actionLocked.current = false; if (alive.current) setPending('') }
   }
   function trapFocus(event: KeyboardEvent<HTMLElement>) {
@@ -165,25 +168,30 @@ export default function AccessSetup({ state, onRefresh, onComplete }: AccessSetu
     if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) { event.preventDefault(); last.focus() }
     else if (!event.shiftKey && (document.activeElement === last || !dialog.current?.contains(document.activeElement))) { event.preventDefault(); first.focus() }
   }
-  const helpKind = help && (permissionNeedsSettings(report, help) || help === 'screen' && !pending && !permissionReady(report, 'screen')) ? help : ACCESS_PERMISSION_ORDER.find(kind => permissionNeedsSettings(report, kind))
-  const systemSettingsSection = helpKind === 'microphone' ? 'Microphone' : 'Screen & System Audio Recording'
+  // Where the OS has no consent to deny, the usual failed computer-audio check is a playback-device problem ('unavailable', never 'denied'),
+  // and the Sound page with a retry is what fixes it, so that help must not wait for a denial.
+  const audioDeviceHelp = (kind: AccessPermission) => kind === 'system-audio' && !os.screenPermissionRequired && os.canOpenSettings(kind) && permissionBlocked(report, kind)
+  const helpKind = help && (permissionNeedsSettings(report, help) || audioDeviceHelp(help) || help === 'screen' && !pending && !permissionReady(report, 'screen')) ? help : ACCESS_PERMISSION_ORDER.find(kind => permissionNeedsSettings(report, kind) || audioDeviceHelp(kind))
+  // Computer audio has no settings page of its own anywhere; where screen consent gates it, that pane is the one to open.
+  const helpPath = helpKind === 'microphone' ? os.microphonePath : os.screenPath
 
   return <div className="access-setup-backdrop"><section ref={dialog} className="access-setup" role="dialog" aria-modal="true" aria-labelledby="access-setup-title" aria-describedby="access-setup-description" data-access-ready={ready} onKeyDown={trapFocus}>
     <header className="access-setup-header"><Brand/><span><LockKeyhole size={13}/>ONE-TIME SETUP</span></header>
     <div className="access-setup-main">
-      <div className="access-setup-intro"><h1 id="access-setup-title" ref={heading} tabIndex={-1}>Let’s get you set up.</h1><p id="access-setup-description">Allow screen and audio access once. We’ll guide you through each step.</p></div>
+      <div className="access-setup-intro"><h1 id="access-setup-title" ref={heading} tabIndex={-1}>Let’s get you set up.</h1><p id="access-setup-description">{os.screenPermissionRequired ? 'Allow screen and audio access once.' : 'Allow microphone access once and let us check computer audio.'} We’ll guide you through each step.</p></div>
       <div className="access-setup-rows">{permissionRows.map(({ kind, label, icon: Icon, description }) => {
         const allowed = permissionReady(report, kind)
         const blocked = permissionBlocked(report, kind)
-        const needsSettings = permissionNeedsSettings(report, kind)
+        // A blocked permission with no settings page to open is retried in place instead.
+        const needsSettings = permissionNeedsSettings(report, kind) && os.canOpenSettings(kind)
         const checking = pending === kind || !report || report.checking && !allowed
         return <div className="access-setup-row" key={kind} data-permission={kind}><span className="access-setup-row-icon"><Icon size={21} strokeWidth={1.6}/></span><div className="access-setup-row-copy"><div><strong>{label}</strong><span className={`access-setup-status ${checking ? 'checking' : allowed ? 'granted' : blocked ? 'blocked' : ''}`} role="status">{checking ? <LoaderCircle size={10} className="spin"/> : allowed ? <Check size={10}/> : null}{permissionStatusLabel(report, kind, checking)}</span></div><p>{description}</p></div><button type="button" className={`access-setup-allow ${allowed ? 'ready' : ''}`} aria-label={allowed ? `${label} access ready` : `${needsSettings ? 'Open settings for' : blocked ? 'Retry access to' : 'Allow access to'} ${label.toLowerCase()}`} disabled={!!pending || allowed} onClick={() => void (needsSettings ? openSettings(kind) : request(kind))}>{checking && pending === kind ? <><LoaderCircle size={13} className="spin"/>Checking…</> : allowed ? <><CircleCheck size={16}/>Ready</> : <>{needsSettings ? 'Open settings' : blocked ? 'Try again' : 'Allow access'}<ArrowUpRight size={12}/></>}</button></div>
       })}</div>
-      {helpKind && <div className="access-setup-help"><Info size={16}/><div><p>{isMac ? <>Open <strong>System Settings → Privacy &amp; Security → {systemSettingsSection}</strong> and enable Faangin. Return here when you’re done; we’ll check automatically. {unsavedSession ? 'Save your current session below before restarting.' : ''} If macOS asks to quit and reopen Faangin, choose <strong>Quit &amp; Reopen</strong>. Your setup will resume.</> : <>Open your system’s privacy settings and allow {helpKind === 'microphone' ? 'microphone' : 'screen and computer audio'} access for Faangin. Return here; we’ll check automatically.</>} {helpKind === 'system-audio' && 'Then choose Retry audio check below to verify computer audio.'}</p><button type="button" disabled={!!pending} onClick={() => void openSettings(helpKind)}>Open {isMac ? 'System Settings' : 'privacy settings'}<ArrowUpRight size={12}/></button>{helpKind === 'system-audio' && <button type="button" disabled={!!pending} onClick={() => void request('system-audio')}>Retry audio check<ArrowRight size={12}/></button>}</div></div>}
+      {helpKind && <div className="access-setup-help"><Info size={16}/><div><p>{helpPath ? <>Open <strong>{helpPath}</strong> and {os.permissionAction(helpKind)}. Return here when you’re done; we’ll check automatically.{os.restartNote && <> {unsavedSession ? 'Save your current session below before restarting.' : ''} If {os.name} asks to quit and reopen Faangin, choose <strong>Quit &amp; Reopen</strong>. Your setup will resume.</>}</> : os.permissionHelp(helpKind)} {helpKind === 'system-audio' && 'Then choose Retry audio check below to verify computer audio.'}</p>{os.canOpenSettings(helpKind) && <button type="button" disabled={!!pending} onClick={() => void openSettings(helpKind)}>Open {os.settingsApp}<ArrowUpRight size={12}/></button>}{helpKind === 'system-audio' && <button type="button" disabled={!!pending} onClick={() => void request('system-audio')}>Retry audio check<ArrowRight size={12}/></button>}</div></div>}
       <p className="access-setup-note"><ShieldCheck size={12}/>{ready ? 'We’ll configure your audio inputs when you continue. Listening stays off.' : 'Setup does not transcribe or save audio. Listening starts only when you choose.'} After setup, access is checked once when Faangin opens.</p>
       {error && <p className="access-setup-error" role="alert">{error}</p>}
       {notice && <p className="access-setup-note" role="status">{notice}</p>}
     </div>
-    <footer className="access-setup-footer"><div className="access-setup-footer-status" role="status">{ready ? <CircleCheck size={18}/> : <ShieldCheck size={17}/>}<span>{ready ? 'All required access is ready.' : `${grantedCount} of 3 ready · Checks automatically`}<small className="access-setup-recording">{state.capture.active ? 'Your current session is listening.' : 'Listening is off.'}</small>{unsavedSession && <button type="button" className="access-setup-export" disabled={!!pending} onClick={() => void exportUnsaved()}><FolderDown size={13}/>Save current session</button>}</span></div><button type="button" className="access-setup-primary" disabled={!!pending} onClick={() => void (ready ? finish() : begin())}>{pending ? <><LoaderCircle size={15} className="spin"/>{pending === 'complete' ? 'Finishing setup…' : pending === 'export' ? 'Saving session…' : 'Checking access…'}</> : <>{ready ? 'Continue' : 'Set up access'}<ArrowRight size={15}/></>}</button></footer>
+    <footer className="access-setup-footer"><div className="access-setup-footer-status" role="status">{ready ? <CircleCheck size={18}/> : <ShieldCheck size={17}/>}<span>{ready ? 'All required access is ready.' : `${grantedCount} of ${required.length} ready · Checks automatically`}<small className="access-setup-recording">{state.capture.active ? 'Your current session is listening.' : 'Listening is off.'}</small>{unsavedSession && <button type="button" className="access-setup-export" disabled={!!pending} onClick={() => void exportUnsaved()}><FolderDown size={13}/>Save current session</button>}</span></div><button type="button" className="access-setup-primary" disabled={!!pending} onClick={() => void (ready ? finish() : begin())}>{pending ? <><LoaderCircle size={15} className="spin"/>{pending === 'complete' ? 'Finishing setup…' : pending === 'export' ? 'Saving session…' : 'Checking access…'}</> : <>{ready ? 'Continue' : 'Set up access'}<ArrowRight size={15}/></>}</button></footer>
   </section></div>
 }

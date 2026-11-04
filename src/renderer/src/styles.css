@@ -45,7 +45,7 @@
   --chrome-blur: 28px;
   --floating-blur: 40px;
   --ambient: radial-gradient(ellipse at 36% 0%, rgb(255 255 255 / .025), transparent 56%), radial-gradient(ellipse at 85% 90%, rgb(255 255 255 / .015), transparent 52%), radial-gradient(ellipse at 0% 57%, rgb(255 255 255 / .01), transparent 42%);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', system-ui, 'Helvetica Neue', sans-serif;
   color: var(--text);
   background: var(--base);
   font-synthesis: none;
@@ -77,6 +77,7 @@ h1, h2, h3, p { margin: 0; }
 ::selection { background: var(--accent-subtle); color: var(--text); }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 30%, transparent); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 55%, transparent); }
 ::-webkit-scrollbar-track { background: transparent; }
 .app { height: 100vh; display: flex; font-size: 13px; background: var(--ambient), var(--base); color: var(--text); overflow: hidden; isolation: isolate; }
 html:has(.native-material), html:has(.native-material) body { background: transparent; }
@@ -844,3 +845,15 @@ kbd { font-family: inherit; font-size: 10px; font-weight: 400; color: var(--fain
 .overlay-app .overlay-more-panel *, .overlay-app .composer, .overlay-app .composer * {
   -webkit-app-region: no-drag;
 }
+
+/* Windows. These selectors outrank the overlay-polish.css rules that load after this file; macOS keeps every rule above unchanged. */
+/* The Windows workspace is opaque, so backdrop blur only costs GPU time on each scroll; keep a little for panels that float over content. */
+.app.platform-win32 { --chrome-blur: 16px; --floating-blur: 24px; }
+/* The slim scrollbar above is classic rather than overlay on Windows, so reserve its 7px and content stays put when a list starts to overflow. */
+.app.platform-win32 .answer-feed, .app.platform-win32 .transcript-scroll, .app.platform-win32 .settings-page, .app.platform-win32 .library { scrollbar-gutter: stable; }
+/* Without a DWM frame around the transparent window, composited children can leave square pixels past the rounded corners that overflow: hidden alone paints on Windows. */
+.app.overlay-app.platform-win32 { clip-path: inset(0 round 20px); }
+/* "Ctrl+Alt+I to interact" is eight characters longer than its macOS glyph form and is the only recovery hint while the overlay is click-through. */
+.app.overlay-app.platform-win32 .overlay-identity.overlay-drag { flex-basis: 136px; width: 136px; max-width: 136px; }
+/* "Ctrl+Alt+S" is three glyphs' width wider than "⌃⌥S"; keep the capture button inside the default 480px topbar. */
+.app.overlay-app.platform-win32 .overlay-capture-button kbd { font-size: 9px; letter-spacing: -.2px; padding-left: 6px; }

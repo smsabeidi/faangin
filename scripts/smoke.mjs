@@ -3,23 +3,20 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
 import WebSocket from 'ws'
 import { writeDocumentFixtures } from './fixtures.mjs'
+import { appProcessKill, resolveAppExecutable } from './lib/app-executable.mjs'
 import { runDesktopWorkflow, verifyDesktopPersistence } from './smoke-workflow.mjs'
 import { startSmokeProvider } from './smoke-provider.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const require = createRequire(import.meta.url)
 const configuredApp = process.env.FAANGIN_APP_PATH
 const nativeAudio = process.env.FAANGIN_SMOKE_NATIVE_AUDIO === '1'
-if (nativeAudio && !configuredApp) throw new Error('FAANGIN_SMOKE_NATIVE_AUDIO requires FAANGIN_APP_PATH for the packaged Faangin permission identity.')
+if (nativeAudio && !configuredApp) throw new Error('FAANGIN_SMOKE_NATIVE_AUDIO requires FAANGIN_APP_PATH so the packaged Faangin, not the development Electron binary, performs the native capture.')
 const fixture = await mkdtemp(join(tmpdir(), 'faangin-smoke-'))
 await writeDocumentFixtures(fixture)
-const executable = configuredApp
-  ? (configuredApp.endsWith('.app') ? join(configuredApp, 'Contents', 'MacOS', 'Faangin') : configuredApp)
-  : require('electron')
+const executable = resolveAppExecutable(configuredApp)
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 const redact = value => String(value).replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
 function launch(markerName) {
@@ -57,10 +54,10 @@ async function ready(running) {
 async function stop(running) {
   if (!running?.child.pid || running.exitCode !== undefined) return
   const child = running.child
-  try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, 'SIGTERM') } catch { child.kill('SIGTERM') }
+  appProcessKill(child, 'SIGTERM')
   await Promise.race([new Promise(resolve => child.once('exit', resolve)), delay(2000)])
   if (running.exitCode === undefined) {
-    try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') }
+    appProcessKill(child, 'SIGKILL')
     await Promise.race([new Promise(resolve => child.once('exit', resolve)), delay(1000)])
   }
 }
@@ -153,7 +150,32 @@ try {
   await debuggerClient.evaluate(`(async () => { const until = Date.now() + 3000; while (!document.querySelector('[data-onboarding-skip], .sidebar') && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20)); document.querySelector('[data-onboarding-skip]')?.click(); })()`)
   const workflow = await debuggerClient.evaluate(`(${runDesktopWorkflow.toString()})(window.faangin, ${JSON.stringify(provider.endpoint)}, ${JSON.stringify({ nativeAudio })})`)
   verified(workflow, ['capture', 'inference', 'presets', 'context', 'history'])
-  if (provider.requests.length !== 21 || provider.requests[0].memory !== true || provider.requests.slice(1).some(request => request.memory) || !provider.requests.find(request => request.route === '/slow')?.cancelled || !provider.requests.find(request => request.route === '/draft')?.draftSources || !provider.requests.find(request => request.route === '/reply')?.replySources || !provider.requests.find(request => request.route === '/automatic')?.automaticSources || provider.requests.filter(request => request.automatic).length !== 9 || !provider.requests.find(request => request.route === '/automatic-failure' && request.automatic) || provider.requests.filter(request => request.interviewSolution).length !== 1 || provider.requests.filter(request => request.interviewContinuity).length !== 2 || !provider.requests.find(request => request.spokenContinuity) || !provider.requests.find(request => request.quietContext) || !provider.requests.find(request => request.freshCandidateContext) || !provider.requests.find(request => request.route === '/automatic-late-context' && !request.freshCandidateContext && request.cancelled) || provider.requests.filter(request => request.interruptionContext).length !== 2 || provider.requests.filter(request => request.interruptionStage?.endsWith('old') && request.cancelled).length !== 2) throw new Error('Local fixture transport, source consent, drafting, spoken reply, automatic reply, failure pause, or cancellation did not match the admitted requests.')
+  // Server-side cancellation is noticed when the fixture's response closes, which a loaded host can delay, so every condition
+  // must still hold but is given a few seconds to settle, and a failure names the unmet conditions instead of all of them.
+  const unmetRequests = () => {
+    const requests = provider.requests, find = predicate => requests.find(predicate), count = predicate => requests.filter(predicate).length
+    return Object.entries({
+      'exactly 21 requests': requests.length === 21,
+      'only the first request carries approved memory': requests[0]?.memory === true && !requests.slice(1).some(request => request.memory),
+      'slow request cancelled': !!find(request => request.route === '/slow')?.cancelled,
+      'draft sources': !!find(request => request.route === '/draft')?.draftSources,
+      'reply sources': !!find(request => request.route === '/reply')?.replySources,
+      'automatic sources': !!find(request => request.route === '/automatic')?.automaticSources,
+      'nine automatic requests': count(request => request.automatic) === 9,
+      'automatic failure request': !!find(request => request.route === '/automatic-failure' && request.automatic),
+      'one interview solution': count(request => request.interviewSolution) === 1,
+      'two interview continuity requests': count(request => request.interviewContinuity) === 2,
+      'spoken continuity': !!find(request => request.spokenContinuity),
+      'quiet context': !!find(request => request.quietContext),
+      'fresh candidate context': !!find(request => request.freshCandidateContext),
+      'late-context request cancelled': !!find(request => request.route === '/automatic-late-context' && !request.freshCandidateContext && request.cancelled),
+      'two interruption contexts': count(request => request.interruptionContext) === 2,
+      'two interrupted old streams cancelled': count(request => request.interruptionStage?.endsWith('old') && request.cancelled) === 2
+    }).filter(([, met]) => !met).map(([name]) => name)
+  }
+  let unmet = unmetRequests()
+  for (const settleBy = Date.now() + 3_000; unmet.length && Date.now() < settleBy; unmet = unmetRequests()) await delay(50)
+  if (unmet.length) throw new Error(`Local fixture transport, source consent, drafting, spoken reply, automatic reply, failure pause, or cancellation did not match the admitted requests (${provider.requests.length} requests; unmet: ${unmet.join('; ')}).`)
   await debuggerClient.evaluate(`window.faangin.updateSettings(${JSON.stringify({chatProvider:'compatible',compatibleChatEndpoint:provider.endpoint,compatibleChatModel:'fixture-fast',compatibleChatSmartModel:'fixture-smart',microphone:false,systemAudio:true,liveSuggestionSource:'system'})})`)
   await debuggerClient.evaluate(`window.faangin.selectSession(${JSON.stringify(workflow.ids.interviewFlow)})`)
   for (const [width, height] of [[1280, 808], [1000, 650], [900, 550]]) {

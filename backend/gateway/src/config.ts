@@ -1,4 +1,6 @@
 /** Pro gateway constants. Printed allowances come from the adopted Pro Option 1 (27 Oct 2026). */
+import process from 'node:process'
+
 export const PORT = Number(process.env.PORT ?? 8080)
 export const OPENAI_BASE = process.env.OPENAI_BASE ?? 'https://api.openai.com'
 export const OPENAI_WS_BASE = process.env.OPENAI_WS_BASE ?? 'wss://api.openai.com'

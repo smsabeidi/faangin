@@ -1,237 +1,134 @@
-# Deploy runbook
+# Deploy Faangin on Supabase
 
-In order, one command per block, from the repo root. **Owner only** marks steps that need the owner's Google, Stripe or OpenAI account; everything else anyone with the repo can run once the owner has done their part. Staging first (`faangin-staging`); production is the same list against `faangin-prod` with the notes at the end.
+Run from the repository root unless a command specifies otherwise. The selected project is `uxgphdpcgcpgwbwfibkx`, with public API origin `https://uxgphdpcgcpgwbwfibkx.supabase.co`. The schema and four Edge Functions are deployed; see the current acceptance status in [launch configuration](../../docs/engineering/launch-configuration.md). Firebase deployment and Google billing quota work are superseded.
 
-## 1. Firebase project — owner only
+Critical pending gate: complete the [exposed Supabase key cutover](SUPABASE-KEY-ROTATION.md) before launch. Passing billing does not establish that the initially exposed server credentials have been retired. This review made no rotation changes.
 
-```bash
-npx firebase login
+## 1. Establish access to the intended project
+
+Use the Supabase account that owns the target project. Project publishable/secret keys authorize project APIs; they do not authorize management API deployment, migrations, Auth settings, or Edge secret setup. The previously connected CLI/connector account cannot access this project, even though the browser is signed into the correct account.
+
+Reconnect the connector to the owning account, or use a short-lived project-scoped management token. The previously approved 24-hour token now returns HTTP 401 invalid/expired (November 2); current remote management verification and fixture cleanup are unavailable until scoped access is renewed. Limit scopes to the database/migrations, Auth configuration, Edge Functions/secrets, and read-only settings/logs/advisors needed for this deployment. Store tokens only in an ignored owner-readable local file or credential store. Do not paste private keys into documentation, chat, public build configuration, or command arguments. Rotate private project keys previously shared in chat.
+
+Discover commands against the installed CLI before use:
+
+```sh
+supabase --help
+supabase db --help
+supabase functions deploy --help
+supabase secrets set --help
 ```
 
-```bash
-npx firebase projects:create faangin-staging
+Before changing the database, inspect existing tables, migrations, Edge Functions, logs, and security/performance advisors in this exact project. Confirm whether existing users/payments need data migration. Do not assume an empty database or overwrite existing data. Firebase users cannot simply reuse their old tokens in Supabase; account migration requires its own verified mapping if real users exist.
+
+## 2. Verify and deploy the schema
+
+Install and verify as described in [the backend README](../README.md). Account/billing schema source is `backend/supabase/schema-billing.sql`; gateway schema source is `backend/gateway/schema-supabase.sql`. The reviewed combined migration belongs in `supabase/migrations/` and must apply the account schema before gateway functions that reference it.
+
+Create migration files with `supabase migration new`, rather than inventing a timestamped filename. Iterate with SQL query tools against a disposable local database; use one reviewed migration for the final remote change. Inspect the pending SQL before applying it to the selected target. Never use `db reset` against this project.
+
+After applying the migration, verify:
+
+- Every `faangin` table has RLS enabled and no browser-role grants.
+- `anon` and `authenticated` cannot execute any `public.faangin_*` RPC or read private tables.
+- Service-role account, device, checkout, event, entitlement, and usage operations succeed.
+- Answer/audio admission and entitlement version updates serialize across parallel callers.
+- Security/performance advisors have been reviewed and actionable application findings resolved.
+
+The migration initializes global flags and the Pro active-seat count. Keep new customer access closed until credentials and deployed acceptance pass. A privileged SQL update can change operational flags, for example:
+
+```sql
+update faangin.flags
+set document = jsonb_set(document, '{checkoutOpen}', 'false'::jsonb)
+where key = 'global';
 ```
 
-Then in the [Firebase console](https://console.firebase.google.com) for `faangin-staging`:
+Other controls are `proSessionsOpen`, `smartToFast`, `handsfreeOff`, `transcriptionOff`, `blockedUids`, `proSeatCap`, `automaticTax`, and `termsConsent`. Change only the required fields; preserve the others.
 
-1. Upgrade to **Blaze** and set a budget alert (Google Cloud → Billing → Budgets, e.g. $50/month).
-2. **Authentication → Sign-in method**: enable **Google** and **Email/Password**.
-3. **Firestore → Create database**, production mode. The location is permanent; use `nam5` (US multi-region) or `us-central1` to sit next to the functions.
-4. **Project settings → General**: note the **Web API key**; the desktop app needs it (`client/README.md`).
+## 3. Configure Auth and mail
 
-## 2. First Firebase deploy
+Enable email/password signup and require confirmed email. The team owns faangin.com and has verified access to its Hostinger DNS editor (cosmos.dns-parking.com and nova.dns-parking.com). The selected sender is Faangin <noreply@auth.faangin.com>; public DNS now has the DKIM TXT record and rsend.auth/send.auth Resend CNAMEs, with SPF/MX resolving through CNAME. _dmarc.auth is absent. Resend now shows auth.faangin.com as Verified, with DKIM and both Forge CNAME sending checks passed; sending is enabled and receiving disabled. After fresh approval, the Faangin Auth domain-restricted Sending key was saved to ignored mode-0600 backend/.env.smtp.local and connected to Supabase. SMTP save was accepted and verified after reload with custom SMTP enabled and no dirty changes. The unused duplicate key was deleted after fresh approval; only the current Faangin Auth key remains. Certificate-verified SMTP authentication returned 235 without sending a message. Approved actual signup confirmation and recovery mail then reached the connected Hostinger inbox. Confirmation signed in; recovery opened its password form. Independent browser observation now confirms the recovery page reports the password saved and instructs returning to Faangin for a new sign-in code. The current sign-in/device code is expired and no desktop session was exchanged. Use Different Account cleared the browser recovery session and returned to the email field; the activation tab was then closed. The standalone helper was stopped with exit 0 after its last poll reported expired. Obsolete password/activation URL/device code/user code fields were scrubbed from the protected email fixture, which now records password-reset-verified-device-expired and retains the exact owned-cleanup identity fields. No desktop session was exchanged. Full native UI acceptance remains pending. [SMTP-SETUP.md](SMTP-SETUP.md) records the exact settings. Earlier Auth config readback returned 200 with confirmation required, SMTP unset, and the approved callback URLs unchanged; the later dashboard SMTP save/reload verification supersedes the SMTP-unset observation. Preserve the verified SMTP sender and complete recovery/device acceptance. Set Site URL to `https://uxgphdpcgcpgwbwfibkx.supabase.co/functions/v1/billing-return/activate` and add `http://127.0.0.1:*/activate?**` to Auth's redirect allowlist. The callback listener remains open for one hour while the device approval code expires after ten minutes. Keep the desktop open while approving a code or following a confirmation/recovery link. Enable Google only after its provider credentials and redirects are configured and verified.
 
-```bash
-npx firebase deploy --project faangin-staging --only firestore,hosting,functions
+Verify a fresh account can sign up, confirm email, sign in, recover a password, approve the displayed device code, and create an independent desktop session. Test wrong/expired/reused codes, cancellation, session revocation, and sign-out. Auth settings existing in the dashboard do not establish successful email delivery.
+
+## 4. Configure Edge secrets and public release metadata
+
+Supabase supplies project URL and server keys to deployed Edge Functions. The implementation accepts the default `SUPABASE_SECRET_KEYS` / `SUPABASE_PUBLISHABLE_KEYS` maps with compatibility fallbacks. Keep the private server key inside Edge. Do not put a service-role key in desktop configuration.
+
+An ignored owner-only `backend/.env.supabase.local` currently contains the newly generated signing key and reconciliation credential. Add the remaining environment secrets securely to that file, or prepare a separate ignored `supabase/.env.edge.local` with mode `0600`. Set actual values securely without logging them:
+
+| Name | Purpose |
+| --- | --- |
+| `STRIPE_CHECKOUT_KEY` | Restricted key: Checkout Sessions, Customers, Customer portal write; Prices, Products, Subscriptions read |
+| `STRIPE_WEBHOOK_KEY` | Separate restricted key: Checkout Sessions, Subscriptions, Invoices, Charges, Refunds, Disputes read |
+| `STRIPE_WEBHOOK_SECRET` | Signature secret for this project's deployed `stripe-webhook` URL |
+| `STRIPE_EXPECT_LIVEMODE` | `false` for sandbox; explicitly `true` only for a live environment |
+| `LICENSE_SIGNING_KEY` | Base64 PKCS#8 Ed25519 private key; never the public verification key |
+| `OPENAI_API_KEY` | Provider project/service-account key used only by the managed gateway |
+| `RECONCILE_SECRET` | High-entropy credential for the internal daily reconciliation caller |
+
+The optional `FAANGIN_HOSTING_ORIGIN` changes billing return URLs. Its default is this project's `/functions/v1/billing-return` base, so no Firebase Hosting domain is required. Return pages use plain text because the shared Supabase Edge domain does not serve arbitrary HTML pages as a trusted app origin.
+
+The new target environment already has a locally generated key pair. For a separate environment with no signing key, generate one with `backend/scripts/gen-license-key.mjs`, redirecting its private stdout into a protected ignored file. Its stderr prints only the matching public key. Set the private value through Edge secrets and put the public SPKI value in the desktop's `licensePublicKeys` array. Keep an existing signing key when retrieving its public half; do not rotate it unnecessarily. During planned rotation, retain old public verification keys for at least the longest outstanding license plus grace window (44 days).
+
+Use the allowlist uploader; the local file also contains the management token, which must stay out of Edge secrets:
+
+```sh
+node backend/scripts/upload-supabase-secrets.mjs --env-file backend/.env.supabase.local
 ```
 
-Functions reference secrets, so this first deploy prompts to create any secret that does not exist yet. Either type the values at the prompts or do step 3 first and deploy again; step 4 ends with a functions deploy anyway.
+The desktop release JSON contains only `supabaseUrl`, `publishableKey`, `gatewayBase`, and `licensePublicKeys`. The gateway base is the same project's `/functions/v1/faangin-gateway`. See [launch configuration](../../docs/engineering/launch-configuration.md). A valid public config does not verify deployed services or secret availability.
 
-## 3. Secrets — owner only
+## 5. Deploy all four Edge Functions
 
-Stripe keys come from step 4 (create them there first if you want to skip the prompts).
+Build the generated gateway bundle before deployment:
 
-```bash
-npx firebase functions:secrets:set STRIPE_CHECKOUT_KEY --project faangin-staging
+```sh
+npm --prefix backend/gateway run build
+supabase functions deploy faangin-api --project-ref uxgphdpcgcpgwbwfibkx --no-verify-jwt
+supabase functions deploy stripe-webhook --project-ref uxgphdpcgcpgwbwfibkx --no-verify-jwt
+supabase functions deploy billing-return --project-ref uxgphdpcgcpgwbwfibkx --no-verify-jwt
+supabase functions deploy faangin-gateway --project-ref uxgphdpcgcpgwbwfibkx --no-verify-jwt
 ```
 
-```bash
-npx firebase functions:secrets:set STRIPE_WEBHOOK_KEY --project faangin-staging
+These functions enforce their own Auth, Stripe signature, or reconciliation-secret checks. Platform JWT verification must remain disabled for the public device/Stripe routes and modern publishable-key flow. Verify the deployed function configuration matches `supabase/config.toml`.
+
+Check `/functions/v1/faangin-api/health`, billing return messages, and gateway `/functions/v1/faangin-gateway/healthz`. Health responses are configuration probes; follow them with authenticated requests and negative authorization tests. Confirm no private keys or tokens appear in logs. Set budget/error alerts and review Edge duration, memory, CPU, and connection limits. Gateway transcription rotates connections before Edge lifetime expiry; test a long interview across multiple rotations before admitting customers.
+
+## 6. Connect the Stripe environment
+
+Both restricted runtime keys and the signing secret are saved/uploaded. The checkout key passed its unpaid Checkout/portal smoke; the webhook key passed its required resource reads, and Customers correctly returned 403. Account health reports billing configured. The intended Selmou AI sandbox endpoint is enabled with its exact URL/API version/14 events. Invalid signatures were rejected, and a directly signed unhandled readiness fixture was processed once with replay deduplicated. A later app-created BYOK sandbox simulation passed independent Stripe completed-payment, exact Dashboard SQL processed/applied binding, and runtime signed-license verification, with no real funds. The exact BYOK completion event’s automatic delivery was directly observed as HTTP 200/applied in Stripe Workbench. Post-purchase BYOK duplicate rejection passed without a new Checkout. The renewed Pro monthly sandbox Subscribe now has independent paid provider state, automatic HTTP 200/applied delivery, exact active subscription/retained BYOK database state, signed Pro license, and blocked repeat-purchase proof; one exact hosted Pro completion replay also passed unchanged-state checks; other replay/delivery-order negatives, Pro lifecycle, and desktop UI/restart remain open. See [the exact permissions and secure local-file convention](STRIPE-SETUP.md).
+
+From `backend/`, `node scripts/stripe-setup.mjs status --sandbox` identifies the sandbox account and catalog. `catalog`, `tax-defaults`, and `portal` are idempotent setup commands. The expected lookup keys and portal tag are in [CONTRACT.md](CONTRACT.md). Use separate live and sandbox keys and reject mode mismatches.
+
+The webhook URL is:
+
+```text
+https://uxgphdpcgcpgwbwfibkx.supabase.co/functions/v1/stripe-webhook
 ```
 
-License signing key: generate, upload, delete the file. The command prints the **public** key on stderr: paste it into `LICENSE_PUBLIC_KEYS` in `client/faangin-cloud.ts` (the app build for this environment).
+Create/update it with the setup script and always pass `--secret-out` to a protected ignored file. Upload the one-time signing secret through Edge secrets, then delete the temporary file. Subscribe only to the event list in `stripe-setup.mjs`, with the installed SDK's pinned API version. Confirm Stripe Workbench shows successful signed deliveries. A browser return or successful Checkout URL alone grants no entitlement.
 
-```bash
-node scripts/gen-license-key.mjs > /tmp/license-key.txt
-```
+The restricted-checkout-key no-payment smoke has passed. To repeat it when a changed key or configuration requires verification, run `npm run stripe:smoke` using that restricted sandbox checkout key. It uses the current Supabase service's exact Checkout parameters. It verifies customer, price, Checkout create/list/expire, and portal permissions without completing payment. Complete actual paid sandbox Checkouts through the desktop to verify signed delivery and fulfillment, subscription reads, and license refresh; use the [concrete paid acceptance plan](PAID-SANDBOX-ACCEPTANCE.md). BYOK sandbox Stripe/database/runtime-license proof has now passed, and its exact automatic webhook delivery was observed HTTP 200/applied. Post-purchase BYOK duplicate rejection passed. The renewed Pro monthly sandbox Subscribe now has independent paid provider state, automatic HTTP 200/applied delivery, exact active subscription/retained BYOK database state, signed Pro license, and blocked repeat-purchase proof; Pro lifecycle, one exact hosted Pro completion replay passed unchanged-state checks; other replay/delivery-order negatives, and desktop UI/restart acceptance remain open.
 
-```bash
-npx firebase functions:secrets:set LICENSE_SIGNING_KEY --project faangin-staging --data-file /tmp/license-key.txt
-```
+Before live sales, configure real business/statement details, invoice branding, legal URLs, payment emails, failed-payment cancellation, and dispute handling. Enable Tax/terms flags only after the matching account settings are ready. Confirm relevant tax registrations and operational/payment requirements with the business owner. Revoking entitlement after a refund/dispute does not cancel Stripe billing; support must ensure future charges stop when required.
 
-```bash
-rm -P /tmp/license-key.txt
-```
+## 7. Schedule reconciliation and run acceptance
 
-## 4. Stripe (sandbox for staging)
+A Vault-backed daily job is installed for 03:15 UTC and remains disabled pending successful Stripe-backed reconciliation acceptance. A one-use reconciliation readiness dispatch completed with HTTP 200, request ID 1, checked 0, and failed 0. This empty run verifies dispatch/HTTP readiness only; it did not reconcile an actual Stripe account. The daily job stays inactive until paid acceptance and a successful nonempty Stripe-backed reconciliation. Its scheduled POST uses a 60-second HMAC plus a private single-use dispatch nonce; pg_net receives no shared credential. The manual secret header is reserved for deliberate server-side operations and is never queued by cron. Inspect the reviewed job with `node backend/scripts/setup-supabase-reconcile.mjs status --env-file backend/.env.supabase.local`; status is read-only. After billing prerequisites pass, run and observe one reconciliation before enabling the daily job and its failure alert. A successful cron queue operation alone is not a successful HTTP reconciliation. Leave the installed pg_net extension unchanged.
 
-Run `status` first: it must list the three lookup keys (`faangin_byok_v1`, `faangin_pro_monthly`, `faangin_pro_annual`), print the account name you expect, and show one portal configuration tagged `faangin=v1` (all three were created in the Selmou AI sandbox on 2026-10-28 and 29). If it prints `missing lookup keys` or `(run: portal)`, or names a different account, fix `.env.stripe-sandbox` and run the commands below; every command is idempotent, so re-running is safe. The sandbox secret key lives only in the gitignored `.env.stripe-sandbox` (see `.env.stripe-sandbox.example`) and is used by these scripts, never by the functions.
+Before public distribution, record results for:
 
-```bash
-node scripts/stripe-setup.mjs status --sandbox
-```
+1. Fresh signup, mail confirmation, password recovery, device approval, separate-session refresh, and sign-out/revocation.
+2. BYOK and Pro sandbox Checkout, signed webhook fulfillment, correct invoices/licenses, portal return, cancellation, payment failure/recovery, duplicate prevention, refund replay, and device cap.
+3. Managed Fast/Smart answers, selected-image Solve, microphone and computer audio, automatic help, reconnects across several Edge lifetimes, stop/cancel, notes/export, and saved-session reopen. Pro must work without a personal provider key.
+4. Cross-worker admission/usage, daily/monthly/ramp boundaries, Stripe retry/reconciliation behavior, provider quota, sustained latency and memory under admitted load.
+5. Live Stripe configuration and a controlled live purchase/refund, followed by signed/notarized installer verification and fresh install.
 
-```bash
-node scripts/stripe-setup.mjs catalog --sandbox
-```
+Do not describe fixture transcripts or local provider stubs as live interview acceptance. Physical audio routing, representative networks/models, email delivery, deployed billing, and release signing each need their own evidence.
 
-```bash
-node scripts/stripe-setup.mjs tax-defaults --sandbox
-```
+## Rotation and recovery
 
-```bash
-node scripts/stripe-setup.mjs portal --sandbox --return-url https://faangin-staging.web.app/activate
-```
+Roll Stripe secrets with overlap, update Edge secrets, and verify the new values before expiring old credentials. Rotate any private Supabase keys shared outside the intended secret store. Revoke temporary management tokens when deployment finishes. Retain a rollback plan for schema and functions without deleting current customer data. The user instructed that pg_net remain unchanged; the recorded namespace warning does not authorize extension removal or relocation. Keep Firebase resources unchanged until their retirement is separately authorized and all required data has been migrated.
 
-Then prove the parameters against the real sandbox (creates and deletes a throwaway customer):
-
-```bash
-npm run stripe:smoke
-```
-
-### Restricted keys — owner only
-
-**Developers → API keys → Create restricted key**, two of them (the sandbox secret key is never put in Secret Manager):
-
-- `STRIPE_CHECKOUT_KEY`: Checkout Sessions **write**, Customers **write**, Customer portal **write** (sessions and configurations), Prices **read**, Products **read**, Subscriptions **read** (the double-subscription guard). Everything else none.
-- `STRIPE_WEBHOOK_KEY`: Checkout Sessions, Subscriptions, Invoices, Charges, Refunds, Disputes **read**. Everything else none.
-
-Set them with step 3's commands.
-
-### Webhook endpoint
-
-After the first functions deploy (step 2), copy the URL `firebase deploy` prints for `stripeWebhook` and create the endpoint with the exact event list and API version the code expects. The signing secret is written to a file, uploaded, and deleted:
-
-```bash
-node scripts/stripe-setup.mjs webhook --sandbox --url https://us-central1-faangin-staging.cloudfunctions.net/stripeWebhook --secret-out /tmp/whsec.txt
-```
-
-```bash
-npx firebase functions:secrets:set STRIPE_WEBHOOK_SECRET --project faangin-staging --data-file /tmp/whsec.txt
-```
-
-```bash
-rm -P /tmp/whsec.txt
-```
-
-Functions pin secret versions at deploy time, so redeploy after setting or changing any secret:
-
-```bash
-npx firebase deploy --project faangin-staging --only functions
-```
-
-### Stripe Tax — owner only
-
-Until this is done `flags/global.automaticTax` stays `false` and Checkout charges the list price with no tax line. Enabling `automatic_tax` without an active registration makes Stripe collect nothing while looking enabled, so the order matters:
-
-1. **Dashboard → Tax → Settings**: set the head office address (the legal entity's). The Tax status turns `active`.
-2. **Tax → Locations → Add registration** for each jurisdiction where the business is registered (or use *Register for me* / Taxually where eligible). Which jurisdictions is a question for the tax advisor. Stripe's threshold monitoring only runs on live-mode transactions, emails only after thresholds are crossed, and does not cover physical-presence obligations such as the home state or country, so Stripe will never prompt for the home-jurisdiction registration: decide it with the advisor before the first live sale. Write the outcome (which registrations were added, or that launching with none was an advisor-backed decision) and the date in the go-live checklist below.
-3. Confirm the product tax codes with the advisor: `txcd_10202000` for the Mac app license, `txcd_10103000` for Pro (https://docs.stripe.com/tax/tax-codes). Change them with `catalog` if needed.
-4. Set `flags/global.automaticTax: true` in Firestore. Run `npm run stripe:smoke`: it enables tax when registrations exist and prints each session's tax status.
-5. Pay one session with a test card from an address inside a registered jurisdiction and check the invoice shows a tax line (sandbox registrations are separate from live ones; repeat in live).
-
-Things to know: while Tax is `pending` (no head office) Stripe refuses to create a session with `automatic_tax` (`stripe_tax_inactive`), and with Tax active but no registration in the buyer's jurisdiction it creates the session and collects nothing, so the flag is flipped only after steps 1 and 2. The flag changes new sessions only: subscriptions created before it keep renewing untaxed until you run the Dashboard's tax migration tool (live mode) and tell those subscribers. After activation, switch on **Settings → Tax → Thresholds** notifications, check the preset tax code matches Pro's `txcd_10103000`, and review **Tax → Locations → Needs attention** monthly in the first year. With tax on and no shipping address, Google Pay is not offered at Checkout; accept that or add shipping collection after testing it in the sandbox. Before choosing the product tax codes, show the advisor the candidates: BYOK `txcd_10202000` (downloadable software, personal use) or `txcd_10202001` (non-recreational); Pro `txcd_10103000` (SaaS, personal use) or `txcd_10103100` (SaaS with electronic download, personal use). The classification is theirs; change it with `catalog` and update `CATALOG`/`tax-defaults` in `scripts/stripe-setup.mjs`. Stripe verifies business tax IDs collected at Checkout by format and zero-rates on that alone; decide the reverse-charge policy with the advisor before turning `automaticTax` on with any VAT/GST registration.
-
-### Dashboard settings — owner only
-
-- **Settings → Business → Public details**: support email, statement descriptor `FAANGIN` (what the card statement shows), terms-of-service and privacy URLs. Once the terms URL is set, `flags/global.termsConsent: true` adds the "I agree" checkbox to Checkout.
-- **Settings → Billing → Subscriptions and emails**: Smart Retries on; after the final retry **cancel the subscription** (the webhook then ends access and the buyer can subscribe again; `unpaid` also ends access but leaves a subscription that blocks a new Checkout until its invoice is paid). Send emails for failed payments and for expiring cards.
-- **Settings → Emails → Customer emails**: successful payments (receipts) and refunds on. Stripe sends no emails from a sandbox.
-- **Settings → Billing → Subscriptions and emails → Manage disputed payments**: set it to cancel the subscription immediately, without prorating. Stripe does not cancel a Pro subscription on a dispute unless this is set, and it never cancels one on a refund or an early fraud warning; the webhook then revokes access but the card would keep being charged, and each renewal is another chargeback. The read-only webhook key cannot cancel, so this setting and the support rule below are the control.
-- **Support rule for refunds**: refund a Pro subscriber from the subscription's **Cancel** dialog with "refund the last payment in full" (one action cancels and refunds), never from the Payments page alone. For an early fraud warning on an undisputed charge, refund it (both prices are below the dispute fee). The first revoke of a Pro subscription after a refund, dispute or fraud warning writes an `ERROR` log line "entitlement revoked; confirm the Stripe subscription is canceled" (repeat events for an already revoked plan stay silent; a BYOK-only revoke is a `WARNING` "BYOK license revoked"); create a log-based alert in Google Cloud Logging on `severity=ERROR` and that message so someone checks the subscription the same day. After a correct Cancel + refund the alert still fires once: confirm in the Dashboard that the subscription is canceled and close it.
-- **Settings → Payments → Payment methods**: review what is on. The code excludes the delayed bank debits (`us_bank_account`, `sepa_debit`, `bacs_debit`, `acss_debit`, `au_becs_debit`, `nz_bank_account`) on both plans even if they are on here, and still fulfils a BYOK payment only once it is not `unpaid`, so cards, wallets and instant methods are the safe set; a card-only setup is simplest. If bank debits are ever wanted for BYOK, first add a pending-payment marker so a buyer with a debit in flight cannot buy twice.
-- **Settings → Business → Public details / Branding / Checkout**: business name, address, support email and phone; icon, logo and colours; show the legal policies, contact information and refund policy on Checkout. After the privacy and terms URLs exist, re-run `node scripts/stripe-setup.mjs portal --sandbox --return-url … --privacy-url … --terms-url …` so the portal shows them.
-- **Settings → Billing → Invoices and Invoice template**: invoice numbering prefix, footer and memo; the seller's legal name and address and, once registered, the seller's tax IDs (under the invoice template's Tax section).
-- **Settings → Emails**: failed-payment, expiring-card and renewal-reminder emails on (the yearly plan especially), plus the Stripe-hosted link for confirming a payment that needs the buyer's action (3DS), which lands in the Customer Portal. Leave *Send finalized invoices* off (it duplicates the renewal receipt), keep PDF attachments on, turn credit-note emails on, and preview a receipt with *Send test receipt* in Branding.
-- **Refunds are credit notes**: refund from the invoice's *More actions → Issue a credit note* with a refund to the original payment method (for a Pro subscriber, from the subscription's Cancel dialog as above), so the invoice, the tax reversal and the buyer's documents line up. A bare refund from the Payments page leaves the invoice untouched.
-- **Pausing**: *Pause subscription* stops service (Stripe emits `customer.subscription.paused`, access ends); *Pause payment collection* deliberately keeps the customer entitled.
-- **Pricing note**: BYOK's numbered post-payment invoice (`invoice_creation`) is billed separately from Payments; check the current per-invoice fee in the Invoicing pricing page. If a receipt is enough, remove `invoice_creation` in `functions/src/billing/checkout-params.ts`.
-- **Settings → Compliance**: complete the PCI questionnaire (SAQ A, hosted Checkout) for the selling entity once the first live key exists, and repeat it yearly.
-
-## 5. Seed the kill switches
-
-In the Firebase console → Firestore, create these two documents by hand (the rules block clients; the console is fine):
-
-- `flags/global`: `{ checkoutOpen: true, proSessionsOpen: true, smartToFast: false, handsfreeOff: false, transcriptionOff: false, blockedUids: [], proSeatCap: 200, automaticTax: false, termsConsent: false }`
-- `stats/pro`: `{ activeSeats: 0 }`
-
-## 6. Gateway on Cloud Run
-
-Install and sign in — owner only:
-
-```bash
-brew install --cask google-cloud-sdk
-```
-
-```bash
-gcloud auth login
-```
-
-Enable the APIs:
-
-```bash
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com --project faangin-staging
-```
-
-Create the OpenAI key secret — owner only. The command reads the value from stdin: paste the key, press Enter, then Ctrl-D (nothing lands in shell history or a file):
-
-```bash
-gcloud secrets create OPENAI_API_KEY --project faangin-staging --replication-policy automatic --data-file=-
-```
-
-Let the Cloud Run service account read it (the default compute service account; it already has project access for Firestore and Auth):
-
-```bash
-gcloud secrets add-iam-policy-binding OPENAI_API_KEY --project faangin-staging --member "serviceAccount:$(gcloud projects describe faangin-staging --format 'value(projectNumber)')-compute@developer.gserviceaccount.com" --role roles/secretmanager.secretAccessor
-```
-
-Deploy (builds the container from `gateway/` with Cloud Build and prints the service URL):
-
-```bash
-bash scripts/deploy-gateway.sh faangin-staging
-```
-
-Put the printed URL into the desktop app as `GATEWAY_BASE`. Rotating the OpenAI key: `gcloud secrets versions add OPENAI_API_KEY --data-file=-` then run the deploy script again (the service binds `latest` at deploy).
-
-## 7. Smoke checks
-
-```bash
-curl -s "$(gcloud run services describe faangin-gateway --project faangin-staging --region us-central1 --format 'value(status.url)')/healthz"
-```
-
-Expect `ok`. Then a device code without any auth:
-
-```bash
-curl -s -X POST https://us-central1-faangin-staging.cloudfunctions.net/deviceCodeStart -H 'content-type: application/json' -d '{"deviceId":"smoke-test-device","deviceName":"Smoke"}'
-```
-
-Open the `verificationUrl` from the answer (it is `https://faangin-staging.web.app/activate?code=…`), sign in, approve, and buy the $10 plan with Stripe's test card `4242 4242 4242 4242`. The Stripe webhook log should show every event answered `200`.
-
-## Production notes
-
-- Separate project `faangin-prod`: repeat steps 1 to 7 with `--project faangin-prod` and Stripe in **live mode**. Give the setup script the live key without leaving it in shell history: `read -rs STRIPE_SECRET_KEY && export STRIPE_SECRET_KEY` (paste, Enter), then `node scripts/stripe-setup.mjs catalog --live` (a restricted key with Products, Prices, Webhook Endpoints, Customer portal and Tax settings write; same for `tax-defaults`, `portal --return-url https://faangin-prod.web.app/activate` and `webhook --url … --secret-out …`, each of which prints `MODE: live` first; expire that key in the Dashboard only after the go-live checklist's `status --live` item, which needs it too), live restricted keys for the functions, and the live Stripe Tax head office and registrations before the first sale.
-- No env file is needed for live mode or the site URL: `functions/src/config.ts` derives both from the Firebase project id. In `faangin-prod` the webhook accepts only live events and every hosted-page URL is `https://faangin-prod.web.app/...`; in any other project (staging, emulator) it accepts only test events and uses that project's own `https://<project>.web.app`. `STRIPE_EXPECT_LIVEMODE=true|false` and `FAANGIN_HOSTING_ORIGIN` still work as overrides (for example a custom domain; put them in `functions/.env.<projectId>`, which Firebase loads at deploy and the repo's `.gitignore` ignores), but forgetting them can no longer put production in test mode or hand out staging links.
-- Staging rejects a live event with 400 and production rejects a test event with 400.
-- A new license key per environment: run step 3 again for prod and ship the prod public key in the production app build (`LICENSE_PUBLIC_KEYS`, current key first; keep the old one listed for 44 days after a rotation).
-- Budget alerts on both projects; the gateway's own backstops (`gateway/src/config.ts`) cap spend per customer.
-
-## Go-live checklist (Stripe, before the first live sale)
-
-Tick each line with the date and who did it.
-
-- [ ] Live restricted keys created (`STRIPE_CHECKOUT_KEY`, `STRIPE_WEBHOOK_KEY`) and uploaded to the `faangin-prod` secrets; no `sk_` key anywhere in Secret Manager.
-- [ ] With the setup key loaded as in the production notes (`read -rs STRIPE_SECRET_KEY && export STRIPE_SECRET_KEY`), `node scripts/stripe-setup.mjs status --live` prints `MODE: live` and lists the three lookup keys, one tagged portal configuration and the live webhook endpoint. Then expire the setup key.
-- [ ] Stripe Tax: head office set, status `active`. Registrations recorded here: ______ (or: launching with none is an advisor-backed decision made on ______). `flags/global.automaticTax` set to match.
-- [ ] Terms of service and privacy URLs set, then `flags/global.termsConsent: true`.
-- [ ] Dashboard: disputed payments cancel the subscription, failed payments cancel after the final retry, receipts and refund emails on, statement descriptor and invoice business details set.
-- [ ] Log-based alert on the "entitlement revoked" error exists and goes to a person.
-- [ ] One real card purchase of each plan (then refund it from the subscription's Cancel dialog) shows `applied` for every webhook event and a correct invoice.
-- [ ] The sandbox restricted keys were exercised before the live ones were made: load the `rk_test_…` checkout key with `read -rs STRIPE_SECRET_KEY && export STRIPE_SECRET_KEY` and run `npm run stripe:smoke` (it covers customers, prices, Checkout create/list/expire and the portal; Tax is not readable with this key and is skipped), then buy a Pro test subscription on staging with the deployed functions (covers `subscriptions.list` and the webhook key's reads) and read both keys' request logs in Workbench for 403 responses.
-- [ ] An Advanced access policy (Developers → API keys → Manage access policy) is attached to `STRIPE_CHECKOUT_KEY` and `STRIPE_WEBHOOK_KEY`: allow Google Cloud ASNs and the US, block anonymous VPNs, proxies and Tor. Try it on the staging keys first and check the request logs after the first live traffic.
-- [ ] Business details on Checkout, invoices and the portal are the real ones (Public details, Branding, Checkout legal links, invoice template, seller tax IDs).
-- [ ] The PCI questionnaire (SAQ A) is complete.
-
-## Rotating Stripe secrets
-
-Firebase pins a secret's version at deploy, so the order is always: change the secret, then redeploy functions inside the overlap.
-
-- **Webhook signing secret**: in Stripe, roll the endpoint's secret with a 24-hour expiry; `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET` with the new value; `firebase deploy --only functions`; then destroy the old secret version.
-- **Restricted keys** (`STRIPE_CHECKOUT_KEY`, `STRIPE_WEBHOOK_KEY`): roll with the grace period (up to 7 days), set the secret, redeploy. Never choose "expire now": fulfilment fails until the redeploy finishes.
-- The owner's setup key (`.env.stripe-sandbox`, or a live key used once for `stripe-setup.mjs`) is never in Secret Manager; expire it when the setup work is done.
-
-## Known gaps (accepted for launch)
-
-- **No time bound on `past_due`.** A failed renewal keeps Pro and starts a new period's allowance for as long as Stripe keeps retrying; the Dashboard setting "cancel after the final retry" in the go-live checklist is what ends it.
-- **Reconcile only re-reads Pro subscriptions that are active or past_due.** If a subscription sat `unpaid` or `paused` (only reachable when the Dashboard keeps unpaid subscriptions or support pauses one), was then paid or resumed, and every Stripe retry of the recovery events was missed, the entitlement stays canceled until another event arrives. Fix by resending the latest `customer.subscription.updated` for that subscription from Workbench (15 days) or the CLI (30 days).
-- **Delayed bank debits are excluded**, so there is no pending-payment state to track; see the Payment methods note before changing that.
-- **A BYOK buyer who pays twice** (card, then a second Checkout opened before the first webhook landed) is possible only inside a few seconds; the expiry of older open sessions and the "already purchased" check make it unlikely, and support refunds the duplicate.
+Current lifecycle blocker: sandbox portal scheduled cancellation exposed a hosted normalization bug. Stripe uses cancel_at at period end with cancel_at_period_end=false; current database/UI incorrectly shows renewal even though Pro access remains active. The cancellation normalizer/parity fix is LOCAL READY: 50 actual Supabase and 42 historical fulfillment tests, both account-backend typechecks, all four Edge checks, and independent focused 8+8 reviews passed. It is not deployed; the hosted database flag remains false. After deployment, one protected nonempty reconciliation is intended to refresh the authoritative owned subscription, followed by the prepared signed verifier. Neither that reconciliation nor scheduled verification has executed. Replaying the already-processed event is correctly a duplicate and cannot heal the row. Daily scheduling stays off. Exact scheduled-cancellation/BYOK-retention verification remains pending; immediate cancellation is deferred. See [paid acceptance](PAID-SANDBOX-ACCEPTANCE.md).

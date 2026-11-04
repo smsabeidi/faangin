@@ -1,22 +1,60 @@
 #!/usr/bin/env bash
-# Fails when a Stripe key, webhook secret, OpenAI key, private key (PEM, or the base64 DER LICENSE_SIGNING_KEY) or service-account
-# file is in a tracked file, an untracked file that is not ignored, or a staged blob. Runs first in `npm test`; also usable as a
-# pre-commit hook: ln -s ../../scripts/check-secrets.sh .git/hooks/pre-commit
+# Scan working files and staged blobs. Report locations only: never print credential text.
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)" # not dirname "$0": as a symlinked hook that would resolve inside .git/
-pattern='(sk|rk|pk)_(live|test)_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{16,}|(^|[^A-Za-z0-9_])sk-(proj-)?[A-Za-z0-9_-]{32,}|MC4CAQAwBQYDK2VwBCIE[A-Za-z0-9+/=]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"private_key_id"'
-# git grep is NUL-safe (spaces and non-ASCII in names). Exit 1 means no match; anything above is a real failure and must not read as "clean".
-scan() {
-  local rc=0 out
-  out=$(git grep -n -I -E "$@" -e "$pattern" -- . ':!scripts/check-secrets.sh') || rc=$?
-  if [ "$rc" -gt 1 ]; then echo "check-secrets: git grep failed ($rc)" >&2; exit 2; fi
-  printf '%s' "$out"
+cd "$(git rev-parse --show-toplevel)"
+node <<'NODE'
+const { spawnSync } = require('node:child_process')
+const { readFileSync, lstatSync } = require('node:fs')
+function git(args) {
+  const result = spawnSync('git', args, { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 })
+  if (result.error || result.status !== 0) throw new Error(`git ${args[0]} failed`)
+  return result.stdout
 }
-hits=$(scan --untracked; printf '\n'; scan --cached)
-hits=$(printf '%s\n' "$hits" | grep . | sort -u || true)
-if [ -n "$hits" ]; then
-  echo "check-secrets: a secret is in a tracked, untracked or staged file:" >&2
-  echo "$hits" | sed -E 's/((sk|rk|pk)_(live|test)_[A-Za-z0-9]{6})[A-Za-z0-9]+/\1…/g; s/(whsec_[A-Za-z0-9]{4})[A-Za-z0-9]+/\1…/g; s/(sk-(proj-)?[A-Za-z0-9_-]{4})[A-Za-z0-9_-]+/\1…/g; s/(MC4CAQAwBQYDK2VwBCIE)[A-Za-z0-9+\/=]+/\1…/g' >&2
-  exit 1
-fi
-echo "check-secrets: clean ($( (git ls-files; git ls-files --others --exclude-standard) | grep -c .) files)"
+const excluded = new Set(['scripts/check-secrets.sh', 'backend/scripts/check-secrets.sh'])
+const patterns = [
+  /(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/,
+  /whsec_[A-Za-z0-9]{16,}/,
+  /(?:^|[^A-Za-z0-9_])sk-(?:proj-)?[A-Za-z0-9_-]{32,}/,
+  /MC4CAQAwBQYDK2VwBCIE[A-Za-z0-9+/=]{20,}/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /"private_key_id"/,
+  /sb_secret_[A-Za-z0-9_-]{16,}/,
+  /(?:^|[^A-Za-z0-9_])sbp_[A-Za-z0-9_-]{20,}/
+]
+function privateJwt(line) {
+  for (const token of line.matchAll(/eyJ[A-Za-z0-9_-]+\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+/g)) {
+    try { if (JSON.parse(Buffer.from(token[1], 'base64url').toString('utf8')).role === 'service_role') return true } catch {}
+  }
+  return false
+}
+const safePath = path => JSON.stringify(patterns.reduce((value, pattern) => value.replace(new RegExp(pattern.source, 'g'), '[credential]'), path).replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[token]'))
+const hits = new Set()
+function scan(path, content, staged = false) {
+  if (excluded.has(path) || content.includes(0)) return
+  const lines = content.toString('utf8').split('\n')
+  for (let index = 0; index < lines.length; index++) {
+    if (patterns.some(pattern => pattern.test(lines[index])) || privateJwt(lines[index])) {
+      hits.add(`${safePath(path)}:${index + 1}${staged ? ' (staged)' : ''}`)
+    }
+  }
+}
+try {
+  const files = [...new Set(git(['ls-files', '--cached', '--others', '--exclude-standard', '-z']).toString('utf8').split('\0').filter(Boolean))]
+  for (const path of files) {
+    try { if (lstatSync(path).isFile()) scan(path, readFileSync(path)) }
+    catch (error) { if (error.code !== 'ENOENT') throw error }
+  }
+  for (const entry of git(['ls-files', '--stage', '-z']).toString('utf8').split('\0').filter(Boolean)) {
+    const match = /^[0-7]+ ([0-9a-f]+) [0-3]\t([\s\S]+)$/.exec(entry)
+    if (!match) throw new Error('Unrecognized staged entry')
+    if (!excluded.has(match[2])) scan(match[2], git(['cat-file', 'blob', match[1]]), true)
+  }
+  if (hits.size) {
+    console.error('check-secrets: credentials detected; remove them from these working/staged locations:')
+    for (const hit of [...hits].sort()) console.error(hit)
+    process.exitCode = 1
+  } else console.log(`check-secrets: clean (${files.length} files plus staged versions)`)
+} catch (error) {
+  console.error(`check-secrets: scan failed (${error.message})`)
+  process.exitCode = 2
+}
+NODE

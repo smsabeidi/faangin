@@ -12,13 +12,18 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "verify": "npm test && npm run build && npm run smoke",
+    "check:launch": "node scripts/launch-preflight.mjs",
+    "verify:launch": "npm run check:launch && npm run verify && npm --prefix backend run typecheck && npm --prefix backend test && npm --prefix backend run smoke:gateway",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:win32": "node --import tsx --import ./scripts/simulate-platform.mjs --test tests/*.test.ts",
     "eval:delivery": "node --import tsx scripts/response-delivery-eval.ts",
     "eval:delivery:live": "electron scripts/response-delivery-live-eval.cjs",
     "package:mac": "npm run build && electron-builder --mac --arm64 --dir",
     "dist:mac": "npm run build && electron-builder --mac --arm64",
     "release:mac": "node scripts/release-mac.mjs",
+    "package:win": "npm run build && electron-builder --win --x64 --dir",
     "dist:win": "npm run build && electron-builder --win --x64",
+    "release:win": "node scripts/release-win.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
   "engines": {

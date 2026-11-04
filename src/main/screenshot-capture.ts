@@ -22,11 +22,14 @@ export interface ScreenshotDisplay {
   scaleFactor: number
 }
 
+export type ScreenshotSourceType = 'screen' | 'window'
+
 interface ScreenshotPorts<Image> {
   windows(): readonly ScreenshotWindow[]
   watchWindows(listener: (window: ScreenshotWindow) => void): () => void
   displays(): readonly ScreenshotDisplay[]
-  sources(size: { width: number; height: number }): Promise<readonly ScreenshotSource<Image>[]>
+  /** Thumbnails of the listed kinds only: on Windows every window thumbnail is a full capture of that window, so a screen request must not pay for them. */
+  sources(size: { width: number; height: number }, types: readonly ScreenshotSourceType[]): Promise<readonly ScreenshotSource<Image>[]>
   quitting(): boolean
   /** A user's explicit Hide during acquisition overrides temporary restoration. */
   mayRestore?(window: ScreenshotWindow): boolean
@@ -60,14 +63,20 @@ export function resolveScreenshotSource<Image>(
   ownedIds: ReadonlySet<string>, before: readonly ScreenshotDisplay[], after: readonly ScreenshotDisplay[]
 ): CapturedScreenshot<Image> {
   if (requestedId && ownedIds.has(requestedId)) throw new Error('Faangin windows cannot be selected as screenshot sources.')
-  const candidates = requestedId ? sources.filter(source => source.id === requestedId)
-    : sources.filter(source => source.id.startsWith('screen:') && source.display_id === primaryDisplayId)
+  // Windows reports an empty display_id for a duplicated or remote display, which leaves nothing to pair the source with. That
+  // is only unambiguous when exactly one display exists, and it is the same one before and after the capture.
+  const only = before.length === 1 && after.length === 1 && before[0].id === after[0].id ? { previous: before[0], current: after[0] } : undefined
+  const screens = sources.filter(source => source.id.startsWith('screen:'))
+  let candidates = requestedId ? sources.filter(source => source.id === requestedId) : screens.filter(source => source.display_id === primaryDisplayId)
+  if (!requestedId && !candidates.length && only && screens.length === 1 && !screens[0].display_id) candidates = screens
   if (candidates.length !== 1) throw new Error('The selected display or window is unavailable. Choose a capture source in Settings.')
   const source = candidates[0]
   if (ownedIds.has(source.id)) throw new Error('Faangin windows cannot be selected as screenshot sources.')
   if (source.id.startsWith('window:')) return { source }
-  if (!source.id.startsWith('screen:') || !source.display_id) throw new Error('The selected display cannot be verified. Choose a capture source in Settings.')
-  const previous = before.find(display => display.id === source.display_id), current = after.find(display => display.id === source.display_id)
+  if (!source.id.startsWith('screen:')) throw new Error('The selected display cannot be verified. Choose a capture source in Settings.')
+  const pair = source.display_id ? { previous: before.find(display => display.id === source.display_id), current: after.find(display => display.id === source.display_id) } : only
+  if (!pair) throw new Error('The selected display cannot be verified. Choose a capture source in Settings.')
+  const { previous, current } = pair
   if (!previous || !current) throw new Error('The selected display was disconnected during capture. Choose a current display in Settings.')
   if (previous.width !== current.width || previous.height !== current.height || previous.scaleFactor !== current.scaleFactor) {
     throw new Error('The selected display changed during capture. Choose it again in Settings.')
@@ -190,7 +199,7 @@ export class ScreenshotCapture<Image> {
         exclusion.start()
         await (this.ports.settle?.() ?? new Promise<void>(resolve => setTimeout(resolve, 120)))
         request.assertCurrent(); exclusion.assertExcluded()
-        const sources = await read({ width: 2560, height: 1600 })
+        const sources = await read({ width: 2560, height: 1600 }, [request.sourceId?.startsWith('window:') ? 'window' : 'screen'])
         request.assertCurrent(); exclusion.assertExcluded()
         return resolveScreenshotSource(sources, request.sourceId, request.primaryDisplayId, exclusion.ownedIds, before, this.ports.displays())
       }, () => exclusion.restore(), abort.signal)
@@ -211,7 +220,7 @@ export class ScreenshotCapture<Image> {
     return this.run(async read => {
       for (const window of this.ports.windows()) remember(window)
       unwatch = this.ports.watchWindows(window => { try { remember(window) } catch { changedError = true } })
-      const sources = await read({ width: 240, height: 150 })
+      const sources = await read({ width: 240, height: 150 }, ['screen', 'window'])
       for (const window of this.ports.windows()) remember(window)
       if (changedError) throw new Error('Faangin windows changed while listing capture sources. Try again.')
       return sources.filter(source => !ownedIds.has(source.id))
@@ -219,7 +228,7 @@ export class ScreenshotCapture<Image> {
   }
 
   private async run<Result>(
-    work: (read: (size: { width: number; height: number }) => Promise<readonly ScreenshotSource<Image>[]>) => Promise<Result>,
+    work: (read: (size: { width: number; height: number }, types: readonly ScreenshotSourceType[]) => Promise<readonly ScreenshotSource<Image>[]>) => Promise<Result>,
     cleanup: () => void,
     signal?: AbortSignal
   ): Promise<Result> {
@@ -234,9 +243,9 @@ export class ScreenshotCapture<Image> {
       if (finished) throw new Error('Screen capture timed out. Try again after the system capture service responds.')
       if (this.ports.quitting()) throw new Error('Faangin is closing. The screenshot was not saved.')
     }
-    const read = (size: { width: number; height: number }) => {
+    const read = (size: { width: number; height: number }, types: readonly ScreenshotSourceType[]) => {
       assertActive()
-      nativeWork = this.ports.sources(size); nativeSettled = false
+      nativeWork = this.ports.sources(size, types); nativeSettled = false
       void nativeWork.then(() => { nativeSettled = true }, () => { nativeSettled = true })
       return nativeWork
     }

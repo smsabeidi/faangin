@@ -4,7 +4,7 @@ COPY package*.json ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build && npm prune --omit=dev
+RUN npm run build:node && npm prune --omit=dev
 
 FROM node:22-slim
 WORKDIR /app

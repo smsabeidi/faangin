@@ -1,11 +1,15 @@
-import type { AudioChannel } from '../shared/types'
-import { AudioHealthTracker, AUDIO_HEALTH_MESSAGES, type AudioHealth } from './audio-health'
+import type { AudioChannel, PlatformId } from '../shared/types'
+import { AudioHealthTracker, audioHealthMessages, type AudioHealth } from './audio-health'
+import type { OutputIdentity } from './media'
 import { SOURCE_VAD_OPTIONS, VoiceActivity } from './vad'
 
 interface PipelineOptions {
   stream: MediaStream
   context: AudioContext
   channel?: AudioChannel
+  platform?: PlatformId
+  /** The default playback device a Windows loopback stream was opened against; `null` where the loopback follows the OS default. */
+  outputIdentity?: OutputIdentity | null
   current(): boolean
   frame(pcm: ArrayBuffer): void
   commit(utteranceComplete: boolean): void
@@ -24,6 +28,7 @@ export class AudioPipeline {
   private cancelWatch: (() => void) | null = null
   private vad: VoiceActivity
   private health: AudioHealthTracker
+  private messages: Readonly<Record<AudioHealth, string>>
   private now: () => number
   private startedAt: number
   private heardFrame = false
@@ -36,9 +41,11 @@ export class AudioPipeline {
     this.now = options.now ?? (() => performance.now())
     this.startedAt = this.now()
     this.health = new AudioHealthTracker(this.startedAt)
+    this.messages = audioHealthMessages(options.platform ?? 'darwin', options.channel ?? 'microphone')
     this.vad = new VoiceActivity(options.frame, options.commit, SOURCE_VAD_OPTIONS[options.channel ?? 'microphone'])
   }
   inputDeviceId(): string | undefined { return this.closed ? undefined : this.options.stream.getAudioTracks()[0]?.getSettings().deviceId }
+  outputIdentity(): OutputIdentity | null { return this.closed ? null : this.options.outputIdentity ?? null }
   private current(): boolean { return !this.closed && this.options.current() }
   private report(message: string): void {
     if (!this.current() || message === this.reportedMessage) return
@@ -61,14 +68,14 @@ export class AudioPipeline {
     }
     if (this.mutedTracks.size) { this.report('Audio source is muted — waiting for audio.'); return }
     if (!this.heardFrame) {
-      if (at - this.startedAt > 8_000) this.fail(AUDIO_HEALTH_MESSAGES['no-frames'])
+      if (at - this.startedAt > 8_000) this.fail(this.messages['no-frames'])
       return
     }
     const next = this.health.read(at)
     if (next === this.reportedHealth) return
     this.reportedHealth = next
-    if (next === 'no-frames') this.fail(AUDIO_HEALTH_MESSAGES[next])
-    else this.report(AUDIO_HEALTH_MESSAGES[next])
+    if (next === 'no-frames') this.fail(this.messages[next])
+    else this.report(this.messages[next])
   }
   async start(workletUrl: string, createNode: (context: AudioContext) => AudioWorkletNode = context => new AudioWorkletNode(context, 'faangin-pcm', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })): Promise<void> {
     try {

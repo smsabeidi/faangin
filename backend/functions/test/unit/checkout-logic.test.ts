@@ -30,6 +30,7 @@ describe('checkoutBlocked', () => {
     assert.equal(checkoutBlocked('byok', EMPTY_ENTITLEMENT, { ...flags, checkoutOpen: false, proSeatCap: 0 }, 99), null)
     assert.equal(checkoutBlocked('byok', { plan: 'byok', status: 'active', updatedAt: 1 }, flags, 0), 'BYOK is already purchased')
     assert.equal(checkoutBlocked('byok', { plan: 'byok', status: 'revoked', updatedAt: 1 }, flags, 0), null)
+    assert.equal(checkoutBlocked('byok', { ...pro('active'), byok: { status: 'active', purchasedAt: 1, paymentIntentId: 'pi_owned', checkoutSessionId: 'cs_owned' } }, flags, 0), 'BYOK is already purchased')
   })
   it('Pro: closed flag, full seats, and an active or past_due subscription all block', () => {
     assert.equal(checkoutBlocked('pro_monthly', EMPTY_ENTITLEMENT, flags, 1), null)
@@ -45,14 +46,15 @@ describe('liveSubscriptionState', () => {
   const state = (...statuses: string[]) => liveSubscriptionState(statuses.map((status) => ({ status })))
   it('none live: a new checkout may start', () => {
     assert.equal(state(), null)
-    assert.equal(state('canceled', 'incomplete_expired', 'incomplete'), null)
+    assert.equal(state('canceled', 'incomplete_expired'), null)
   })
   it('paying or retrying gives access', () => {
     for (const s of ['active', 'trialing', 'past_due']) assert.equal(state(s), 'access', s)
   })
-  it('unpaid or paused only: on hold, no access but still blocks a second subscription', () => {
+  it('unpaid, paused or incomplete: on hold, no access but still blocks a second subscription', () => {
     assert.equal(state('unpaid'), 'on_hold')
     assert.equal(state('paused'), 'on_hold')
+    assert.equal(state('incomplete'), 'on_hold', 'the first invoice can still be paid after 3DS or payment retry')
     assert.equal(state('unpaid', 'paused', 'canceled'), 'on_hold')
   })
   it('any paying subscription wins over an on-hold one', () => {

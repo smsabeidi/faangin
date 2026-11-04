@@ -1,6 +1,7 @@
 export type SetupPermission = 'microphone' | 'screen'
 export interface PermissionSetupPorts {
-  platform: string
+  /** True only where the OS shows its own per-app prompts (macOS); elsewhere the privacy settings page is the only path. */
+  promptsNatively: boolean
   status: (kind: SetupPermission) => string
   requestMicrophone: () => Promise<boolean>
   enumerateScreens: () => Promise<unknown>
@@ -11,7 +12,7 @@ export interface PermissionSetupPorts {
 export async function requestSetupPermission(kind: SetupPermission, ports: PermissionSetupPorts): Promise<void> {
   const current = ports.status(kind)
   if (current === 'granted') return
-  if (ports.platform !== 'darwin' || current === 'denied' || current === 'restricted') {
+  if (!ports.promptsNatively || current === 'denied' || current === 'restricted') {
     await ports.openSettings(kind)
     return
   }

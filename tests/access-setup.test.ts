@@ -167,5 +167,5 @@ test('access completion survives a real repository restart with history disabled
     assert.equal(restored.mayRecheckOnStartup(allowed), true)
     assert.equal(repository.settings().fontSize, 17)
     assert.equal(repository.settings().historyEnabled, false)
-  } finally { repository.close(); rmSync(directory, { recursive: true, force: true }) }
+  } finally { repository.close(); rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })

@@ -1,0 +1,8 @@
+{
+  "supabaseUrl": "https://uxgphdpcgcpgwbwfibkx.supabase.co",
+  "publishableKey": "sb_publishable_PciWKuYo3XAcH7DMo5BIbA_K4YnNukM",
+  "gatewayBase": "https://uxgphdpcgcpgwbwfibkx.supabase.co/functions/v1/faangin-gateway",
+  "licensePublicKeys": [
+    "MCowBQYDK2VwAyEApsbycNN1tCIEKFcVwerNQRdfJrVc4kJQEPilKRm1F2g="
+  ]
+}

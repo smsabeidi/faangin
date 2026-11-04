@@ -3,6 +3,7 @@ export interface OverlayWindowPort {
   isFocused(): boolean
   setIgnoreMouseEvents(ignore: boolean): void
   setFocusable(focusable: boolean): void
+  setSkipTaskbar(skip: boolean): void
   blur(): void
   showInactive(): void
   show(): void
@@ -16,12 +17,14 @@ export class OverlayInteractionPolicy {
   private passiveMode = false
   private visible = false
   private revision = 0
+  // The focus-coupled native calls last applied, so a reveal of an already-visible overlay does not repeat them.
+  private applied: { window: OverlayWindowPort; passive: boolean } | null = null
 
   get passive(): boolean { return this.passiveMode }
   get desiredVisible(): boolean { return this.visible }
   checkpoint(): number { return this.revision }
 
-  attach(window: OverlayWindowPort): void { this.window = window; this.applyMode() }
+  attach(window: OverlayWindowPort): void { this.window = window; this.applied = null; this.applyMode() }
 
   setPassive(value: boolean): void {
     this.revision++
@@ -33,11 +36,19 @@ export class OverlayInteractionPolicy {
   private applyMode(): void {
     const window = this.current()
     if (!window) return
-    // Forwarded mouse moves let Chromium hover/cursors affect the underlying app.
-    window.setIgnoreMouseEvents(this.passiveMode)
-    window.setFocusable(!this.passiveMode)
+    // Ignoring mouse events and focusability persist across hide/show, so only a new window or a mode change needs them. On Windows
+    // setFocusable also deactivates the window (macOS keeps focus), so repeating it on every answer or nudge would steal the composer's focus.
+    const stale = this.applied?.window !== window || this.applied.passive !== this.passiveMode
+    if (stale) {
+      // Forwarded mouse moves let Chromium hover/cursors affect the underlying app.
+      window.setIgnoreMouseEvents(this.passiveMode)
+      window.setFocusable(!this.passiveMode)
+      this.applied = { window, passive: this.passiveMode }
+    }
+    // Windows couples SetFocusable to SetSkipTaskbar(!focusable), which would hand the transparent overlay a taskbar button; macOS ignores the call.
+    window.setSkipTaskbar(true)
     // Electron explicitly does not relinquish existing focus on macOS here.
-    if (this.passiveMode && window.isFocused()) window.blur()
+    if (stale && this.passiveMode && window.isFocused()) window.blur()
   }
 
   showOutput(expectedRevision?: number): boolean {

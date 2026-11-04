@@ -1,0 +1,17 @@
+{
+  "name": "faangin-supabase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:sql": "node test-local-postgres.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.0",
+    "stripe": "23.0.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

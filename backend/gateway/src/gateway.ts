@@ -1,13 +1,15 @@
 /** Routes only. Every dependency is injected so tests run against fakes and an in-memory store. */
 import { createServer, STATUS_CODES, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { Buffer } from 'node:buffer'
 import type { Duplex } from 'node:stream'
 import { authorize, type AuthDeps } from './auth.js'
 import { createRealtime, type RealtimeDeps } from './realtime.js'
 import { createResponses, sendJson, type ResponsesDeps } from './responses.js'
+import { INPUT_LIMITS } from './input-validation.js'
 
-export type GatewayDeps = AuthDeps & ResponsesDeps & RealtimeDeps
+export type GatewayDeps = AuthDeps & ResponsesDeps & RealtimeDeps & { providerReady?: boolean }
 
-const BODY_LIMIT_BYTES = 1_000_000
+const BODY_LIMIT_BYTES = INPUT_LIMITS.bodyBytes
 
 export type GatewayServer = Server & { /** Closes every live socket and waits for their usage to flush. */ shutdown(): Promise<void> }
 
@@ -23,6 +25,7 @@ export function createGateway(deps: GatewayDeps): GatewayServer {
       return
     }
     if (req.method === 'POST' && url.pathname === '/v1/responses') {
+      if (deps.providerReady === false) return sendJson(res, 503, { error: { code: 'provider_not_configured', message: 'Managed inference setup is pending' } })
       const auth = await authorize(deps, req.headers.authorization)
       if (!auth.ok) return sendJson(res, auth.status, auth.body)
       const raw = await readBody(req)
@@ -55,6 +58,7 @@ export function createGateway(deps: GatewayDeps): GatewayServer {
     if (url.pathname !== '/v1/realtime' || url.searchParams.get('intent') !== 'transcription') {
       return rejectUpgrade(socket, 404, { error: { code: 'not_found', message: 'Only /v1/realtime?intent=transcription upgrades' } })
     }
+    if (deps.providerReady === false) return rejectUpgrade(socket, 503, { error: { code: 'provider_not_configured', message: 'Managed inference setup is pending' } })
     authorize(deps, req.headers.authorization)
       .then(auth => (auth.ok ? realtime.upgrade(req, socket, head, auth) : rejectUpgrade(socket, auth.status, auth.body)))
       .catch(error => {

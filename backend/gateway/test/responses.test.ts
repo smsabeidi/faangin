@@ -42,6 +42,34 @@ describe('POST /v1/responses', () => {
     assert.equal(fake.requests.length, 0)
   })
 
+  it('rejects invalid output limits before charging an answer or contacting the provider', async () => {
+    for (const max_output_tokens of [0, -1, 1.5, '10', null]) {
+      const res = await post(gw, token, { model: 'fast', input: 'hi', max_output_tokens })
+      assert.equal(res.status, 400)
+      assert.equal((await errorCode(res)).code, 'invalid_input')
+    }
+    assert.equal(fake.requests.length, 0)
+    assert.equal((await usage()).fast, 0)
+  })
+
+  it('bounds an upstream stream that never finishes and releases its answer slot', async () => {
+    const bounded = await startGateway(fake, { responseTimeoutMs: 100 })
+    bounded.entitlements.set(uid, proEntitlement())
+    try {
+      fake.hold = true
+      const res = await post(bounded, token, { model: 'fast', input: 'hi' })
+      assert.equal(res.status, 200)
+      await res.text()
+      await until(async () => (await bounded.store.read(uid, PERIOD_KEY)).spendUsd > 0)
+      assert.equal((await bounded.store.read(uid, PERIOD_KEY)).fast, 1)
+      fake.hold = false; fake.release()
+      const next = await post(bounded, token, { model: 'fast', input: 'try again' })
+      assert.equal(next.status, 200)
+      await next.text()
+      assert.equal((await bounded.store.read(uid, PERIOD_KEY)).fast, 2)
+    } finally { fake.release(); await bounded.close() }
+  })
+
   it('forwards only the allowlist with the server model, stream true, store false and a capped max_output_tokens', async () => {
     const res = await post(gw, token, {
       model: 'smart', input: 'hi', instructions: 'be nice', max_output_tokens: 99_999, reasoning: { effort: 'low' }, text: { format: { type: 'text' } },
@@ -69,6 +97,15 @@ describe('POST /v1/responses', () => {
     const u = await usage()
     assert.ok(Math.abs(u.spendUsd - 0.00114) < 1e-12)
     assert.ok(Math.abs(u.days[TODAY].spendUsd - 0.00114) < 1e-12)
+  })
+
+  it('enforces the output budget for every managed mode, including short handsfree replies', async () => {
+    for (const [model, limit] of [['fast', 4096], ['smart', 4096], ['handsfree', 300]] as const) {
+      const res = await post(gw, token, { model, input: 'hi', max_output_tokens: 99_999 })
+      assert.equal(res.status, 200)
+      await res.text()
+      assert.equal(fake.requests.at(-1)!.body.max_output_tokens, limit)
+    }
   })
 
   it('settles a stream without usage at the cap estimate', async () => {

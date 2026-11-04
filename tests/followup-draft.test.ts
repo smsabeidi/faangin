@@ -119,5 +119,5 @@ test('saved follow-up drafts retain their admitted source snapshots after databa
     assert(sessionMarkdown(repo.get(current.id) as Session).includes('The team agreed to review the proposal.'))
     repo.reset(current.id)
     assert.deepEqual(repo.get(current.id).answers, [])
-  } finally { repo.close(); rmSync(root, { recursive: true, force: true }) }
+  } finally { repo.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
 })
