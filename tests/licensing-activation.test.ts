@@ -26,6 +26,7 @@ test('activation lease binds only loopback, protects its page with a nonce CSP a
   assert.match(html, /Approve this device/)
   assert.ok(!/\bMac\b/.test(html), 'the page copy names no operating system')
   assert.ok(!/localStorage|sessionStorage|refresh_token|service_role|sb_secret_/.test(html))
+  assert.doesNotMatch(html, /Continue with Google|\/auth\/v1\/authorize/)
   assert.match(html, /deviceCodeApprove/)
   assert.match(html, /logout\?scope=local/)
   new Script(/<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)![1])
@@ -61,11 +62,11 @@ async function browser(t: test.TestContext, input: { hash?: string; expiresAt?: 
   const source = /<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)![1]
   type Element = { hidden: boolean; disabled: boolean; value: string; textContent: string; onclick?: () => void; listeners: Map<string, (event: { preventDefault(): void }) => void>; classList: { toggle(): void }; addEventListener(type: string, callback: (event: { preventDefault(): void }) => void): void; reportValidity(): boolean }
   const elements = new Map<string, Element>()
-  for (const id of ['status', 'expiry', 'identity', 'instructions', 'user-code', 'login', 'recovery', 'approval', 'email', 'password', 'new-password', 'submit', 'signup', 'reset', 'google', 'approve', 'different']) {
+  for (const id of ['status', 'expiry', 'identity', 'instructions', 'user-code', 'login', 'recovery', 'approval', 'email', 'password', 'new-password', 'submit', 'signup', 'reset', 'approve', 'different']) {
     const listeners = new Map()
-    elements.set(id, { hidden: ['expiry', 'recovery', 'approval', 'google'].includes(id), disabled: false, value: '', textContent: '', listeners, classList: { toggle() {} }, addEventListener(type, callback) { listeners.set(type, callback) }, reportValidity: () => true })
+    elements.set(id, { hidden: ['expiry', 'recovery', 'approval'].includes(id), disabled: false, value: '', textContent: '', listeners, classList: { toggle() {} }, addEventListener(type, callback) { listeners.set(type, callback) }, reportValidity: () => true })
   }
-  const buttons = ['submit', 'signup', 'reset', 'google', 'approve', 'different'].map(id => elements.get(id)!)
+  const buttons = ['submit', 'signup', 'reset', 'approve', 'different'].map(id => elements.get(id)!)
   const calls: Array<{ url: string; init?: RequestInit }> = [], location = new URL(lease.url + (input.hash ?? ''))
   let now = Date.now()
   const timers: Array<{ run: () => void; at: number }> = []
@@ -81,7 +82,6 @@ async function browser(t: test.TestContext, input: { hash?: string; expiresAt?: 
     fetch: async (url: string, init?: RequestInit) => {
       calls.push({ url, init })
       if (input.respond) return input.respond(url, init)
-      if (url.endsWith('/settings')) return Response.json({ external: { google: false } })
       if (url.endsWith('/user')) return Response.json(user)
       if (url.includes('/signup')) return Response.json({ user })
       if (url.includes('/token?')) return Response.json({ access_token: 'fixture-browser-session' })
@@ -108,7 +108,7 @@ test('signup sends a live owned callback, clears the password, and guides confir
   assert.equal(new URL(signup.url).searchParams.get('redirect_to'), f.lease.url)
   assert.deepEqual(JSON.parse(signup.init!.body as string), { email: 'buyer@example.test', password: 'fixture-password' })
   assert.equal(f.element('password').value, '')
-  assert.match(f.element('status').textContent, /Check your email.*code expires.*Sign in again/)
+  assert.match(f.element('status').textContent, /Check your email.*code expires.*Continue with email/)
   await f.advance(f.expiresAt + 1)
   assert.equal(f.element('approve').hidden, true)
   assert.equal(f.element('user-code').hidden, true)
@@ -137,7 +137,6 @@ test('switching accounts accepts an empty successful logout and clears the brows
   const f = await browser(t, {
     hash: '#access_token=fixture-confirmed-session&type=signup',
     respond: url => {
-      if (url.endsWith('/settings')) return Response.json({})
       if (url.endsWith('/user')) return Response.json({ id: 'fixture-user', email: 'buyer@example.test', email_confirmed_at: '2026-01-01T00:00:00Z' })
       if (url.includes('/logout?scope=local')) return new Response(null, { status: 204 })
       return Response.json({})
@@ -156,7 +155,7 @@ test('switching accounts accepts an empty successful logout and clears the brows
 })
 
 test('successful Auth responses that require JSON still reject malformed response bodies', async t => {
-  const f = await browser(t, { respond: url => url.endsWith('/settings') ? Response.json({}) : new Response('not JSON', { status: 200 }) })
+  const f = await browser(t, { respond: () => new Response('not JSON', { status: 200 }) })
   f.element('email').value = 'buyer@example.test'; f.element('password').value = 'fixture-password'
   await f.action('login', 'submit')
   assert.equal(f.element('approval').hidden, true)
@@ -181,7 +180,7 @@ test('a recovery callback still changes the password after code expiry and never
 })
 
 test('invalid recovery sessions and expired callbacks do not expose account actions', async t => {
-  const f = await browser(t, { hash: '#access_token=invalid-session&type=recovery', respond: url => url.endsWith('/settings') ? Response.json({}) : Response.json({ message: 'Session expired' }, { status: 401 }) })
+  const f = await browser(t, { hash: '#access_token=invalid-session&type=recovery', respond: () => Response.json({ message: 'Session expired' }, { status: 401 }) })
   assert.equal(f.location.hash, '')
   assert.equal(f.element('recovery').hidden, true)
   assert.equal(f.element('approval').hidden, true)

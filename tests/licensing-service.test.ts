@@ -15,7 +15,7 @@ test('a build without a backend offers nothing and refuses to sign in', async t 
   await service.start()
   assert.equal(service.summary().state.kind, 'unavailable')
   await assert.rejects(service.startSignIn(), (error: unknown) => error instanceof BillingError && /not connected to an accounts service/.test(error.message))
-  await assert.rejects(service.openCheckout('byok'), BillingError)
+  await assert.rejects(service.openCheckout('pro_monthly'), BillingError)
   assert.equal(count('startDeviceSignIn'), 0)
 })
 
@@ -134,14 +134,30 @@ test('a signed-in account with no purchase is no-plan, quietly, and a stale lice
   assert.equal(await store.readLicense(), null)
 })
 
-test('the fourth device gets the device-limit message and keeps its sign-in', async t => {
-  const { service, store } = harness(t, { cloud: { fetchLicense: async () => { throw new CloudError('RESOURCE_EXHAUSTED', 'Up to 3 devices in 30 days', 429) } } })
+test('the fourth device gets the device-limit message and keeps its sign-in but loses its stale license', async t => {
+  const { service, store, token } = harness(t, { cloud: { fetchLicense: async () => { throw new CloudError('RESOURCE_EXHAUSTED', 'Up to 3 devices in 30 days', 429) } } })
   await store.writeSession(signedIn)
+  await store.writeLicense(token())
   await service.start()
+  assert.equal(service.summary().state.kind, 'active')
   await service.refresh()
   assert.match(service.summary().error!, /already active on 3 devices/)
   assert.equal(service.summary().state.kind, 'no-plan')
+  assert.equal(await store.readLicense(), null)
   assert.deepEqual(await store.readSession(), signedIn)
+})
+
+test('a failed local cleanup still signs out and revokes the server session', async t => {
+  const { service, store, token, count } = harness(t)
+  await store.writeSession(signedIn)
+  await store.writeLicense(token())
+  await service.start()
+  t.mock.method(store, 'clearSession', async () => { throw new Error('file locked') })
+  const result = await service.signOut()
+  assert.equal(result.state.kind, 'signed-out')
+  assert.match(result.error!, /could not remove all saved sign-in data/)
+  assert.equal(await store.readLicense(), null)
+  await until(() => count('revokeAuthSession') === 1)
 })
 
 test('a rejected sign-in token signs the user out and clears what was stored', async t => {
@@ -360,7 +376,7 @@ test('a checkout link that is not Stripe is refused and nothing is opened', asyn
   const { service, store, opened } = harness(t, { cloud: { callFunction: async () => ({ url: 'https://evil.example/pay' }) } })
   await store.writeSession(signedIn)
   await service.start()
-  await assert.rejects(service.openCheckout('byok'), (error: unknown) => error instanceof BillingError && /unexpected link/.test(error.message))
+  await assert.rejects(service.openCheckout('pro_monthly'), (error: unknown) => error instanceof BillingError && /unexpected link/.test(error.message))
   assert.deepEqual(opened, [])
   assert.equal(service.summary().awaitingPurchase, false)
 })
@@ -372,7 +388,7 @@ test('the server explains why Checkout is unavailable; other failures stay gener
     const { service, store } = harness(t, { cloud: { callFunction: async () => { throw reason } } })
     await store.writeSession(signedIn)
     await service.start()
-    await assert.rejects(service.openCheckout('byok'), (error: unknown) => error instanceof BillingError && expected[index]!.test(error.message) && !/stack trace/.test(error.message))
+    await assert.rejects(service.openCheckout('pro_monthly'), (error: unknown) => error instanceof BillingError && expected[index]!.test(error.message) && !/stack trace/.test(error.message))
   }
 })
 
@@ -387,7 +403,7 @@ test('an unknown plan is refused before any request', async t => {
 test('Checkout and the portal need a sign-in', async t => {
   const { service } = harness(t)
   await service.start()
-  await assert.rejects(service.openCheckout('byok'), /Sign in first/)
+  await assert.rejects(service.openCheckout('pro_monthly'), /Sign in first/)
   await assert.rejects(service.openPortal(), /Sign in first/)
 })
 
@@ -407,7 +423,7 @@ test('a revoked session found while opening Checkout signs the user out', async 
   await store.writeSession(signedIn)
   await store.writeLicense(token())
   await service.start()
-  await assert.rejects(service.openCheckout('byok'), /signed out/)
+  await assert.rejects(service.openCheckout('pro_monthly'), /signed out/)
   assert.equal(service.summary().state.kind, 'signed-out')
   assert.equal(await store.readSession(), null)
 })

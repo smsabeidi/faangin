@@ -2,8 +2,10 @@ import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, M
 import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { open, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { developmentRenderer, pathWithin, sameExistingPath, smokeMarker, smokeProfile } from './desktop-runtime'
+import { validateDocxArchive } from './docx-archive'
 import { Repository } from './repository'
 import { AttachmentSelection } from './attachment-selection'
 import { reorderSessionAttachments } from './attachment-order'
@@ -24,6 +26,7 @@ import { prepareMemorySelection } from './memory-selection'
 import { WindowStateManager, jsonWindowStateStore, type WindowBounds, type WindowLayout } from './window-state'
 import { constrainOverlayBounds, defaultOverlayBounds, overlayExpandedHeight, overlaySizeLimits, OVERLAY_LAYOUT } from './overlay-layout'
 import { createLicensing, type LicenseService } from './licensing'
+import { isGoogleAuthCallback } from './licensing/auth-redirect'
 import { accountAllowsInference, accountHasPro, requireAccountInference } from '../shared/account-access'
 import { ShortcutManager, applyStartupShortcutBindings, resolveShortcutBindings, SHORTCUT_ACTIONS } from './shortcut-manager'
 import { MacDockPolicy, OverlayInteractionPolicy } from './native-policy'
@@ -53,23 +56,37 @@ import { DEFAULT_SETTINGS } from '../shared/types'
 import { platform } from './platform'
 import trayIconPath from '../../resources/icon.png?asset'
 
+declare const __FAANGIN_PACKAGE_QA__: boolean
 const mainDirectory = __dirname
 // Every renderer bundle a window may load lives here; local file requests outside it are refused.
 const rendererRoot = resolve(mainDirectory, '../renderer')
-const smoke = process.env.FAANGIN_SMOKE === '1'
+app.setName('Faangin')
+const devRenderer = developmentRenderer(app.isPackaged, process.env.ELECTRON_RENDERER_URL)
+const allowSmoke = !app.isPackaged || __FAANGIN_PACKAGE_QA__
+const fixtureDataPath = allowSmoke && process.env.FAANGIN_SMOKE === '1' ? smokeProfile(process.env.FAANGIN_USER_DATA_DIR, tmpdir(), app.getPath('userData')) : null
+const smoke = !!fixtureDataPath
 const smokeVisible = smoke && process.env.FAANGIN_QA_VISIBLE === '1'
-const liveFixture = smoke && !!process.env.FAANGIN_USER_DATA_DIR && process.env.FAANGIN_SMOKE_LIVE_FIXTURE === '1'
+const liveFixture = smoke && process.env.FAANGIN_SMOKE_LIVE_FIXTURE === '1'
 const screenshotFixture = liveFixture && process.env.FAANGIN_SMOKE_CAPTURE_FIXTURE === '1'
-const fixtureDataPath = process.env.FAANGIN_USER_DATA_DIR ? resolve(process.env.FAANGIN_USER_DATA_DIR) : ''
-const ownedAccessFixture = smoke && !!fixtureDataPath && (/^\/private\/tmp\/faangin-/.test(fixtureDataPath) || /^\/tmp\/faangin-/.test(fixtureDataPath) || !!pathWithin(resolve(tmpdir()), fixtureDataPath)?.startsWith('faangin-'))
-const accessFixtureMode = ownedAccessFixture ? (process.env.FAANGIN_SMOKE_ACCESS_FIXTURE || (process.env.FAANGIN_SMOKE_ACCESS_READY === '1' ? 'ready' : '')) : ''
+const smokeReadyPath = smokeMarker(process.env.FAANGIN_SMOKE_READY, fixtureDataPath)
+const accessFixtureMode = smoke ? (process.env.FAANGIN_SMOKE_ACCESS_FIXTURE || (process.env.FAANGIN_SMOKE_ACCESS_READY === '1' ? 'ready' : '')) : ''
 const accessFixtureEnabled = accessFixtureMode === 'required' || accessFixtureMode === 'ready'
 const fixtureOSGranted = accessFixtureEnabled && (accessFixtureMode === 'ready' || process.env.FAANGIN_SMOKE_ACCESS_OS_GRANTED === '1')
 const accessFixturePermissions = { microphone: fixtureOSGranted ? 'granted' : 'not-determined', screen: fixtureOSGranted ? 'granted' : 'not-determined' }
 let accessFixtureProbeResult = 'success'
 const accessTelemetry = { gateBlocks: 0, statusChecks: 0, permissionRequests: 0, systemAudioChecks: 0, backgroundAudioChecks: 0, allTracksStopped: true, activeProbeTracks: 0, probeTracksStarted: 0, probeTracksStopped: 0, captureStarts: 0, generationStarts: 0, screenCaptures: 0, cloudRequests: 0 }
-if (process.env.FAANGIN_USER_DATA_DIR && smoke) app.setPath('userData', resolve(process.env.FAANGIN_USER_DATA_DIR))
-app.setName('Faangin')
+if (fixtureDataPath) {
+  app.setPath('userData', fixtureDataPath)
+  app.setPath('sessionData', fixtureDataPath)
+}
+if (app.isPackaged) {
+  const smokeDebugger = smoke && app.commandLine.hasSwitch('remote-debugging-port')
+  for (const flag of ['remote-debugging-port', 'remote-debugging-address', 'remote-debugging-pipe', 'no-sandbox', 'disable-web-security']) app.commandLine.removeSwitch(flag)
+  if (smokeDebugger) {
+    app.commandLine.appendSwitch('remote-debugging-port', '0')
+    app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')
+  }
+}
 if (platform.appUserModelId) app.setAppUserModelId(platform.appUserModelId)
 app.enableSandbox()
 let repo: Repository, settings: Settings, workspace: BrowserWindow | null = null, overlay: BrowserWindow | null = null, captureWindow: BrowserWindow | null = null, documentWindow: BrowserWindow | null = null, tray: Tray | null = null
@@ -137,11 +154,6 @@ let accessibility: AppState['accessibility'] = { reduceTransparency: false, redu
 let accessibilityUnsubscribe: (() => void) | null = null
 let appearanceRefresh: NodeJS.Immediate | null = null
 function userDataFile(name: string): string { return join(app.getPath('userData'), name) }
-/** Containment via node:path: a string prefix test misses Windows separators, drive-letter case and `..` escapes. */
-function pathWithin(root: string, path: string): string | null {
-  const inside = relative(root, path)
-  return inside && !isAbsolute(inside) && inside !== '..' && !inside.startsWith(`..${sep}`) ? inside : null
-}
 async function writeSecretFile(path: string, data: Buffer): Promise<void> {
   const temporary = `${path}.${randomUUID()}.tmp`
   try {
@@ -352,8 +364,9 @@ function emitState(): void { for (const window of uiWindows()) sendUI(window, { 
 function sendCapture(command: CaptureCommand): void { try { if (captureWindow && !captureWindow.isDestroyed() && !captureWindow.webContents.isDestroyed()) captureWindow.webContents.send('faangin:capture-command', command) } catch {} }
 function emitCapture(): void { emit({ type: 'capture-status', ...captureState }) }
 function rendererURL(surface: string, kind?: WindowKind): string {
-  if (process.env.ELECTRON_RENDERER_URL) { const url = new URL(`${surface}.html`, process.env.ELECTRON_RENDERER_URL.endsWith('/') ? process.env.ELECTRON_RENDERER_URL : `${process.env.ELECTRON_RENDERER_URL}/`); if (kind) url.searchParams.set('window', kind); return url.href }
-  const url = pathToFileURL(join(rendererRoot, `${surface}.html`)); if (kind) url.searchParams.set('window', kind); return url.href
+  const url = devRenderer ? new URL(`${surface}.html`, devRenderer) : pathToFileURL(join(rendererRoot, `${surface}.html`))
+  if (kind) url.searchParams.set('window', kind)
+  return url.href
 }
 function isLocalURL(value: string, surface: string): boolean {
   try {
@@ -397,7 +410,10 @@ function secureSession(target: ElectronSession, kind: 'ui' | 'capture' | 'docume
     const url = new URL(details.url)
     // fileURLToPath throws for file URLs Node cannot map to a path (no drive letter on Windows, encoded separators anywhere); those are outside the renderer root too.
     if (url.protocol === 'file:') { let inside = false; try { inside = !!pathWithin(rendererRoot, fileURLToPath(url)) } catch {} callback({ cancel: !inside }); return }
-    if (process.env.ELECTRON_RENDERER_URL && new URL(process.env.ELECTRON_RENDERER_URL).origin === url.origin && (url.protocol === 'http:' || url.protocol === 'ws:')) { callback({}); return }
+    if (devRenderer) {
+      const websocketOrigin = devRenderer.origin.replace(/^http/, 'ws')
+      if (url.origin === devRenderer.origin || url.origin === websocketOrigin) { callback({}); return }
+    }
     callback({ cancel: true })
   })
   if (kind === 'capture') target.setDisplayMediaRequestHandler(async (request, callback) => {
@@ -453,7 +469,7 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     ...(isUI ? (isOverlay ? platform.overlayWindowOptions() : platform.workspaceWindowOptions({ reduceTransparency: accessibility.reduceTransparency })) : {}),
     show: false, focusable: !isOverlay || !overlayInteraction.passive, frame: !isOverlay, transparent: isOverlay, alwaysOnTop: isOverlay, skipTaskbar: isOverlay || surface !== 'index',
     backgroundColor: isUI ? windowBackground(isOverlay) : '#101014',
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false, partition, preload: join(mainDirectory, '../preload/index.js'), additionalArguments: [`--faangin-surface=${surface === 'index' ? kind : surface}`, ...(smoke ? ['--faangin-smoke'] : []), ...(liveFixture && surface === 'index' ? ['--faangin-live-fixture'] : [])], spellcheck: false, backgroundThrottling: surface !== 'capture' }
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false, devTools: !app.isPackaged || smoke, partition, preload: join(mainDirectory, '../preload/index.js'), additionalArguments: [`--faangin-surface=${surface === 'index' ? kind : surface}`, ...(smoke ? ['--faangin-smoke'] : []), ...(liveFixture && surface === 'index' ? ['--faangin-live-fixture'] : [])], spellcheck: false, backgroundThrottling: surface !== 'capture' }
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (surface === 'index') {
@@ -466,7 +482,11 @@ function windowFor(surface: 'index' | 'capture' | 'document', kind?: WindowKind)
     }
     return { action: 'deny' }
   })
-  window.webContents.on('will-navigate', (event, url) => { if (!isLocalURL(url, surface)) event.preventDefault() })
+  const restrictNavigation = (event: { isMainFrame: boolean; url: string; preventDefault(): void }) => {
+    if (!event.isMainFrame || !isLocalURL(event.url, surface)) event.preventDefault()
+  }
+  window.webContents.on('will-frame-navigate', restrictNavigation)
+  window.webContents.on('will-redirect', restrictNavigation)
   window.webContents.on('will-attach-webview', event => event.preventDefault())
   window.webContents.on('render-process-gone', () => { if (surface === 'capture') { void stopCapture(); emit({ type: 'error', message: 'Audio capture stopped because its process closed.' }) } })
   if (surface === 'index') {
@@ -1144,20 +1164,9 @@ async function previewScreenshotRegion(sessionId: string, ownerId: string, sourc
   const lease = screenshotRegions.create(randomUUID(), { sessionId, ownerId, epoch, image, name: captured.source.name, ...dimensions, display: captured.display })
   return { ...lease, sessionId, name: captured.source.name, dataUrl: `data:image/jpeg;base64,${preview.toString('base64')}`, ...dimensions, displayId: captured.display?.id, scaleFactor: captured.display?.scaleFactor }
 }
-function validateDocxArchive(buffer: Buffer): void {
-  // Read central-directory metadata before the parser can expand the archive.
-  let entries = 0, expanded = 0
-  for (let offset = 0; offset + 46 <= buffer.length; offset++) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) continue
-    entries++; expanded += buffer.readUInt32LE(offset + 24)
-    const nameLength = buffer.readUInt16LE(offset + 28), extra = buffer.readUInt16LE(offset + 30), comment = buffer.readUInt16LE(offset + 32)
-    if (entries > 1000 || expanded > 30 * 1024 * 1024 || offset + 46 + nameLength + extra + comment > buffer.length) throw new Error('The document archive exceeds import limits or is malformed.')
-    offset += 45 + nameLength + extra + comment
-  }
-  if (!entries) throw new Error('This is not a valid DOCX archive.')
-}
 async function parseDocument(bytes: Buffer, format: string): Promise<string> {
   if (documentWindow && !documentWindow.isDestroyed()) throw new Error('Another profile is being imported.')
+  if (format === 'docx') validateDocxArchive(bytes)
   const window = windowFor('document'); documentWindow = window
   return new Promise<string>((resolve, reject) => {
     const id = randomUUID()
@@ -1204,10 +1213,10 @@ function microphoneInventory(): Promise<MicrophoneDevice[]> {
   return pending
 }
 let licensing: LicenseService | null = null
-function setupLicensing(): void {
+function setupLicensing(): Promise<void> {
   const service = licensing = createLicensing({
     userDataPath: app.getPath('userData'), packaged: app.isPackaged, env: process.env, defaultDeviceName: platform.defaultDeviceName,
-    ...(ownedAccessFixture && liveFixture ? { cloudConfig: null } : {}),
+    ...(liveFixture ? { cloudConfig: null } : {}),
     secrets: {
       available: () => platform.credentialEncryptionAvailable(safeStorage),
       encrypt: plain => safeStorage.encryptString(plain), decrypt: data => safeStorage.decryptString(data)
@@ -1222,11 +1231,15 @@ function setupLicensing(): void {
   handle('billing-state', [0, 0], () => service.summary())
   handle('billing-sign-in', [0, 0], () => service.startSignIn())
   handle('billing-cancel-sign-in', [0, 0], () => service.cancelSignIn())
+  handle('billing-google-sign-in', [0, 0], () => service.startGoogleSignIn())
+  handle('billing-google-cancel-sign-in', [0, 0], () => service.cancelGoogleSignIn())
   handle('billing-sign-out', [0, 0], () => { cancelRequests(); liveReplies.reset(); void stopCapture().catch(recordDiagnosticError); return service.signOut() })
   handle('billing-refresh', [0, 0], () => service.refresh())
-  handle('billing-checkout', [1, 1], (_event, plan) => service.openCheckout(validate.oneOf(plan, ['byok', 'pro_monthly', 'pro_annual'] as const)))
+  handle('billing-checkout', [1, 1], (_event, plan) => service.openCheckout(validate.oneOf(plan, ['pro_monthly', 'pro_annual'] as const)))
   handle('billing-manage', [0, 0], () => service.openPortal())
-  void service.start().catch(recordDiagnosticError)
+  const startup = service.start()
+  void startup.catch(recordDiagnosticError)
+  return startup
 }
 function setupIPC(): void {
   if (liveFixture) handle('smoke-live', [1, 1], async (_event, command) => {
@@ -1338,7 +1351,7 @@ function setupIPC(): void {
     refreshAppearance()
     // Only a packaged app may enroll itself at login; a dev run would register the bare Electron binary. Re-asserted on every save so a
     // login item removed outside the app follows the saved preference again.
-    if (app.isPackaged) platform.applyLoginItem(app, settings.launchAtLogin, 'save')
+    if (app.isPackaged && !smoke) platform.applyLoginItem(app, settings.launchAtLogin, 'save')
     for (const window of uiWindows()) window.setContentProtection(settings.privacyMode)
     emitState(); return settings
   })
@@ -1505,7 +1518,6 @@ function setupIPC(): void {
     const path = selected.filePaths[0], bytes = await readBounded(path, 10 * 1024 * 1024), extension = extname(path).toLowerCase()
     if (extension === '.txt' || extension === '.md') return validate.text(decodeProfileText(bytes, platform.legacyTextEncoding), 100_000)
     if (extension === '.pdf' && bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('This file is not a PDF.')
-    if (extension === '.docx') validateDocxArchive(bytes)
     return parseDocument(bytes, validate.oneOf(extension.slice(1), ['pdf', 'docx']))
   })
   handle('export', [2, 2], async (event, value, formatValue) => {
@@ -1681,13 +1693,43 @@ function setupMenu(): void {
 }
 if (!smoke && !app.requestSingleInstanceLock()) app.quit()
 else {
-  app.on('second-instance', () => showWindow('workspace'))
+  let pendingGoogleCallback = !smoke && platform.id === 'win32' ? process.argv.find(isGoogleAuthCallback) : undefined
+  let licensingReady: Promise<void> | undefined
+
+  function receiveGoogleCallback(url: string): void {
+    if (quitting || !isGoogleAuthCallback(url)) return
+    if (!licensingReady) { pendingGoogleCallback = url; return }
+    if (workspace?.isMinimized()) workspace.restore()
+    showWindow('workspace')
+    const target = workspace
+    if (target) {
+      const navigate = () => sendUI(target, { type: 'navigate', view: 'settings', settingsSection: 'account' })
+      if (target.webContents.isLoading()) target.webContents.once('did-finish-load', navigate)
+      else navigate()
+    }
+    void licensingReady.then(() => {
+      if (!quitting) return licensing?.handleGoogleCallback(url)
+    }).catch(() => {
+      if (!quitting) emit({ type: 'error', message: 'Google sign-in could not finish. Start again from Account settings.' })
+    })
+  }
+
+  // Launch Services may deliver the URL before the app is ready or the account store is open.
+  if (!smoke && platform.id === 'darwin') app.on('open-url', (event, url) => {
+    event.preventDefault()
+    receiveGoogleCallback(url)
+  })
+  app.on('second-instance', (_event, argv) => {
+    const callback = platform.id === 'win32' ? argv.find(isGoogleAuthCallback) : undefined
+    if (callback) receiveGoogleCallback(callback)
+    else if (repo) showWindow('workspace')
+  })
   app.whenReady().then(async () => {
     // POSIX hardening: Windows ignores these modes and %APPDATA% already carries the profile's user-only ACL.
     const data = app.getPath('userData'); mkdirSync(data, { recursive: true, mode: 0o700 }); chmodSync(data, 0o700)
     repo = new Repository(userDataFile('faangin.sqlite')); settings = repo.settings()
     // The Run entry is only written when a setting is saved, so a reinstall elsewhere or a retained profile would leave it stale or missing.
-    if (app.isPackaged) { try { platform.applyLoginItem(app, settings.launchAtLogin, 'launch') } catch { /* A blocked registry write must not stop the app opening. */ } }
+    if (app.isPackaged && !smoke) { try { platform.applyLoginItem(app, settings.launchAtLogin, 'launch') } catch { /* A blocked registry write must not stop the app opening. */ } }
     let savedAccessSetup: unknown
     try { savedAccessSetup = repo.configuration('access-setup') } catch { /* Preserve an unreadable receipt and require setup again. */ }
     if (accessFixtureMode === 'ready') savedAccessSetup = { version: 1, completed: true, systemAudioVerifiedAt: Date.now() }
@@ -1697,8 +1739,13 @@ else {
     try { presetCatalog = new PresetCatalog(repo.configuration('preset-catalog')) } catch { presetRecoveryRequired = true }
     savedPresetSnapshot = presetCatalog.snapshot()
     windowState = new WindowStateManager(screen, jsonWindowStateStore(userDataFile('window-state.json')), error => emit({ type: 'error', code: 'save-failed', message: `Window position could not be saved: ${safeError(error)}` }))
-    setupAppearance(); setupIPC(); setupLicensing(); setupMenu(); applyDockPreference(); setupCapturePolicy()
+    setupAppearance(); setupIPC(); licensingReady = setupLicensing(); setupMenu(); applyDockPreference(); setupCapturePolicy()
     currentSessionId = repo.list()[0]?.id ?? null; workspace = windowFor('index', 'workspace')
+    if (pendingGoogleCallback) {
+      const url = pendingGoogleCallback
+      pendingGoogleCallback = undefined
+      receiveGoogleCallback(url)
+    }
     workspace.webContents.once('did-finish-load', () => {
       // The completed setup records consent for one no-sample capability recheck on a later launch.
       // Focus/poll refreshes remain read-only and never repeat this request.
@@ -1706,7 +1753,7 @@ else {
       accessRequestPending = true
       void requestComputerAudioAccess(true).catch(() => {}).finally(() => { accessRequestPending = false; refreshAccessReadiness() })
     })
-    if (smoke && process.env.FAANGIN_SMOKE_READY) {
+    if (fixtureDataPath && smokeReadyPath) {
       workspace.webContents.once('did-finish-load', async () => {
         try {
           const diagnostics = await workspace!.webContents.executeJavaScript('(async () => ({ state: await window.faangin.getState(), security: { sandbox: window.faanginSmoke?.sandbox, contextIsolation: window.faanginSmoke?.contextIsolation }, nodeIntegration: typeof window.require !== "undefined" }))()')
@@ -1732,22 +1779,21 @@ else {
           if (!workflow.interviewReady || !workflow.transparencyReady || !workflow.resetReady || !workflow.restoreReady) throw new Error('Isolated interview workflow checks did not pass.')
           let documentImports: { pdf: boolean; docx: boolean } | undefined
           const fixtureDirectory = process.env.FAANGIN_SMOKE_DOCUMENT_FIXTURES_DIR
-          if (fixtureDirectory) {
-            const pdf = await readBounded(join(resolve(fixtureDirectory), 'profile.pdf'), 10 * 1024 * 1024)
-            const docx = await readBounded(join(resolve(fixtureDirectory), 'profile.docx'), 10 * 1024 * 1024)
-            validateDocxArchive(docx)
+          if (fixtureDirectory && sameExistingPath(fixtureDirectory, fixtureDataPath)) {
+            const pdf = await readBounded(join(fixtureDataPath, 'profile.pdf'), 10 * 1024 * 1024)
+            const docx = await readBounded(join(fixtureDataPath, 'profile.docx'), 10 * 1024 * 1024)
             const pdfText = await parseDocument(pdf, 'pdf'), docxText = await parseDocument(docx, 'docx')
             documentImports = { pdf: pdfText.includes('Faangin document fixture'), docx: docxText.includes('Faangin document fixture') }
             if (!documentImports.pdf || !documentImports.docx) throw new Error('Sandboxed document fixture extraction did not match expected text.')
           }
-          await writeFile(process.env.FAANGIN_SMOKE_READY!, JSON.stringify({
+          await writeSecretFile(smokeReadyPath, Buffer.from(JSON.stringify({
             version: app.getVersion(), windowCount: BrowserWindow.getAllWindows().length,
             keyConfigured: diagnostics.state.keyConfigured, sqliteReady: true,
             startupSession: { id: diagnostics.state.currentSession?.id ?? null, historyEnabled: diagnostics.state.settings.historyEnabled, persistent: diagnostics.state.currentSession?.persistent ?? null },
             security: { sandbox: diagnostics.security?.sandbox === true, contextIsolation: diagnostics.security?.contextIsolation === true, nodeIntegration: diagnostics.nodeIntegration },
             rendererReady: true, workflow, ...(documentImports ? { documentImports } : {})
-          }), { mode: 0o600 })
-        } catch (error) { await writeFile(process.env.FAANGIN_SMOKE_READY!, JSON.stringify({ error: safeError(error) })) }
+          })))
+        } catch (error) { await writeSecretFile(smokeReadyPath, Buffer.from(JSON.stringify({ error: safeError(error) }))) }
       })
     }
   }).catch(error => { dialog.showErrorBox('Faangin could not start', safeError(error)); app.exit(1) })

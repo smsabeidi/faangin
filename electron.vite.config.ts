@@ -8,7 +8,10 @@ const cloudConfig = readCloudBuildConfig(process.env.FAANGIN_CLOUD_CONFIG_FILE |
 
 export default defineConfig({
   main: {
-    define: { __FAANGIN_CLOUD_CONFIG__: JSON.stringify(cloudConfig ?? { supabaseUrl: '', publishableKey: '' }) },
+    define: {
+      __FAANGIN_CLOUD_CONFIG__: JSON.stringify(cloudConfig ?? { supabaseUrl: '', publishableKey: '' }),
+      __FAANGIN_PACKAGE_QA__: JSON.stringify(process.env.FAANGIN_PACKAGE_QA === '1')
+    },
     plugins: [externalizeDepsPlugin()],
     build: { rollupOptions: { input: resolve('src/main/index.ts') } }
   },

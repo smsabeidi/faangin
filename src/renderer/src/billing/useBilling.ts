@@ -30,6 +30,8 @@ export function useBilling() {
     actionError,
     signIn: () => act(() => window.faangin.billingSignIn()),
     cancelSignIn: () => act(() => window.faangin.billingCancelSignIn()),
+    googleSignIn: () => act(() => window.faangin.billingGoogleSignIn()),
+    cancelGoogleSignIn: () => act(() => window.faangin.billingGoogleCancelSignIn()),
     signOut: () => act(() => window.faangin.billingSignOut()),
     refresh: () => act(() => window.faangin.billingRefresh()),
     checkout: (plan: BillingPlan) => act(() => window.faangin.billingCheckout(plan)),

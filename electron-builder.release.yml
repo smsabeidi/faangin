@@ -6,15 +6,27 @@ directories:
   buildResources: resources
 files:
   - out/**
+  # The tray icon's ?asset import resolves inside the ASAR at runtime.
+  - resources/icon.png
   - package.json
   - '!node_modules/**/test/**'
   - '!node_modules/**/tests/**'
 asar: true
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
 npmRebuild: false
 forceCodeSigning: true
 mac:
   icon: resources/icon.icns
   category: public.app-category.productivity
+  protocols:
+    - name: com.faangin.desktop.auth
+      role: Viewer
+      schemes: [faangin]
   type: distribution
   target:
     - target: dmg

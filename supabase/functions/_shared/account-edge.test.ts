@@ -4,8 +4,9 @@ import { createAccountHandler } from '../faangin-api/index.ts'
 import { createStripeWebhookHandler } from '../stripe-webhook/index.ts'
 import { createRuntime, serviceHeaders, type AccountRuntime } from './account-runtime.ts'
 import { ServiceError } from '../../../backend/supabase/errors.ts'
+import { verifyLicense } from '../../../backend/supabase/license.ts'
 import { boundedText } from './http.ts'
-import { createHmac, randomUUID } from 'node:crypto'
+import { createHmac, generateKeyPairSync, randomUUID } from 'node:crypto'
 const uid='0d08fe00-1234-4000-8000-000000000001'
 function fixture() {
   const calls:Array<{name:string;data?:unknown}>=[]
@@ -67,6 +68,53 @@ Deno.test('REST runtime uses opaque server keys only as apikey and derives ident
   assert.deepEqual(result,{status:'approved',tokenHash:'fixture-independent-hash',uid})
   assert.ok(calls.some(call=>call.url.endsWith('/auth/v1/admin/generate_link')))
 })
+Deno.test('Google and password sessions for the same Supabase user reach the same license and device record', async () => {
+  const keys = generateKeyPairSync('ed25519')
+  const env = new Map([
+    ['SUPABASE_URL', 'https://project.supabase.test'],
+    ['SUPABASE_SECRET_KEY', 'fixture-server-key'],
+    ['SUPABASE_PUBLISHABLE_KEY', 'fixture-publishable-key'],
+    ['LICENSE_SIGNING_KEY', keys.privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')]
+  ])
+  const device = { deviceId: 'mac-fixture-01', deviceName: 'Mac' }
+  const sessions = new Map([['fixture-google-session', 'google'], ['fixture-password-session', 'email']])
+  const touched: unknown[] = []
+  const runtime = createRuntime({ env: { get: key => env.get(key) }, fetcher: async (input, init) => {
+    const path = new URL(String(input)).pathname
+    const request = init as RequestInit | undefined
+    const headers = new Headers(request?.headers)
+    if (path === '/auth/v1/user') {
+      assert.equal(headers.get('apikey'), 'fixture-publishable-key')
+      const provider = sessions.get(headers.get('authorization')?.slice('Bearer '.length) ?? '')
+      if (!provider) return new Response(null, { status: 401 })
+      return Response.json({ id: uid, email: 'buyer@example.test', app_metadata: { provider } })
+    }
+    assert.equal(path, '/rest/v1/rpc/faangin_device_touch')
+    assert.equal(headers.get('apikey'), 'fixture-server-key')
+    touched.push(JSON.parse(String(request?.body)))
+    return Response.json({ document: { plan: 'byok', status: 'active', updatedAt: 0 }, version: 1, now: 1_800_000_000_000 })
+  } })
+  const handle = createAccountHandler(() => runtime)
+  const request = (route: string, token: string) => new Request(`https://project.supabase.test/functions/v1/faangin-api/${route}`, {
+    method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ data: { uid: 'forged', ...device } })
+  })
+  for (const route of ['issueLicense', 'createCheckoutSession', 'createPortalSession', 'deviceCodeApprove']) {
+    assert.equal((await handle(request(route, 'fixture-raw-google-token'))).status, 401)
+  }
+  assert.deepEqual(touched, [])
+  const publicKey = keys.publicKey.export({ type: 'spki', format: 'der' }).toString('base64')
+  for (const token of ['fixture-password-session', 'fixture-google-session']) {
+    const response = await handle(request('issueLicense', token))
+    assert.equal(response.status, 200)
+    const { result } = await response.json()
+    const license = verifyLicense(result.token, publicKey)
+    assert.equal(license?.uid, uid)
+    assert.equal(license?.deviceId, device.deviceId)
+    assert.equal(license?.plan, 'byok')
+  }
+  const touch = { p_uid: uid, p_device_id: device.deviceId, p_name: device.deviceName }
+  assert.deepEqual(touched, [touch, touch])
+})
 Deno.test('named server-key cutover reaches account RPC and Auth Admin without using the default or legacy key',async()=>{
   const selectedKey='sb_secret_'+'selected_fixture'
   const env=new Map([
@@ -97,6 +145,40 @@ Deno.test('explicit unavailable server-key selection fails before an account pro
   let requests=0
   assert.throws(()=>createRuntime({env:{get:key=>env.get(key)},fetcher:async()=>{requests++;return Response.json({})}}),/selected Supabase server key is unavailable/)
   assert.equal(requests,0)
+})
+Deno.test('billing refuses mismatched Stripe modes and overprivileged or shared keys before checkout', () => {
+  const env = new Map([
+    ['SUPABASE_URL', 'https://project.supabase.test'], ['SUPABASE_SECRET_KEY', 'fixture-server-key'],
+    ['STRIPE_CHECKOUT_KEY', 'rk_test_checkout_fixture'], ['STRIPE_WEBHOOK_KEY', 'rk_test_webhook_fixture'],
+    ['STRIPE_WEBHOOK_SECRET', 'fixture-webhook-secret']
+  ])
+  const runtime = () => createRuntime({ env: { get: key => env.get(key) } })
+  const unavailable = (error: unknown) => error instanceof ServiceError && error.code === 'unavailable'
+  assert.equal(runtime().billingConfigured, true)
+  assert.ok(runtime().billing('checkout').stripe)
+  env.set('STRIPE_CHECKOUT_KEY', 'rk_live_checkout_fixture')
+  assert.equal(runtime().billingConfigured, false)
+  assert.throws(() => runtime().billing('checkout'), unavailable)
+  assert.ok(runtime().billing('webhook').stripe, 'previous sandbox payments can still fulfill')
+  env.set('STRIPE_EXPECT_LIVEMODE', 'true')
+  assert.throws(() => runtime().billing('checkout'), unavailable)
+  assert.throws(() => runtime().billing('webhook'), unavailable)
+  env.set('STRIPE_WEBHOOK_KEY', 'rk_live_webhook_fixture')
+  assert.equal(runtime().billingConfigured, true)
+  assert.ok(runtime().billing('checkout').stripe)
+  env.set('STRIPE_CHECKOUT_KEY', 'sk_live_checkout_fixture')
+  assert.throws(() => runtime().billing('checkout'), unavailable)
+  env.set('STRIPE_CHECKOUT_KEY', 'rk_live_webhook_fixture')
+  assert.throws(() => runtime().billing('checkout'), unavailable)
+  assert.throws(() => runtime().billing('webhook'), unavailable)
+  env.set('STRIPE_EXPECT_LIVEMODE', 'yes')
+  env.set('STRIPE_CHECKOUT_KEY', 'rk_test_checkout_fixture')
+  env.set('STRIPE_WEBHOOK_KEY', 'rk_test_webhook_fixture')
+  assert.throws(() => runtime().billing('checkout'), unavailable)
+  env.set('STRIPE_EXPECT_LIVEMODE', 'false')
+  env.delete('STRIPE_WEBHOOK_SECRET')
+  assert.throws(() => runtime().billing('checkout'), unavailable)
+  assert.ok(runtime().billing('portal').stripe, 'existing customers can still manage their subscriptions')
 })
 Deno.test('scheduled reconciliation verifies a short-lived HMAC and consumes its DB nonce exactly once',async()=>{
   const f=fixture(),nonce:string='abac0000-1234-4000-8000-123456789abc',timestamp=String(Math.floor(Date.now()/1000)),secret=f.env.get('RECONCILE_SECRET')!
@@ -149,5 +231,5 @@ Deno.test('request readers cap streamed bytes before buffering complete JSON or 
   assert.equal(await boundedText(new Request('https://project.supabase.test',{method:'POST',body:split}),2),'é')
   await assert.rejects(boundedText(new Request('https://project.supabase.test',{method:'POST',body:'é'}),1),ServiceError)
   const webhook=createStripeWebhookHandler(()=>({env:{get:()=> 'fixture-secret'},billing(){throw new Error('Oversized payload must be rejected before Stripe')}} as unknown as AccountRuntime))
-  assert.equal((await webhook(new Request('https://project.supabase.test/functions/v1/stripe-webhook',{method:'POST',body:'x'.repeat(1_048_577)}))).status,400)
+  assert.equal((await webhook(new Request('https://project.supabase.test/functions/v1/stripe-webhook',{method:'POST',headers:{'stripe-signature':'test'},body:'x'.repeat(1_048_577)}))).status,400)
 })

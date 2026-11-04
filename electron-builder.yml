@@ -12,10 +12,22 @@ files:
   - '!node_modules/**/test/**'
   - '!node_modules/**/tests/**'
 asar: true
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  # The local arm64 bundle still needs an ad-hoc signature after its framework is patched.
+  resetAdHocDarwinSignature: true
 npmRebuild: false
 mac:
   icon: resources/icon.icns
   category: public.app-category.productivity
+  protocols:
+    - name: com.faangin.desktop.auth
+      role: Viewer
+      schemes: [faangin]
   target:
     - target: dmg
       arch: [arm64]

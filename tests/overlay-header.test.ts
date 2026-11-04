@@ -58,14 +58,14 @@ test('Capture & solve registration cannot swallow the local Solve keyboard fallb
   assert.equal(hasRegisteredActionShortcut([{ ...binding, id: undefined }], 'solve'), false)
 })
 
-test('compact answers disclose performance on demand while preserving provenance, interruption and streaming cancellation', () => {
+test('answers keep provenance, interruption and streaming cancellation without exposing model or timing details', () => {
   const answer: Answer = { id: 'answer', requestId: 'request', sessionId: 'session', action: 'solve', prompt: '', text: 'Use BFS for shortest unweighted paths.', model: 'fixture', status: 'complete', createdAt: 1, firstTokenMs: 200, inputTokens: 500, outputTokens: 30, context: { transcriptIds: ['question'], attachmentIds: ['screen'], priorAnswerIds: [], memorySourceIds: [], truncated: false } }
   const render = (compact: boolean, patch: Partial<Answer> = {}) => renderToStaticMarkup(createElement(AnswerCard, { answer: { ...answer, ...patch }, copy: async () => {}, cancel: async () => {}, retry: async () => {}, compact }))
-  const html = render(true)
-  assert.match(html, /<details class="answer-footnote answer-performance"><summary>Response details<\/summary>/)
-  assert.match(html, /Included context · 1 transcript turns · 1 images/)
-  assert.match(html, /First text 200 ms/)
-  assert.doesNotMatch(render(false), /<summary>Response details/)
+  for (const compact of [true, false]) {
+    const html = render(compact)
+    assert.match(html, /Included context · 1 transcript turns · 1 images/)
+    assert.doesNotMatch(html, /Response details|First text|fixture/)
+  }
   assert.match(render(true, { status: 'streaming' }), /Cancel/)
   assert.match(render(true, { status: 'cancelled', interruption: { reason: 'new-question', at: 2 } }), /Interrupted — question changed/)
 })

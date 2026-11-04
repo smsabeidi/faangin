@@ -13,8 +13,8 @@
 import { closeSync, openSync, unlinkSync, writeSync } from 'node:fs'
 import { API_VERSION, createStripeClient, fail } from './lib/stripe-env.mjs'
 
-// Product catalog. Lookup keys are the contract with supabase/config.ts; amounts come from the pricing decision
-// of 2026-10-27 (BYOK $10 one-time, Pro $14.99/month or $144/year). USD, tax added on top (exclusive).
+// Product catalog. Lookup keys are the contract with supabase/config.ts. USD, tax added on top (exclusive).
+// Pro v2 matches faangin.com. Keep the original lookup keys on their prices for existing subscriptions.
 // Tax codes: txcd_10202000 "Downloadable Software - personal use" for the Mac app license,
 // txcd_10103000 "Software as a service (SaaS) - personal use" for Pro. Confirm with a tax advisor before live.
 export const CATALOG = [
@@ -37,8 +37,8 @@ export const CATALOG = [
       statement_descriptor: 'FAANGIN PRO'
     },
     prices: [
-      { lookup_key: 'faangin_pro_monthly', unit_amount: 1499, currency: 'usd', recurring: { interval: 'month' }, tax_behavior: 'exclusive', nickname: 'Pro $14.99/month' },
-      { lookup_key: 'faangin_pro_annual', unit_amount: 14400, currency: 'usd', recurring: { interval: 'year' }, tax_behavior: 'exclusive', nickname: 'Pro $144/year' }
+      { lookup_key: 'faangin_pro_monthly_v2', unit_amount: 4999, currency: 'usd', recurring: { interval: 'month' }, tax_behavior: 'exclusive', nickname: 'Pro $49.99/month' },
+      { lookup_key: 'faangin_pro_annual_v2', unit_amount: 35988, currency: 'usd', recurring: { interval: 'year' }, tax_behavior: 'exclusive', nickname: 'Pro $359.88/year' }
     ]
   }
 ]
@@ -121,8 +121,9 @@ async function ensureCatalog(stripe) {
       }
       result.push({ product: product.id, price: price.id, lookup_key: spec.lookup_key, amount: `${(spec.unit_amount / 100).toFixed(2)} ${spec.currency}`, interval: spec.recurring?.interval ?? 'one-time', tax_code: entry.product.tax_code, tax_behavior: spec.tax_behavior })
     }
-    if (entry.key === 'pro' && product.default_price !== result.find((r) => r.lookup_key === 'faangin_pro_monthly')?.price) {
-      await stripe.products.update(product.id, { default_price: result.find((r) => r.lookup_key === 'faangin_pro_monthly').price })
+    if (entry.key === 'pro') {
+      const monthlyPrice = result.find((r) => r.lookup_key === 'faangin_pro_monthly_v2').price
+      if (product.default_price !== monthlyPrice) await stripe.products.update(product.id, { default_price: monthlyPrice })
     }
   }
   console.table(result)

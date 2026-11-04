@@ -39,6 +39,16 @@ export function createRuntime(options: RuntimeOptions = {}) {
   const env = options.env ?? Deno.env, fetcher = options.fetcher ?? fetch
   const url = (env.get('SUPABASE_URL') || '').replace(/\/$/, ''), secret = serverKey(env), publicKey = publishableKey(env)
   if (!url || !secret) throw new ServiceError('unavailable', 'The account service is not configured yet')
+  const stripeMode = env.get('STRIPE_EXPECT_LIVEMODE')
+  const expectLivemode = stripeMode === 'true'
+  const stripeKey = (name: 'STRIPE_CHECKOUT_KEY' | 'STRIPE_WEBHOOK_KEY') => {
+    const key = env.get(name)
+    const match = /^rk_(test|live)_[A-Za-z0-9_-]+$/.exec(key ?? '')
+    if (stripeMode !== undefined && stripeMode !== 'true' && stripeMode !== 'false') return undefined
+    return match?.[1] === (expectLivemode ? 'live' : 'test') ? key : undefined
+  }
+  const checkoutKey = stripeKey('STRIPE_CHECKOUT_KEY'), webhookKey = stripeKey('STRIPE_WEBHOOK_KEY')
+  const billingConfigured = !!checkoutKey && !!webhookKey && checkoutKey !== webhookKey && !!env.get('STRIPE_WEBHOOK_SECRET')
   const rpc = new SupabaseRpcClient(url, secret, fetcher)
   const store = new SupabaseStore(rpc)
   const asUser = (body: Record<string, unknown>): AccountUser => {
@@ -62,18 +72,20 @@ export function createRuntime(options: RuntimeOptions = {}) {
     }
   }
   return {
-    env, url, store,
+    env, url, store, authConfigured: !!publicKey, billingConfigured,
     async claimReconcileDispatch(nonce: string, timestamp: number): Promise<boolean> {
       const result = await rpc.rpc('faangin_reconcile_dispatch_claim', { p_nonce: nonce, p_timestamp: timestamp })
       if (result.error || typeof result.data !== 'boolean') throw new ServiceError('unavailable', 'The reconciliation dispatch could not be verified')
       return result.data
     },
     account: createAccountService({ store, auth, signingKey: env.get('LICENSE_SIGNING_KEY') || '', activationUrl: env.get('FAANGIN_ACTIVATION_URL') || `${url}/functions/v1/billing-return/activate` }),
-    billing(webhook = false) {
-      const key = env.get(webhook ? 'STRIPE_WEBHOOK_KEY' : 'STRIPE_CHECKOUT_KEY')
-      if (!key) throw new ServiceError('unavailable', 'Billing is not configured yet')
+    billing(operation: 'checkout' | 'portal' | 'webhook') {
+      const key = operation === 'webhook' ? webhookKey : checkoutKey
+      if (!key || (operation === 'webhook' && checkoutKey === webhookKey) || (operation === 'checkout' && !billingConfigured)) {
+        throw new ServiceError('unavailable', 'Billing is not configured yet')
+      }
       const stripe = new Stripe(key, { httpClient: Stripe.createFetchHttpClient(), maxNetworkRetries: 2, timeout: 10_000 })
-      const service = createBillingService({ store, stripe, hostingOrigin: env.get('FAANGIN_HOSTING_ORIGIN') || `${url}/functions/v1/billing-return`, expectLivemode: env.get('STRIPE_EXPECT_LIVEMODE') === 'true', log: event => console.log(JSON.stringify({ event })) })
+      const service = createBillingService({ store, stripe, hostingOrigin: env.get('FAANGIN_HOSTING_ORIGIN') || `${url}/functions/v1/billing-return`, expectLivemode, log: event => console.log(JSON.stringify({ event })) })
       return { stripe, service }
     },
     async user(request: Request): Promise<AccountUser> {

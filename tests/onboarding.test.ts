@@ -47,7 +47,7 @@ function renderOnboarding(platform: string, permissions: { microphone: string; s
   const state: AppState = { settings: DEFAULT_SETTINGS, permissions: { platform, ...permissions }, shortcuts: [], accessibility: { reduceTransparency: false, reduceMotion: false, increaseContrast: false }, keyConfigured: false, chatConfigured: false, compatibleKeyConfigured: false, sessions: [], currentSession: null, version: 'fixture', windowKind: 'workspace', capture: { active: false, sessionId: null, microphone: 'Off', system: 'Off' } }
   // Static rendering runs no effects, so a window holding only the saved progress is all the component reads.
   ;(globalThis as { window?: unknown }).window = { localStorage: store }
-  try { return renderToStaticMarkup(createElement(Onboarding, { state, onComplete() {}, onConnect() {}, onRefresh: async () => {} })) } finally { delete (globalThis as { window?: unknown }).window }
+  try { return renderToStaticMarkup(createElement(Onboarding, { state, onComplete() {}, onOpenAccount() {}, onRefresh: async () => {} })) } finally { delete (globalThis as { window?: unknown }).window }
 }
 
 test('the access step names each permission the way the running OS does', () => {
