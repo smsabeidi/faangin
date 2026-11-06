@@ -1,6 +1,39 @@
-# Sandbox billing credentials and acceptance
+# Stripe billing setup
 
-The approved Stripe account is **Selmou AI sandbox**, `acct_1UVc6oRrWEBZT5Mj`, in test mode. Its three Faangin prices and tagged customer portal are configured. Both restricted runtime keys and the webhook signing secret are saved in ignored owner-only files and uploaded to Supabase Edge secrets. The checkout key's unpaid Checkout/portal smoke passed with cleanup. The webhook read key passed actual reads for Checkout, subscriptions, invoices, invoice payments, charges, refunds, and disputes; Customers correctly returned 403. Account health now reports billing configured.
+## Production account
+
+Production billing runs on **SIDGROUP LLC**, `acct_1SvNnP8BbXRWcVQW`, in live mode. It moved from the sandbox on November 6, 2026, with no real subscribers to migrate. The same Stripe account also serves LeaveStream, so avoid account-wide changes: do not run `stripe-setup.mjs tax-defaults` there, and note that its leavestream.com webhook also receives Faangin checkout and subscription events.
+
+| Object | Value |
+| --- | --- |
+| Monthly price | `faangin_pro_monthly_v2`, USD 49.99 |
+| Annual price | `faangin_pro_annual_v2`, USD 359.88 |
+| Customer portal | `bpc_1UYZSc8BbXRWcVQWPv9gco9O`, tagged `faangin=v1`; also the account default |
+| Webhook | `we_1UYZSd8BbXRWcVQWfIXGAQi3`, 14 events, API version `2026-09-30.endive` |
+| Checkout key | Restricted, `Faangin Supabase live checkout` |
+| Webhook key | Restricted, `Faangin Supabase live webhook` |
+
+The Edge runtime refuses `sk_` keys. It requires two different `rk_live_` keys plus `STRIPE_EXPECT_LIVEMODE=true`, otherwise billing reports unconfigured. Stripe has no API for creating restricted keys and asks for a two-factor code for each one, but a link in the form `https://dashboard.stripe.com/apikeys/create?name=<name>&permissions[]=rak_<permission>` pre-fills the page. The checkout key uses `checkout_session_write`, `customer_write`, `customer_portal_write`, `plan_read`, `product_read`, and `subscription_read`. The webhook key uses `checkout_session_read`, `subscription_read`, `invoice_read`, `charge_read`, and `dispute_read`.
+
+The live values are in the ignored owner-only files `backend/.env.stripe-live-keys.local` and `backend/.env.stripe-live-webhook.local`. To upload them, put a scoped `SUPABASE_ACCESS_TOKEN` in the environment and pass only those two files:
+
+```sh
+node backend/scripts/upload-supabase-secrets.mjs --env-file backend/.env.stripe-live-keys.local --env-file backend/.env.stripe-live-webhook.local
+```
+
+Never add `backend/.env.supabase.local` to that command. It would also push its own `LICENSE_SIGNING_KEY`, `OPENAI_API_KEY`, and `STRIPE_EXPECT_LIVEMODE=false`.
+
+Before the switch, an unpaid live Checkout and portal session passed with the restricted keys, using production's parameters. After it, production secret digests matched, a signed live event returned 200/ignored, and both the old sandbox secret and test-mode events returned 400. No real card payment is recorded here yet.
+
+Stripe Tax is still pending on this account, with no head office or registrations, so `automaticTax` must stay false until that is finished or Stripe refuses Checkout. `termsConsent` needs a terms URL in the account's public details first.
+
+Stored Stripe IDs belong to one account. An ID from another account fails with `No such customer`, the app shows only a generic retry, and `faangin_customer_bind` never overwrites a row. Before any future account move, close Checkout and repoint or clear `faangin.customers`. The one test account was repointed to a live customer, but its entitlement still holds its old sandbox `pro.subscriptionId`. Reconcile counts that as a failure on every run, so clear it before enabling the daily job.
+
+To roll back, close Checkout first, because any Stripe test card grants Pro on sandbox keys. Then upload `backend/.env.stripe-runtime.local` and `backend/.env.stripe-webhook.supabase.local` with `STRIPE_EXPECT_LIVEMODE=false`. Customers created on the live account would then need the same repointing.
+
+## Sandbox credentials and acceptance
+
+The test account is **Selmou AI sandbox**, `acct_1UVc6oRrWEBZT5Mj`, in test mode. Its Faangin prices and tagged customer portal are configured. Both restricted sandbox keys and the webhook signing secret are saved in ignored owner-only files; they were the production Edge secrets until the November 6 switch. The checkout key's unpaid Checkout/portal smoke passed with cleanup. The webhook read key passed actual reads for Checkout, subscriptions, invoices, invoice payments, charges, refunds, and disputes; Customers correctly returned 403.
 
 The intended webhook `we_1UWkoIRrWEBZT5MjQJKUecL3` is enabled with the exact Supabase URL, pinned API version, and 14 configured event types. Invalid signatures return 400. A signed disposable unhandled readiness event returned 200/ignored, replay returned 200/duplicate, and its database record was processed once; that exact fixture was cleaned. That early readiness probe was separate from the later BYOK paid-simulation evidence described below.
 

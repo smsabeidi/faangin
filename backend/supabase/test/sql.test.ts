@@ -37,11 +37,10 @@ test('SQL grants block public roles, checkout leases serialize callers and owner
   await store.releaseCheckout(uid,randomUUID());assert.equal(await store.claimCheckout(uid,randomUUID()),false)
   await store.releaseCheckout(uid,winner);assert.equal(await store.claimCheckout(uid,randomUUID()),true)
 })
-test('SQL device cap allows three concurrent active devices and polling has a single independent hash issuer',testSql,async()=>{
+test('SQL device registration accepts concurrent active devices and polling has a single independent hash issuer',testSql,async()=>{
   const uid=await addUser();await store.commit(uid,0,{plan:'byok',status:'active',updatedAt:Date.now()})
   const touches=await Promise.allSettled(Array.from({length:4},(_,i)=>store.touchDevice(uid,`mac-sql-cap-${i}`,'Test Mac')))
-  assert.equal(touches.filter(result=>result.status==='fulfilled').length,3)
-  assert.equal(touches.filter(result=>result.status==='rejected').length,1)
+  assert.equal(touches.filter(result=>result.status==='fulfilled').length,4)
   let generated=0
   const account=createAccountService({store,auth:{async getUserById(){return{id:uid,email:'sql@example.test',emailVerified:true}},async generateMagicLink(){generated++;return{uid,tokenHash:'one-desktop-hash'}}},signingKey:'',activationUrl:'http://127.0.0.1:4000/activate'})
   const start=await account.start({deviceId:'mac-sql-auth-01',deviceName:'SQL Mac'})

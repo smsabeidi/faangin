@@ -107,9 +107,9 @@ async function connectDebugger(url) {
     socket.once('open', opened); socket.once('error', failed)
   })
   let sequence = 0
-  const send = (method, params) => new Promise((resolve, reject) => {
+  const send = (method, params, waitMs = 35000) => new Promise((resolve, reject) => {
     const id = ++sequence
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error('The isolated desktop workflow timed out.')) }, 35000)
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error('The isolated desktop workflow timed out.')) }, waitMs)
     pending.set(id, { resolve, reject, timer })
     socket.send(JSON.stringify({ id, method, params }), error => {
       if (!error) return
@@ -118,8 +118,8 @@ async function connectDebugger(url) {
     })
   })
   return {
-    async evaluate(expression) {
-      const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, timeout: 30000 })
+    async evaluate(expression, timeoutMs = 30000) {
+      const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, timeout: timeoutMs }, timeoutMs + 5000)
       if (response.exceptionDetails) {
         const message = response.exceptionDetails.exception?.description ?? response.exceptionDetails.text
         throw new Error(`Isolated desktop workflow failed: ${redact(message).split('\n')[0].slice(0, 1200)}`)
@@ -148,7 +148,8 @@ try {
   const isolation = await debuggerClient.evaluate('({ sandbox: window.faanginSmoke?.sandbox, contextIsolation: window.faanginSmoke?.contextIsolation, preload: typeof window.faangin?.getState === "function", nodeIntegration: typeof window.require !== "undefined" })')
   if (isolation?.sandbox !== true || isolation.contextIsolation !== true || isolation.preload !== true || isolation.nodeIntegration !== false) throw new Error('The workflow debugger did not reach the sandboxed smoke workspace.')
   await debuggerClient.evaluate(`(async () => { const until = Date.now() + 3000; while (!document.querySelector('[data-onboarding-skip], .sidebar') && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20)); document.querySelector('[data-onboarding-skip]')?.click(); })()`)
-  const workflow = await debuggerClient.evaluate(`(${runDesktopWorkflow.toString()})(window.faangin, ${JSON.stringify(provider.endpoint)}, ${JSON.stringify({ nativeAudio })})`)
+  // One evaluation drives every fixture request; packaged builds on CI runners need well over the per-call default.
+  const workflow = await debuggerClient.evaluate(`(${runDesktopWorkflow.toString()})(window.faangin, ${JSON.stringify(provider.endpoint)}, ${JSON.stringify({ nativeAudio })})`, 120000)
   verified(workflow, ['capture', 'inference', 'presets', 'context', 'history'])
   // Server-side cancellation is noticed when the fixture's response closes, which a loaded host can delay, so every condition
   // must still hold but is given a few seconds to settle, and a failure names the unmet conditions instead of all of them.
@@ -174,7 +175,7 @@ try {
     }).filter(([, met]) => !met).map(([name]) => name)
   }
   let unmet = unmetRequests()
-  for (const settleBy = Date.now() + 3_000; unmet.length && Date.now() < settleBy; unmet = unmetRequests()) await delay(50)
+  for (const settleBy = Date.now() + 10_000; unmet.length && Date.now() < settleBy; unmet = unmetRequests()) await delay(50)
   if (unmet.length) throw new Error(`Local fixture transport, source consent, drafting, spoken reply, automatic reply, failure pause, or cancellation did not match the admitted requests (${provider.requests.length} requests; unmet: ${unmet.join('; ')}).`)
   await debuggerClient.evaluate(`window.faangin.updateSettings(${JSON.stringify({chatProvider:'compatible',compatibleChatEndpoint:provider.endpoint,compatibleChatModel:'fixture-fast',compatibleChatSmartModel:'fixture-smart',microphone:false,systemAudio:true,liveSuggestionSource:'system'})})`)
   await debuggerClient.evaluate(`window.faangin.selectSession(${JSON.stringify(workflow.ids.interviewFlow)})`)
