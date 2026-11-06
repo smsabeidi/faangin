@@ -1,6 +1,7 @@
 /** Runs only against a credential-free, isolated smoke workspace. */
 export async function runDesktopWorkflow(api, providerEndpoint, options = {}) {
-  const check = (condition, message) => { if (!condition) throw new Error(message) }
+  // A stall throws nothing of its own, so smoke.mjs reads back the last check that passed.
+  const check = (condition, message) => { if (!condition) throw new Error(message); window.faanginSmokeLastCheck = message }
   const rejected = async (operation, pattern, label) => {
     try { await operation() } catch (error) {
       check(pattern.test(String(error)), `${label} failed with an unexpected error.`)

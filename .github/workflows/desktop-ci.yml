@@ -123,6 +123,18 @@ jobs:
         run: npm run package:mac
         env:
           FAANGIN_PACKAGE_QA: '1'
+      - name: Give the packaged macOS app its own keychain
+        # The development smoke leaves a safe-storage item owned by the Electron binary. Fuses give the packaged app a
+        # different code identity, so reaching that item raises a Keychain prompt, and with nobody to answer it on a
+        # headless runner the prompt blocks the app's main process until the smoke times out.
+        if: runner.os == 'macOS'
+        run: |
+          keychain="$RUNNER_TEMP/faangin-ci.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security default-keychain -d user -s "$keychain"
       - name: Smoke the packaged macOS app
         if: runner.os == 'macOS'
         run: npm run smoke

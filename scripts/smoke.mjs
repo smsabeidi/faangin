@@ -120,6 +120,7 @@ async function connectDebugger(url) {
   return {
     async evaluate(expression, timeoutMs = 30000) {
       const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, timeout: timeoutMs }, timeoutMs + 5000)
+        .catch(error => { throw new Error(`${error.message} While evaluating: ${redact(expression).slice(0, 100)}`) })
       if (response.exceptionDetails) {
         const message = response.exceptionDetails.exception?.description ?? response.exceptionDetails.text
         throw new Error(`Isolated desktop workflow failed: ${redact(message).split('\n')[0].slice(0, 1200)}`)
@@ -234,6 +235,12 @@ try {
   } finally { database.close() }
   if (new Set(Object.values(targets)).size !== 3 || before !== after || Object.values(edits ?? {}).some(persistent => persistent !== false)) throw new Error(`History-off edits reached the saved workspace: ${JSON.stringify({ before, after, edits })}`)
   console.log(`Faangin ${startup.version}: 21 isolated fixture requests passed. ${nativeAudio ? 'Performed bounded native system audio capture; no retained audio or live inference. ' + JSON.stringify(workflow.nativeAudio) : 'Native Electron display permission reached the owned capture handler without opening an OS stream. No live inference or recording was performed.'} Sandboxed startup, document imports, interview brief, selected-image Solve, BFS/DFS manual and automatic follow-up continuity with history off, streaming, Fast/Smart routing, selected memory, cancellation, safe quota errors, spoken Reply, automatic source/partial/disable/stop/failure guards, and saved answers verified across restart. A history-off restart kept edits of saved sessions out of SQLite.`)
+} catch (error) {
+  // Failures seen only on CI leave nothing else to go on, so report how far the run got and what the app last printed.
+  const lastCheck = await debuggerClient?.evaluate('window.faanginSmokeLastCheck', 3000).catch(() => 'unavailable')
+  console.error(`Smoke stopped after ${provider?.requests.length ?? 0} fixture requests (last: ${provider?.requests.at(-1)?.route ?? 'none'}). Last passed check: ${lastCheck}`)
+  console.error(redact(running?.logs.slice(-1600) ?? ''))
+  throw error
 } finally {
   overlayDebugger?.close()
   debuggerClient?.close()
