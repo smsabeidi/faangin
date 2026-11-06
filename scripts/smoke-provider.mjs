@@ -84,7 +84,7 @@ export async function startSmokeProvider() {
         const delayed = setTimeout(() => {
           frame(chunk(item.freshCandidateContext ? 'WAIT\n' : 'ASSIST\nSTALE_REPLY_MUST_NOT_APPEAR'))
           frame(chunk('', 'stop')); response.write('data: [DONE]\n\n'); response.end()
-        }, item.freshCandidateContext ? 10 : 1_000)
+        }, item.freshCandidateContext ? 10 : 8_000)
         response.on('close', () => { clearTimeout(delayed); item.cancelled = !response.writableEnded }); return
       }
       if (request.url === '/automatic-wait') {
