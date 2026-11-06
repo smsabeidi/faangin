@@ -282,7 +282,8 @@ export async function runDesktopWorkflow(api, providerEndpoint, options = {}) {
   check((await api.getState()).liveSuggestions.phase === 'understanding', 'The new target never entered unpublished understanding.')
   await new Promise(resolve => setTimeout(resolve, 100))
   await liveProxy({ type: 'final', itemId: 'late-context-answer', channel: 'microphone', text: 'LATE_CANDIDATE_ANSWER: BFS explores by shortest distance and I have explained the invariant.' })
-  await new Promise(resolve => setTimeout(resolve, 1_800))
+  const reconsiderDeadline = Date.now() + 6_000
+  while ((await api.getState()).liveSuggestions.phase !== 'listening' && Date.now() < reconsiderDeadline) await new Promise(resolve => setTimeout(resolve, 10))
   const lateContextState = await api.getState()
   check(lateContextState.liveSuggestions.phase === 'listening' && lateContextState.currentSession.answers.length === 0 && !document.body.textContent.includes('STALE_REPLY_MUST_NOT_APPEAR'), 'Late candidate speech did not reconsider the unpublished response with fresh context.')
   await api.stopCapture()
